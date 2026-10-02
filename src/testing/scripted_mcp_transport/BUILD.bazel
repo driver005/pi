@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_mcp_transport",
+    deps = ["//interfaces/mcp/i_mcp_transport"],
+)

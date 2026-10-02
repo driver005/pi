@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_mcp_client",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/mcp_call_result",
+        "//interfaces/types/mcp_request_options",
+        "//interfaces/types/mcp_tool",
+        "//interfaces/types/result",
+    ],
+)

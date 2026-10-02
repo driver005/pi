@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_result_parser",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/mcp_call_result",
+        "//interfaces/types/mcp_tool",
+        "//interfaces/types/result",
+    ],
+)
