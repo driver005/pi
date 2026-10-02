@@ -101,3 +101,40 @@ TEST_F(CodingSessionHandleTest, ReleasingTheSessionManagerKeepsTheTree) {
     ASSERT_NE(manager, nullptr);
     EXPECT_EQ(manager->sessionId(), id);
 }
+
+TEST_F(CodingSessionHandleTest, McpServersFromMcpJsonContributeActiveTools) {
+    const std::string script = R"sh(
+while IFS= read -r line; do
+  id=${line#*\"id\":}; id=${id%%,*}
+  case "$line" in
+    *'"method":"initialize"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{}},"serverInfo":{"name":"sh","version":"1"}}}\n' "$id";;
+    *'"method":"tools/list"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"echo","description":"Echo","inputSchema":{"type":"object"}}]}}\n' "$id";;
+  esac
+done
+)sh";
+    std::filesystem::create_directories(m_dir + "/agent");
+    const Json config{{"mcpServers", Json{{"sh", Json{{"command", "/bin/sh"}, {"args", Json::array({"-c", script})}}}}}};
+    std::ofstream(m_dir + "/agent/mcp.json") << config.dump();
+    const auto handle = open({});
+    const auto active = handle->session().activeToolNames();
+    EXPECT_NE(std::find(active.begin(), active.end(), "mcp__sh__echo"), active.end());
+    EXPECT_NE(std::find(active.begin(), active.end(), "read"), active.end());
+    EXPECT_TRUE(handle->diagnostics().empty());
+
+    CodingStartupOptions off;
+    off.noMcp = true;
+    const auto without = open(off)->session().activeToolNames();
+    EXPECT_EQ(std::find(without.begin(), without.end(), "mcp__sh__echo"), without.end());
+}
+
+TEST_F(CodingSessionHandleTest, BadMcpConfigAndFailingServersAreDiagnostics) {
+    std::filesystem::create_directories(m_dir + "/agent");
+    const Json config{{"mcpServers", Json{{"broken", Json{{"command", "/definitely/not/here"}}}, {"bad name", Json{{"command", "x"}}}}}};
+    std::ofstream(m_dir + "/agent/mcp.json") << config.dump();
+    const auto handle = open({});
+    const auto diagnostics = handle->diagnostics();
+    ASSERT_EQ(diagnostics.size(), 2U);
+    EXPECT_NE(diagnostics[0].message.find("invalid server name"), std::string::npos);
+    EXPECT_NE(diagnostics[1].message.find("MCP server \"broken\""), std::string::npos);
+    EXPECT_EQ(handle->session().activeToolNames(), (std::vector<std::string>{"read", "bash", "edit", "write"}));
+}

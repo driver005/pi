@@ -67,3 +67,14 @@ TEST_F(CommandLineParserTest, ReportsUsageErrors) {
     EXPECT_FALSE(parse({"--model"}).has_value());
     EXPECT_FALSE(parse({"serve2"}).has_value());
 }
+
+TEST_F(CommandLineParserTest, McpOptions) {
+    const auto line = parse({"rpc", "--no-mcp", "--mcp-wait", "1500"});
+    ASSERT_TRUE(line.has_value());
+    EXPECT_TRUE(line->options.startup.noMcp);
+    EXPECT_EQ(line->options.startup.mcpStartupWaitMs, 1500);
+    EXPECT_FALSE(parse({"rpc", "--mcp-wait", "soon"}).has_value());
+    EXPECT_FALSE(parse({"rpc", "--mcp-wait", "-5"}).has_value());
+    EXPECT_FALSE(parse({"rpc"})->options.startup.noMcp);
+    EXPECT_EQ(parse({"rpc"})->options.startup.mcpStartupWaitMs, 5000);
+}

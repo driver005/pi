@@ -1,3 +1,7 @@
+module;
+
+#include <cstdint>
+
 export module pi.types.coding_startup_options;
 
 import std;
@@ -20,4 +24,8 @@ export struct CodingStartupOptions {
     std::vector<std::string> promptTemplatePaths;
     /** Explicit answer to "trust this project?"; nullopt resolves it from the trust store. */
     std::optional<bool> trustProject;
+    /** Do not connect the MCP servers of mcp.json. */
+    bool noMcp = false;
+    /** How long startup waits for MCP servers to connect; slower ones add their tools when ready. */
+    std::int64_t mcpStartupWaitMs = 5000;
 };

@@ -5,10 +5,15 @@ export import pi.coding_services;
 export import pi.session.i_session_runtime_handle;
 export import pi.types.coding_startup_options;
 export import pi.types.session_runtime_request;
+import pi.mcp_connector;
+import pi.mcp_server_manager;
 import pi.session.agent_session;
 import pi.session.resource_loader;
 import pi.session.settings_manager;
 import pi.support.bash_command_executor;
+import pi.support.mcp_config_loader;
+import pi.support.mcp_result_converter;
+import pi.support.mcp_tool_namer;
 import pi.support.model_selector;
 import pi.tools.bash_tool;
 import pi.tools.edit_tool;
@@ -30,6 +35,7 @@ export class CodingSessionHandle : public ISessionRuntimeHandle {
 public:
     CodingSessionHandle(SessionRuntimeRequest request, CodingServices& services,
                         const CodingStartupOptions& options);
+    ~CodingSessionHandle() override;
 
     IAgentSession& session() override;
     ISessionManager& sessionManager() override;
@@ -45,6 +51,10 @@ private:
     ModelChoice chooseModel(const CodingStartupOptions& options);
     std::optional<std::vector<std::string>> activeTools(const CodingStartupOptions& options) const;
     void createSession(const CodingStartupOptions& options);
+    void startMcp(const CodingStartupOptions& options);
+    void activateMcpTools(const std::vector<std::string>& names);
+    std::vector<std::string> mcpToolNames() const;
+    std::optional<std::string> providerToken(const std::string& provider);
     void warn(const std::string& message);
 
     CodingServices& m_services;
@@ -58,6 +68,12 @@ private:
     ToolRegistry m_tools;
     BashCommandExecutor m_bash;
     ModelSelector m_selector;
+    ConfigValueResolver m_configValues;
+    McpConfigLoader m_mcpConfigs;
+    McpToolNamer m_mcpNamer;
+    McpResultConverter m_mcpResults;
+    McpConnector m_mcpConnector;
+    std::unique_ptr<McpServerManager> m_mcp;
     std::unique_ptr<AgentSession> m_session;
 };
 
@@ -72,13 +88,26 @@ CodingSessionHandle::CodingSessionHandle(SessionRuntimeRequest request, CodingSe
       m_resources(resourceOptions(options), m_settings, services.platform().files()),
       m_queue(services.platform().files()),
       m_bash(services.platform().processes(), services.platform().files(), services.platform().crypto(),
-             services.platform().environment()) {
+             services.platform().environment()),
+      m_configValues(services.platform().environment(), services.platform().processes()),
+      m_mcpConfigs(services.platform().files()),
+      m_mcpNamer(services.platform().crypto()),
+      m_mcpResults(services.platform().files(), services.platform().crypto(), services.platform().base64(),
+                   services.platform().environment()),
+      m_mcpConnector(services.platform().children(), services.platform().http(), services.platform().sleeper(),
+                     services.platform().files(), m_configValues,
+                     [this](const std::string& provider) { return providerToken(provider); }) {
     resolveTrust(options);
     registerTools();
+    startMcp(options);
     if (auto loaded = m_resources.reload(); !loaded) {
         warn(loaded.error().message);
     }
     createSession(options);
+    if (m_mcp) {
+        m_mcp->setToolsListener([this](const std::vector<std::string>& added) { activateMcpTools(added); });
+        activateMcpTools(mcpToolNames());
+    }
     for (const auto& error : m_settings.drainErrors()) {
         warn("Settings (" + error.scope + "): " + error.message);
     }
@@ -86,6 +115,69 @@ CodingSessionHandle::CodingSessionHandle(SessionRuntimeRequest request, CodingSe
 
 void CodingSessionHandle::warn(const std::string& message) {
     m_diagnostics.push_back(RuntimeDiagnostic{"warning", message});
+}
+
+CodingSessionHandle::~CodingSessionHandle() {
+    // The manager's listener and tools use the session and the registry: stop it first.
+    if (m_mcp) {
+        m_mcp->close();
+    }
+}
+
+std::optional<std::string> CodingSessionHandle::providerToken(const std::string& provider) {
+    const auto auth = m_services.models().models().getAuth(provider, std::nullopt, {});
+    if (!auth || !*auth) {
+        return std::nullopt;
+    }
+    return (*auth)->auth.apiKey;
+}
+
+/** Connects the servers of mcp.json. Skipped when the tool set is restricted, since MCP tools are not in it. */
+void CodingSessionHandle::startMcp(const CodingStartupOptions& options) {
+    if (options.noMcp || activeTools(options).has_value()) {
+        return;
+    }
+    McpConfigLoadOptions load;
+    load.agentDir = m_agentDir;
+    load.cwd = m_cwd;
+    load.projectTrusted = m_settings.projectTrusted();
+    const McpConfigResult config = m_mcpConfigs.load(load);
+    for (const std::string& error : config.errors) {
+        warn("MCP config: " + error);
+    }
+    if (config.servers.empty()) {
+        return;
+    }
+    PlatformServices& platform = m_services.platform();
+    m_mcp = std::make_unique<McpServerManager>(m_tools, m_mcpConnector, platform.sleeper(), m_mcpNamer,
+                                               m_mcpResults, "0");
+    m_mcp->start(config.servers, m_cwd, std::chrono::milliseconds(options.mcpStartupWaitMs));
+    for (const McpServerStatus& status : m_mcp->status()) {
+        if (status.state == McpServerState::Failed || status.state == McpServerState::NeedsAuth) {
+            warn("MCP server \"" + status.name + "\": " +
+                 (status.error.empty() ? "needs authentication" : status.error));
+        }
+    }
+}
+
+std::vector<std::string> CodingSessionHandle::mcpToolNames() const {
+    std::vector<std::string> names;
+    for (const auto& tool : m_tools.all()) {
+        if (tool->definition().name.starts_with("mcp__")) {
+            names.push_back(tool->definition().name);
+        }
+    }
+    return names;
+}
+
+void CodingSessionHandle::activateMcpTools(const std::vector<std::string>& names) {
+    std::vector<std::string> active = m_session->activeToolNames();
+    for (const std::string& name : names) {
+        if (std::find(active.begin(), active.end(), name) == active.end()) {
+            active.push_back(name);
+        }
+    }
+    m_session->setActiveToolsByName(active);
 }
 
 void CodingSessionHandle::resolveTrust(const CodingStartupOptions& options) {

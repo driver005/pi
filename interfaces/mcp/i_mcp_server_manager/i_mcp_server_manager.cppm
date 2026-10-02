@@ -11,7 +11,15 @@ export import pi.types.mcp_server_status;
  */
 export class IMcpServerManager {
 public:
+    using ToolsListener = std::function<void(const std::vector<std::string>& added)>;
+
     virtual ~IMcpServerManager() = default;
+
+    /**
+     * Called, outside any lock and possibly from a background thread, with the names of tools that
+     * were registered since the last call (servers that connected late, refreshed tool lists).
+     */
+    virtual void setToolsListener(ToolsListener listener) = 0;
 
     /**
      * Connects every enabled server with visible tools, in parallel, and returns when all have

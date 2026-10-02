@@ -4,8 +4,13 @@ pi_module(
     name = "coding_session_handle",
     deps = [
         "//app/coding_services",
+        "//app/mcp_connector",
+        "//app/mcp_server_manager",
         "//interfaces/session/i_session_runtime_handle",
         "//interfaces/support/bash_command_executor",
+        "//interfaces/support/mcp_config_loader",
+        "//interfaces/support/mcp_result_converter",
+        "//interfaces/support/mcp_tool_namer",
         "//interfaces/support/model_selector",
         "//interfaces/types/coding_startup_options",
         "//interfaces/types/session_runtime_request",

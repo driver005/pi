@@ -179,3 +179,26 @@ TEST_F(McpServerManagerTest, CloseUnregistersTheTools) {
     EXPECT_TRUE(toolNames().empty());
     EXPECT_EQ(statusOf("docs").state, McpServerState::Closed);
 }
+
+TEST_F(McpServerManagerTest, ListenerHearsAboutNewToolsOnly) {
+    std::mutex mutex;
+    std::vector<std::vector<std::string>> heard;
+    m_manager.setToolsListener([&](const std::vector<std::string>& added) {
+        const std::lock_guard<std::mutex> lock(mutex);
+        heard.push_back(added);
+    });
+    m_connector.enqueue(serving({"one"}));
+    start({server("docs")});
+    {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_listed = {"one", "two"};
+    }
+    m_connector.transports().at(0)->push(Json{{"jsonrpc", "2.0"}, {"method", "notifications/tools/list_changed"}});
+    ASSERT_TRUE(waitUntil([&]() {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return heard.size() == 2;
+    }));
+    const std::lock_guard<std::mutex> lock(mutex);
+    EXPECT_EQ(heard[0], (std::vector<std::string>{"mcp__docs__one"}));
+    EXPECT_EQ(heard[1], (std::vector<std::string>{"mcp__docs__two"}));
+}

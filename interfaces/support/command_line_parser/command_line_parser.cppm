@@ -21,6 +21,7 @@ public:
 private:
     Result<void> applySwitch(const std::string& flag, CommandLine& line) const;
     Result<void> applyValueFlag(const std::string& flag, const std::string& value, CommandLine& line) const;
+    Result<void> applyMcpWait(const std::string& value, CodingStartupOptions& startup) const;
     std::string expandHome(const std::string& path) const;
     std::string defaultAgentDir() const;
     std::vector<std::string> splitList(const std::string& text) const;
@@ -30,7 +31,8 @@ private:
     const std::set<std::string> m_valueFlags{"--cwd",           "--agent-dir",           "--catalog-dir",
                                              "--model",         "--thinking",            "--session",
                                              "--session-dir",   "--tools",               "--system-prompt",
-                                             "--append-system-prompt", "--skill",        "--prompt-template"};
+                                             "--append-system-prompt", "--skill",        "--prompt-template",
+                                             "--mcp-wait"};
 };
 
 CommandLineParser::CommandLineParser(const IEnvironment& environment) : m_environment(environment) {}
@@ -59,6 +61,8 @@ std::string CommandLineParser::usage() const {
            "  --no-prompt-templates         Do not load prompt templates\n"
            "  --skill <path>                Extra skill file or directory (repeatable)\n"
            "  --prompt-template <path>      Extra prompt template (repeatable)\n"
+           "  --no-mcp                      Do not connect MCP servers\n"
+           "  --mcp-wait <ms>               How long startup waits for MCP servers (default 5000)\n"
            "  --trust / --no-trust          Answer the project trust question\n"
            "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
            "  --help, -h                    Show this help\n";
@@ -151,6 +155,8 @@ Result<void> CommandLineParser::applySwitch(const std::string& flag, CommandLine
         options.startup.noSkills = true;
     } else if (flag == "--no-prompt-templates") {
         options.startup.noPromptTemplates = true;
+    } else if (flag == "--no-mcp") {
+        options.startup.noMcp = true;
     } else if (flag == "--trust") {
         options.startup.trustProject = true;
     } else if (flag == "--no-trust") {
@@ -160,6 +166,17 @@ Result<void> CommandLineParser::applySwitch(const std::string& flag, CommandLine
     } else {
         return std::unexpected(Error{"usage", "Unknown option " + flag});
     }
+    return {};
+}
+
+Result<void> CommandLineParser::applyMcpWait(const std::string& value,
+                                             CodingStartupOptions& startup) const {
+    std::int64_t milliseconds = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), milliseconds);
+    if (error != std::errc() || end != value.data() + value.size() || milliseconds < 0) {
+        return std::unexpected(Error{"usage", "--mcp-wait expects a number of milliseconds"});
+    }
+    startup.mcpStartupWaitMs = milliseconds;
     return {};
 }
 
@@ -190,6 +207,8 @@ Result<void> CommandLineParser::applyValueFlag(const std::string& flag, const st
             options.startup.appendSystemPrompt = std::vector<std::string>{};
         }
         options.startup.appendSystemPrompt->push_back(value);
+    } else if (flag == "--mcp-wait") {
+        return applyMcpWait(value, options.startup);
     } else if (flag == "--skill") {
         options.startup.skillPaths.push_back(expandHome(value));
     } else {
