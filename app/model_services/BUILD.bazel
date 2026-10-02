@@ -10,6 +10,7 @@ pi_module(
         "//src/ai/azure_responses_provider",
         "//src/ai/chat_completions_provider",
         "//src/ai/faux_provider",
+        "//src/ai/codex_provider",
         "//src/ai/file_credential_store",
         "//src/ai/google_adc_auth",
         "//src/ai/google_provider",

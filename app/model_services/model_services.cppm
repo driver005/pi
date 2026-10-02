@@ -13,6 +13,7 @@ import pi.ai.faux_provider;
 import pi.ai.google_adc_auth;
 import pi.ai.google_provider;
 import pi.ai.google_vertex_provider;
+import pi.ai.codex_provider;
 import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.mistral_provider;
@@ -77,6 +78,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<PiMessagesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+    m_providers.registerProvider(std::make_shared<CodexProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.base64()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
         registerFaux(replies.value_or("[]"));
