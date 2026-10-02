@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_config_loader",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/mcp_server_config_validator",
+        "//interfaces/types/json",
+        "//interfaces/types/mcp_config_load_options",
+        "//interfaces/types/mcp_config_result",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

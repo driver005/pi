@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_server_config_validator",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/mcp_exposure",
+        "//interfaces/types/mcp_server_config",
+        "//interfaces/types/result",
+    ],
+)

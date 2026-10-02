@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "mcp_server_config",
+    deps = ["//interfaces/types/json", "//interfaces/types/mcp_exposure"],
+)
