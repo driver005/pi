@@ -11,6 +11,7 @@ import pi.ai.azure_responses_provider;
 import pi.ai.bedrock_provider;
 import pi.ai.chat_completions_provider;
 import pi.ai.faux_provider;
+import pi.ai.github_copilot_oauth_flow;
 import pi.ai.google_adc_auth;
 import pi.ai.google_provider;
 import pi.ai.google_vertex_provider;
@@ -42,7 +43,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<OauthRefreshFlow>> buildFlows() const;
-    std::map<std::string, IOauthFlow*> flowMap() const;
+    std::map<std::string, IOauthFlow*> flowMap();
     void registerFaux(const std::string& replies);
 
     PlatformServices& m_platform;
@@ -52,6 +53,7 @@ private:
     EnvKeyTable m_envKeys;
     GoogleAdcAuth m_adc;
     std::vector<std::unique_ptr<OauthRefreshFlow>> m_flows;
+    GithubCopilotOauthFlow m_copilot;
     ProviderRegistry m_providers;
     std::shared_ptr<FauxProvider> m_faux;
     ModelRuntime m_runtime;
@@ -67,6 +69,7 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
       m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(),
             platform.base64()),
       m_flows(buildFlows()),
+      m_copilot(platform.http()),
       m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore,
                 platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
     m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
@@ -110,11 +113,12 @@ std::vector<std::unique_ptr<OauthRefreshFlow>> ModelServices::buildFlows() const
     return flows;
 }
 
-std::map<std::string, IOauthFlow*> ModelServices::flowMap() const {
+std::map<std::string, IOauthFlow*> ModelServices::flowMap() {
     std::map<std::string, IOauthFlow*> flows;
     for (const auto& flow : m_flows) {
         flows[flow->providerId()] = flow.get();
     }
+    flows["github-copilot"] = &m_copilot;
     return flows;
 }
 

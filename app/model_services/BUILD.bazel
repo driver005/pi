@@ -13,6 +13,7 @@ pi_module(
         "//src/ai/faux_provider",
         "//src/ai/codex_provider",
         "//src/ai/file_credential_store",
+        "//src/ai/github_copilot_oauth_flow",
         "//src/ai/google_adc_auth",
         "//src/ai/google_provider",
         "//src/ai/google_vertex_provider",
