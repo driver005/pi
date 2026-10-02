@@ -13,7 +13,7 @@ build --incompatible_strict_action_env
 build --strip=never
 test --test_output=errors
 
-build:asan --copt=-fsanitize=address,undefined --linkopt=-fsanitize=address,undefined --copt=-fno-omit-frame-pointer
+build:asan --copt=-fsanitize=address --linkopt=-fsanitize=address --copt=-fno-omit-frame-pointer
 build:tsan --copt=-fsanitize=thread --linkopt=-fsanitize=thread
 
 # Machine-local settings (registry mirrors, proxies) go in user.bazelrc.

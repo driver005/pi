@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "file_mutation_queue",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/tool/i_file_mutation_queue",
+    ],
+    test_deps = ["//src/base/posix_file_system"],
+)
