@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "delta_encoder",
+    deps = ["//interfaces/types/json"],
+    test_deps = [
+        "//interfaces/support/delta_decoder",
+    ],
+)
