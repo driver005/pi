@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "mcp_server_connection",
+    deps = [
+        "//interfaces/mcp/i_mcp_connector",
+        "//interfaces/mcp/i_mcp_tool_caller",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/mcp_server_config",
+        "//interfaces/types/mcp_server_state",
+        "//interfaces/types/mcp_tool",
+    ],
+    test_deps = [
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_mcp_connector",
+    ],
+)

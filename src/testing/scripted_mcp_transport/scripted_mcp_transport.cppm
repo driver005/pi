@@ -31,6 +31,8 @@ public:
     void drop();
     /** Makes start() fail. */
     void failStart(const std::string& message);
+    /** The next send of a request for `method` fails with this error (once). */
+    void failSend(const std::string& method, Error error);
 
     std::vector<Json> sent() const;
     std::vector<Json> sent(const std::string& method) const;
@@ -59,6 +61,7 @@ private:
     CloseListener m_close;
     std::string m_protocolVersion;
     std::optional<std::string> m_startFailure;
+    std::map<std::string, std::deque<Error>> m_sendFailures;
     bool m_closed = false;
     bool m_closeNotified = false;
     int m_closeCalls = 0;
@@ -164,6 +167,11 @@ void ScriptedMcpTransport::failStart(const std::string& message) {
     m_startFailure = message;
 }
 
+void ScriptedMcpTransport::failSend(const std::string& method, Error error) {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    m_sendFailures[method].push_back(std::move(error));
+}
+
 std::vector<Json> ScriptedMcpTransport::sent() const {
     const std::lock_guard<std::mutex> lock(m_mutex);
     return m_sent;
@@ -213,6 +221,12 @@ Result<void> ScriptedMcpTransport::send(const Json& message) {
         m_sent.push_back(message);
         if (message.contains("method") && message.contains("id")) {
             const std::string method = message["method"].get<std::string>();
+            auto failure = m_sendFailures.find(method);
+            if (failure != m_sendFailures.end() && !failure->second.empty()) {
+                Error error = std::move(failure->second.front());
+                failure->second.pop_front();
+                return std::unexpected(std::move(error));
+            }
             ignored = m_ignored.contains(method);
             const auto found = m_handlers.find(method);
             if (found != m_handlers.end()) {
