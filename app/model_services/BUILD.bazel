@@ -17,6 +17,7 @@ pi_module(
         "//src/ai/file_models_store",
         "//src/ai/mistral_provider",
         "//src/ai/model_runtime",
+        "//src/ai/pi_messages_provider",
         "//src/ai/provider_registry",
         "//src/ai/responses_provider",
     ],

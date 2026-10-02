@@ -17,6 +17,7 @@ import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.mistral_provider;
 import pi.ai.model_runtime;
+import pi.ai.pi_messages_provider;
 import pi.ai.provider_registry;
 import pi.ai.responses_provider;
 import pi.platform_services;
@@ -73,6 +74,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
     m_providers.registerProvider(std::make_shared<GoogleVertexProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(), m_adc));
     m_providers.registerProvider(std::make_shared<MistralProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+    m_providers.registerProvider(std::make_shared<PiMessagesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");

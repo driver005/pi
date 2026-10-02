@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "pi_messages_stream_reader",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/sse_event",
+    ],
+    test_deps = ["//src/testing/fixed_clock"],
+)
