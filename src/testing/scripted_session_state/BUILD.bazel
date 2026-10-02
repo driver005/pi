@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_session_state",
+    deps = [
+        "//interfaces/server/i_routed_session_handle",
+        "//src/testing/scripted_service_attachment",
+    ],
+)

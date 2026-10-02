@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_router",
+    deps = [
+        "//interfaces/chord/i_service_endpoint",
+        "//interfaces/types/client_attachment",
+        "//interfaces/types/hosted_session",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/rpc_target",
+        "//interfaces/types/session_router_options",
+    ],
+    test_deps = [
+        "//src/testing/scripted_server_host",
+        "//src/testing/sequential_id_generator",
+    ],
+)

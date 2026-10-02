@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_service_attachment",
+    deps = ["//interfaces/server/i_service_attachment"],
+)
