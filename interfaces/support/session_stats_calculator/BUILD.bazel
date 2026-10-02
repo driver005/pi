@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_stats_calculator",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_stats",
+    ],
+)

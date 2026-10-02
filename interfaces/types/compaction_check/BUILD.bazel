@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "compaction_check",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/compaction_settings",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_projection",
+    ],
+)

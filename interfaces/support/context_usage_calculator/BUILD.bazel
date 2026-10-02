@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "context_usage_calculator",
+    deps = [
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/types/context_usage",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_projection",
+    ],
+)

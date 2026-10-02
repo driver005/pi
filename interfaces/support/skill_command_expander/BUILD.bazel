@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "skill_command_expander",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/frontmatter_parser",
+        "//interfaces/types/parsed_skill_block",
+        "//interfaces/types/result",
+        "//interfaces/types/skill",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "overflow_detector",
+    deps = ["//interfaces/types/assistant_message"],
+)
