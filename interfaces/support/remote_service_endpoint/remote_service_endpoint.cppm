@@ -2,7 +2,7 @@ module;
 
 #include <nlohmann/json.hpp>
 
-export module pi.chord.remote_service_endpoint;
+export module pi.support.remote_service_endpoint;
 
 import std;
 export import pi.chord.i_service_endpoint;

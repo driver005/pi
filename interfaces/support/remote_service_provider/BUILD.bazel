@@ -1,6 +1,6 @@
-load("//tools:module.bzl", "pi_module")
+load("//tools:module.bzl", "pi_support")
 
-pi_module(
+pi_support(
     name = "remote_service_provider",
     deps = [
         "//interfaces/chord/i_remote_service",
@@ -12,6 +12,6 @@ pi_module(
         "//interfaces/types/service_registration",
     ],
     test_deps = [
-        "//src/chord/replicated_state",
+        "//interfaces/support/replicated_state",
     ],
 )

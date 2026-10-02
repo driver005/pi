@@ -4,7 +4,7 @@ module;
 
 #include <cstdint>
 
-export module pi.chord.remote_service_provider;
+export module pi.support.remote_service_provider;
 
 import std;
 export import pi.chord.i_remote_service;

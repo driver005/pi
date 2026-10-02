@@ -2,9 +2,9 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.chord.remote_service_endpoint;
-import pi.chord.remote_service_provider;
-import pi.chord.replicated_state;
+import pi.support.remote_service_endpoint;
+import pi.support.remote_service_provider;
+import pi.support.replicated_state;
 
 class CounterService : public IRemoteService {
 public:

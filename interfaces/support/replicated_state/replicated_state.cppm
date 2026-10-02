@@ -4,7 +4,7 @@ module;
 
 #include <cstdint>
 
-export module pi.chord.replicated_state;
+export module pi.support.replicated_state;
 
 import std;
 export import pi.chord.i_replicated_state;

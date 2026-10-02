@@ -2,7 +2,7 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.chord.replicated_state;
+import pi.support.replicated_state;
 import pi.support.delta_applier;
 
 class ReplicatedStateTest : public testing::Test {
