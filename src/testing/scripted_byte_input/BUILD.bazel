@@ -1,0 +1,3 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(name = "scripted_byte_input", deps = ["//interfaces/platform/i_byte_input"])

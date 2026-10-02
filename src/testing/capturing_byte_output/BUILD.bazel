@@ -1,0 +1,3 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(name = "capturing_byte_output", deps = ["//interfaces/platform/i_byte_output"])

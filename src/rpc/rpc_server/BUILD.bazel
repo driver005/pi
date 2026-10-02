@@ -1,0 +1,26 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "rpc_server",
+    deps = [
+        "//interfaces/platform/i_byte_input",
+        "//interfaces/platform/i_byte_output",
+        "//interfaces/platform/i_executor",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_agent_session_runtime",
+        "//interfaces/support/json_writer",
+        "//interfaces/support/jsonl_line_reader",
+        "//interfaces/support/rpc_command_router",
+    ],
+    test_deps = [
+        "//app/session_manager_factory",
+        "//src/base/thread_pool",
+        "//src/session/agent_session_runtime",
+        "//src/session/session_store",
+        "//src/testing/capturing_byte_output",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/scripted_byte_input",
+        "//src/testing/session_harness",
+        "//src/testing/session_runtime_factory",
+    ],
+)
