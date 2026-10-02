@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "prompt_loadout",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/platform/i_clock",
+        "//interfaces/session/i_resource_loader",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/support/system_prompt_builder",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/tool/i_tool_registry",
+    ],
+    test_deps = [
+        "//src/testing/fake_resource_loader",
+        "//src/testing/scripted_tool",
+        "//src/testing/session_harness",
+        "//src/tools/tool_registry",
+    ],
+)

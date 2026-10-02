@@ -31,10 +31,15 @@ public:
         return m_sequential ? std::optional<ToolExecutionMode>(ToolExecutionMode::Sequential) : std::nullopt;
     }
     std::string promptSnippet() const override {
-        return "";
+        return m_snippet;
     }
     std::vector<std::string> promptGuidelines() const override {
-        return {};
+        return m_guidelines;
+    }
+    /** Test helper: what the tool contributes to the system prompt. */
+    void setPrompt(std::string snippet, std::vector<std::string> guidelines) {
+        m_snippet = std::move(snippet);
+        m_guidelines = std::move(guidelines);
     }
     Json prepareArguments(const Json& arguments) const override {
         return arguments;
@@ -58,6 +63,8 @@ public:
 
 private:
     Tool m_definition;
+    std::string m_snippet;
+    std::vector<std::string> m_guidelines;
     std::string m_resultText;
     int m_delayMs;
     bool m_terminate;
