@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "chat_completions_request_builder",
+    deps = [
+        "//interfaces/support/chat_completions_compat_resolver",
+        "//interfaces/support/message_transformer",
+        "//interfaces/support/short_hash",
+        "//interfaces/support/thinking_budget_calculator",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/chat_completions_compat",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/transcript_context",
+    ],
+)

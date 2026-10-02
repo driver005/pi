@@ -55,3 +55,19 @@ TEST(ProviderErrorFormatterTest, SdkStyleMessages) {
     response.body = "";
     EXPECT_EQ(formatter.formatSdk(response), "400 status code (no body)");
 }
+
+TEST(ProviderErrorFormatterTest, OpenAiStyleMessages) {
+    ProviderErrorFormatter formatter;
+    HttpResponse response;
+    response.status = 429;
+    response.body = R"({"error":{"message":"Rate limit","type":"x"}})";
+    EXPECT_EQ(formatter.formatOpenAi(response), "429 Rate limit");
+    response.body = R"({"error":{"message":"Provider returned error","metadata":{"raw":"upstream said no"}}})";
+    EXPECT_EQ(formatter.formatOpenAi(response), "429 Provider returned error\nupstream said no");
+    response.body = R"({"error":{"code":1}})";
+    EXPECT_EQ(formatter.formatOpenAi(response), "429 {\"code\":1}");
+    response.body = "gateway down";
+    EXPECT_EQ(formatter.formatOpenAi(response), "429 gateway down");
+    response.body = "";
+    EXPECT_EQ(formatter.formatOpenAi(response), "429 status code (no body)");
+}

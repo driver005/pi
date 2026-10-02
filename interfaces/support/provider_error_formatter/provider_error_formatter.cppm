@@ -22,6 +22,12 @@ public:
      */
     std::string formatSdk(const HttpResponse& response) const;
 
+    /**
+     * OpenAI SDK style: the message comes from the body's `error` object (message string or its
+     * JSON), plus OpenRouter's `error.metadata.raw` detail on its own line when present.
+     */
+    std::string formatOpenAi(const HttpResponse& response) const;
+
     /** Appends "... [truncated N chars]" past the limit, without splitting a UTF-8 sequence. */
     std::string truncate(const std::string& text, std::size_t maxChars) const;
 
@@ -94,4 +100,37 @@ std::string ProviderErrorFormatter::formatSdk(const HttpResponse& response) cons
         return status + " " + json["message"].get<std::string>();
     }
     return status + " " + truncate(body, MaxBodyChars);
+}
+
+std::string ProviderErrorFormatter::formatOpenAi(const HttpResponse& response) const {
+    const std::string status = std::to_string(response.status);
+    const std::string body = trim(response.body);
+    if (body.empty()) {
+        return status + " status code (no body)";
+    }
+    const Json json = Json::parse(body, nullptr, false);
+    if (!json.is_object()) {
+        return status + " " + truncate(body, MaxBodyChars);
+    }
+    const auto dump = [](const Json& value) {
+        return value.dump(-1, ' ', false, Json::error_handler_t::replace);
+    };
+    const Json error = json.contains("error") ? json["error"] : json;
+    std::string message;
+    if (error.is_string()) {
+        message = error.get<std::string>();
+    } else if (error.is_object() && error.contains("message") && error["message"].is_string()) {
+        message = error["message"].get<std::string>();
+    } else {
+        message = truncate(dump(error), MaxBodyChars);
+    }
+    std::string out = status + " " + message;
+    if (error.is_object() && error.contains("metadata") && error["metadata"].is_object() &&
+        error["metadata"].contains("raw") && error["metadata"]["raw"].is_string()) {
+        const std::string raw = error["metadata"]["raw"].get<std::string>();
+        if (out.find(raw) == std::string::npos) {
+            out += "\n" + raw;
+        }
+    }
+    return out;
 }

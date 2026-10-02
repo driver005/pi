@@ -1,0 +1,3 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(name = "short_hash")
