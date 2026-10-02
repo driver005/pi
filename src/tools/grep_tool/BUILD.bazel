@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "grep_tool",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/support/path_resolver",
+        "//interfaces/support/text_truncator",
+        "//interfaces/support/tool_result_factory",
+        "//interfaces/tool/i_tool",
+    ],
+    test_deps = [
+        "//src/base/posix_file_system",
+        "//src/base/posix_process_runner",
+    ],
+)
