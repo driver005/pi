@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 import std;
-import pi.session.session_event_hub;
+import pi.support.session_event_hub;
 
 class SessionEventHubTest : public testing::Test {
 protected:

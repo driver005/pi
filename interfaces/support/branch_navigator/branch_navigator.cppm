@@ -2,7 +2,7 @@ module;
 
 #include <nlohmann/json.hpp>
 
-export module pi.session.branch_navigator;
+export module pi.support.branch_navigator;
 
 import std;
 export import pi.agent.i_agent;

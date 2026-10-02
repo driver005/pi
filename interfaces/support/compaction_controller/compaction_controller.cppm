@@ -2,7 +2,7 @@ module;
 
 #include <cstdint>
 
-export module pi.session.compaction_controller;
+export module pi.support.compaction_controller;
 
 import std;
 export import pi.agent.i_agent;

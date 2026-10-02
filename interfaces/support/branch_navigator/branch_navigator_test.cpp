@@ -2,7 +2,7 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.session.branch_navigator;
+import pi.support.branch_navigator;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;
 import pi.testing.session_harness;

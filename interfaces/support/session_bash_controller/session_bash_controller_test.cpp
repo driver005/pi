@@ -6,7 +6,7 @@ import pi.base.boring_crypto;
 import pi.base.posix_file_system;
 import pi.base.posix_process_runner;
 import pi.base.system_environment;
-import pi.session.session_bash_controller;
+import pi.support.session_bash_controller;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;
 import pi.testing.session_harness;

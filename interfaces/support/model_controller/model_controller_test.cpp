@@ -2,7 +2,7 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.session.model_controller;
+import pi.support.model_controller;
 import pi.testing.fake_model_runtime;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;

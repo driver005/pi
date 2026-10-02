@@ -2,7 +2,7 @@ module;
 
 #include <cstdint>
 
-export module pi.session.auto_retry_controller;
+export module pi.support.auto_retry_controller;
 
 import std;
 export import pi.platform.i_sleeper;

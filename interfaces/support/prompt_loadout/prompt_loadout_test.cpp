@@ -2,7 +2,7 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.session.prompt_loadout;
+import pi.support.prompt_loadout;
 import pi.testing.fake_resource_loader;
 import pi.testing.scripted_tool;
 import pi.testing.session_harness;

@@ -1,6 +1,6 @@
-load("//tools:module.bzl", "pi_module")
+load("//tools:module.bzl", "pi_support")
 
-pi_module(
+pi_support(
     name = "prompt_loadout",
     deps = [
         "//interfaces/agent/i_agent",

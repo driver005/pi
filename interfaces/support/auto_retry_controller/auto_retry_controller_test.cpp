@@ -2,7 +2,7 @@
 #include <nlohmann/json.hpp>
 
 import std;
-import pi.session.auto_retry_controller;
+import pi.support.auto_retry_controller;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;
 import pi.testing.session_harness;

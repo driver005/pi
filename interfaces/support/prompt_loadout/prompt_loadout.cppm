@@ -1,4 +1,4 @@
-export module pi.session.prompt_loadout;
+export module pi.support.prompt_loadout;
 
 import std;
 export import pi.agent.i_agent;

@@ -2,7 +2,7 @@ module;
 
 #include <nlohmann/json.hpp>
 
-export module pi.session.session_bash_controller;
+export module pi.support.session_bash_controller;
 
 import std;
 export import pi.agent.i_agent;

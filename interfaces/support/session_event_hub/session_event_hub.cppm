@@ -2,7 +2,7 @@ module;
 
 #include <cstdint>
 
-export module pi.session.session_event_hub;
+export module pi.support.session_event_hub;
 
 import std;
 export import pi.session.i_session_event_sink;

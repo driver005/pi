@@ -2,7 +2,7 @@ module;
 
 #include <nlohmann/json.hpp>
 
-export module pi.session.model_controller;
+export module pi.support.model_controller;
 
 import std;
 export import pi.agent.i_agent;

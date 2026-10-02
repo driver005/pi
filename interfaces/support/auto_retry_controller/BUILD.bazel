@@ -1,6 +1,6 @@
-load("//tools:module.bzl", "pi_module")
+load("//tools:module.bzl", "pi_support")
 
-pi_module(
+pi_support(
     name = "auto_retry_controller",
     deps = [
         "//interfaces/platform/i_sleeper",
