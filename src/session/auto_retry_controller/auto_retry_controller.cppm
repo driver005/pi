@@ -72,13 +72,7 @@ AutoRetryController::AutoRetryController(ISettingsManager& settings, ISleeper& s
     : m_settings(settings), m_sleeper(sleeper), m_omitter(omitter), m_sink(sink), m_delays(sleeper) {}
 
 AssistantRetryPolicy AutoRetryController::policy() const {
-    const SettingsView view = m_settings.view();
-    AssistantRetryPolicy out;
-    out.enabled = view.retryEnabled();
-    out.maxRetries = static_cast<int>(view.retryMaxRetries());
-    out.baseDelayMs = view.retryBaseDelayMs();
-    out.maxDelayMs = view.retryMaxAgentDelayMs();
-    return out;
+    return m_settings.view().retryPolicy();
 }
 
 bool AutoRetryController::isRetryable(const AssistantMessage& message, std::int64_t contextWindow) const {

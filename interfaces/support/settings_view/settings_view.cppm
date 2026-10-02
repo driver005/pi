@@ -8,6 +8,8 @@ export module pi.support.settings_view;
 
 import std;
 export import pi.support.settings_merger;
+export import pi.types.assistant_retry_policy;
+export import pi.types.compaction_settings;
 export import pi.types.json;
 
 /**
@@ -33,9 +35,13 @@ public:
     /** modelOverrides["provider/id"] wins over the plain value; invalid numbers fall back. */
     std::int64_t compactionReserveTokens(const std::string& provider, const std::string& modelId) const;
     std::int64_t compactionKeepRecentTokens(const std::string& provider, const std::string& modelId) const;
+    /** enabled, reserve and keep-recent tokens for a model in one value. */
+    CompactionSettings compactionSettings(const std::string& provider, const std::string& modelId) const;
     std::int64_t branchSummaryReserveTokens() const;
     bool branchSummarySkipPrompt() const;
 
+    /** settings.retry as a policy for retried assistant calls. */
+    AssistantRetryPolicy retryPolicy() const;
     bool retryEnabled() const;
     std::int64_t retryMaxRetries() const;
     std::int64_t retryBaseDelayMs() const;
@@ -185,6 +191,15 @@ std::int64_t SettingsView::compactionReserveTokens(const std::string& provider, 
     return compactionToken("reserveTokens", provider, modelId, 16384);
 }
 
+CompactionSettings SettingsView::compactionSettings(const std::string& provider,
+                                                    const std::string& modelId) const {
+    CompactionSettings out;
+    out.enabled = compactionEnabled();
+    out.reserveTokens = compactionReserveTokens(provider, modelId);
+    out.keepRecentTokens = compactionKeepRecentTokens(provider, modelId);
+    return out;
+}
+
 std::int64_t SettingsView::compactionKeepRecentTokens(const std::string& provider,
                                                       const std::string& modelId) const {
     return compactionToken("keepRecentTokens", provider, modelId, 20000);
@@ -197,6 +212,15 @@ std::int64_t SettingsView::branchSummaryReserveTokens() const {
 
 bool SettingsView::branchSummarySkipPrompt() const {
     return boolAt(section("branchSummary"), "skipPrompt", false);
+}
+
+AssistantRetryPolicy SettingsView::retryPolicy() const {
+    AssistantRetryPolicy out;
+    out.enabled = retryEnabled();
+    out.maxRetries = static_cast<int>(retryMaxRetries());
+    out.baseDelayMs = retryBaseDelayMs();
+    out.maxDelayMs = retryMaxAgentDelayMs();
+    return out;
 }
 
 bool SettingsView::retryEnabled() const {

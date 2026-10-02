@@ -1,0 +1,25 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "compaction_controller",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/auth_guidance",
+        "//interfaces/support/compaction_preparer",
+        "//interfaces/support/compactor",
+        "//interfaces/support/session_context_refresher",
+        "//interfaces/support/summarization_retry_reporter",
+        "//interfaces/types/agent_loop_config",
+        "//interfaces/types/compaction_result",
+        "//interfaces/types/summarization_options",
+    ],
+    test_deps = [
+        "//src/testing/fake_settings_manager",
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

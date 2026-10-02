@@ -29,6 +29,11 @@ public:
     virtual ~IAgent() = default;
 
     virtual AgentState state() const = 0;
+    /** Cheap reads of single state fields (state() copies the whole transcript). */
+    virtual Model model() const = 0;
+    virtual ThinkingLevel thinkingLevel() const = 0;
+    virtual bool isRunning() const = 0;
+    virtual std::vector<AgentMessage> messages() const = 0;
     virtual void setModel(const Model& model) = 0;
     virtual void setThinkingLevel(ThinkingLevel level) = 0;
     virtual void setTools(std::vector<std::shared_ptr<ITool>> tools) = 0;

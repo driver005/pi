@@ -76,3 +76,25 @@ TEST(SettingsViewTest, WrongTypesFallBack) {
     EXPECT_TRUE(view.skillPaths().empty());
     EXPECT_EQ(view.httpIdleTimeoutMs(), 300000);
 }
+
+TEST(SettingsViewCompactionTest, CompactionSettingsBundlesModelAwareValues) {
+    const SettingsView view(Json{{"compaction", Json{{"enabled", false},
+                                                      {"reserveTokens", 100},
+                                                      {"modelOverrides", Json{{"p/m", Json{{"keepRecentTokens", 7}}}}}}}});
+    const CompactionSettings settings = view.compactionSettings("p", "m");
+    EXPECT_FALSE(settings.enabled);
+    EXPECT_EQ(settings.reserveTokens, 100);
+    EXPECT_EQ(settings.keepRecentTokens, 7);
+    EXPECT_EQ(view.compactionSettings("other", "x").keepRecentTokens, 20000);
+}
+
+TEST(SettingsViewRetryTest, RetryPolicyReadsSettingsWithDefaults) {
+    const AssistantRetryPolicy defaults = SettingsView().retryPolicy();
+    EXPECT_TRUE(defaults.enabled);
+    EXPECT_EQ(defaults.maxRetries, 3);
+    EXPECT_EQ(defaults.baseDelayMs, 2000);
+    const SettingsView custom(Json{{"retry", Json{{"enabled", false}, {"maxRetries", 1}, {"baseDelayMs", 5}}}});
+    EXPECT_FALSE(custom.retryPolicy().enabled);
+    EXPECT_EQ(custom.retryPolicy().maxRetries, 1);
+    EXPECT_EQ(custom.retryPolicy().baseDelayMs, 5);
+}

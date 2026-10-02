@@ -14,6 +14,10 @@ public:
     Agent(AgentOptions options, IAgentLoop& loop, const IClock& clock);
 
     AgentState state() const override;
+    Model model() const override;
+    ThinkingLevel thinkingLevel() const override;
+    bool isRunning() const override;
+    std::vector<AgentMessage> messages() const override;
     void setModel(const Model& model) override;
     void setThinkingLevel(ThinkingLevel level) override;
     void setTools(std::vector<std::shared_ptr<ITool>> tools) override;
@@ -122,6 +126,26 @@ AgentState Agent::state() const {
     snapshot.pendingToolCalls = m_pendingToolCalls;
     snapshot.errorMessage = m_errorMessage;
     return snapshot;
+}
+
+Model Agent::model() const {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    return m_model;
+}
+
+ThinkingLevel Agent::thinkingLevel() const {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    return m_thinkingLevel;
+}
+
+bool Agent::isRunning() const {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    return m_running;
+}
+
+std::vector<AgentMessage> Agent::messages() const {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    return m_messages;
 }
 
 void Agent::setModel(const Model& model) {
