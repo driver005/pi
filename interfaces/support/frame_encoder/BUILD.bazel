@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "frame_encoder",
+    deps = ["//interfaces/types/result"],
+)
