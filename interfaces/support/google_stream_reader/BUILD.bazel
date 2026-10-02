@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "google_stream_reader",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/sse_event",
+    ],
+    test_deps = ["//src/testing/fixed_clock"],
+)

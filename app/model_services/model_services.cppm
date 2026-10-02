@@ -10,6 +10,7 @@ import pi.ai.anthropic_messages_provider;
 import pi.ai.azure_responses_provider;
 import pi.ai.chat_completions_provider;
 import pi.ai.faux_provider;
+import pi.ai.google_provider;
 import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.model_runtime;
@@ -61,6 +62,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<AzureResponsesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment()));
+    m_providers.registerProvider(std::make_shared<GoogleProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
         registerFaux(replies.value_or("[]"));
