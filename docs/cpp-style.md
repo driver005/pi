@@ -46,7 +46,10 @@ top-level directory (`src/base/system_clock` -> `pi.base.system_clock`), the fil
 snake_case of the single class. Declare modules with the macros in `tools/module.bzl`:
 
 - `pi_interface`: module under `interfaces/` (no test of its own).
-- `pi_support`: pure-logic helper under `interfaces/support/`, with test.
+- `pi_support`: helper under `interfaces/support/`, with test. It does no I/O of its own: OS access
+  goes through `I*` references. That includes the stateful orchestrators an `AgentSession` is built
+  from (retry, compaction, model and bash controllers); they are support modules so the session,
+  which may import only interfaces, can use them.
 - `pi_module`: implementation under `src/`, with test.
 - `pi_test_support`: test-only fake under `src/testing/`.
 
@@ -56,7 +59,8 @@ POSIX headers) is `#include`d in the global module fragment (`module;` ... `expo
 nlohmann/json must be included in every unit that uses `Json` members (template lookup).
 
 Production modules import only `interfaces/` modules, never other `src/` modules. Tests, `app/`
-and `src/testing/` may import concrete modules. Wiring happens in `app/` by constructor injection.
+and `src/testing/` may import concrete modules. Wiring happens in `app/` by constructor injection;
+factories that must construct a concrete class (for example `app/agent_factory`) live there too.
 
 ## Rules (enforced by `tools/check_style.py`, `-Wall -Wextra -Werror`)
 

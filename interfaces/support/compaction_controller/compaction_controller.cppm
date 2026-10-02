@@ -42,6 +42,8 @@ public:
 
     void abort();
     bool compacting() const;
+    /** A user-requested compaction is running (automatic ones only run inside an agent run). */
+    bool manualInProgress() const;
 
 private:
     SummarizationOptions optionsFor(const std::shared_ptr<AbortSignal>& signal, const std::string& reason) const;
@@ -119,6 +121,11 @@ void CompactionController::abort() {
 bool CompactionController::compacting() const {
     const std::lock_guard<std::mutex> lock(m_mutex);
     return m_manual != nullptr || m_auto != nullptr;
+}
+
+bool CompactionController::manualInProgress() const {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    return m_manual != nullptr;
 }
 
 SummarizationOptions CompactionController::optionsFor(const std::shared_ptr<AbortSignal>& signal,

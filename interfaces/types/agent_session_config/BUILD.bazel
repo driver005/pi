@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_session_config",
+    deps = [
+        "//interfaces/agent/i_agent_factory",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_resource_loader",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/bash_command_executor",
+        "//interfaces/tool/i_tool_registry",
+        "//interfaces/types/model",
+        "//interfaces/types/scoped_model",
+        "//interfaces/types/thinking_level",
+    ],
+)

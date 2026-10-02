@@ -1,10 +1,10 @@
 load("//tools:module.bzl", "pi_support")
 
 pi_support(
-    name = "session_context_refresher",
+    name = "session_message_persister",
     deps = [
-        "//interfaces/agent/i_agent",
         "//interfaces/session/i_session_manager",
+        "//interfaces/types/agent_message",
     ],
     test_deps = ["//src/testing/session_harness"],
 )

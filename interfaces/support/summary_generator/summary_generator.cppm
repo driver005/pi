@@ -27,7 +27,7 @@ export import pi.types.transcript_context;
  */
 export class SummaryGenerator {
 public:
-    SummaryGenerator(IClock& clock, IIdGenerator& ids, ISleeper& sleeper);
+    SummaryGenerator(const IClock& clock, IIdGenerator& ids, ISleeper& sleeper);
 
     /** The one call behind every summary: no caching, a routing session id, retry policy applied. */
     AssistantMessage complete(const TranscriptContext& context, const SummarizationOptions& options,
@@ -61,7 +61,7 @@ private:
     std::string updateInstructions() const;
     std::string turnPrefixPrompt() const;
 
-    IClock& m_clock;
+    const IClock& m_clock;
     IIdGenerator& m_ids;
     AssistantCallRetrier m_retrier;
     AgentMessageConverter m_converter;
@@ -69,7 +69,7 @@ private:
     TranscriptNormalizer m_normalizer;
 };
 
-SummaryGenerator::SummaryGenerator(IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
+SummaryGenerator::SummaryGenerator(const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
     : m_clock(clock), m_ids(ids), m_retrier(sleeper) {}
 
 std::string SummaryGenerator::summarizationPrompt() const {
