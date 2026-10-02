@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "platform_services",
+    deps = [
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/base/curl_http_client",
+        "//src/base/posix_file_lock",
+        "//src/base/posix_file_system",
+        "//src/base/posix_process_runner",
+        "//src/base/system_clock",
+        "//src/base/system_environment",
+        "//src/base/thread_pool",
+        "//src/base/thread_sleeper",
+        "//src/base/uuid7_generator",
+    ],
+)
