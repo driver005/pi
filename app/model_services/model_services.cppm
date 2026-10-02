@@ -19,10 +19,12 @@ import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.mistral_provider;
 import pi.ai.model_runtime;
+import pi.ai.oauth_refresh_flow;
 import pi.ai.pi_messages_provider;
 import pi.ai.provider_registry;
 import pi.ai.responses_provider;
 import pi.platform_services;
+import pi.support.builtin_oauth_specs;
 
 /**
  * The model side of the application: credential and models.json stores under the agent directory,
@@ -39,6 +41,8 @@ public:
     FauxProvider* faux();
 
 private:
+    std::vector<std::unique_ptr<OauthRefreshFlow>> buildFlows() const;
+    std::map<std::string, IOauthFlow*> flowMap() const;
     void registerFaux(const std::string& replies);
 
     PlatformServices& m_platform;
@@ -47,6 +51,7 @@ private:
     FileModelsStore m_modelsStore;
     EnvKeyTable m_envKeys;
     GoogleAdcAuth m_adc;
+    std::vector<std::unique_ptr<OauthRefreshFlow>> m_flows;
     ProviderRegistry m_providers;
     std::shared_ptr<FauxProvider> m_faux;
     ModelRuntime m_runtime;
@@ -61,8 +66,9 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
       m_envKeys(platform.environment(), platform.files()),
       m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(),
             platform.base64()),
+      m_flows(buildFlows()),
       m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore,
-                platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), {}) {
+                platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
     m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(
@@ -89,6 +95,27 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         registerFaux(replies.value_or("[]"));
     }
     m_runtime.reload();
+}
+
+std::vector<std::unique_ptr<OauthRefreshFlow>> ModelServices::buildFlows() const {
+    std::string kimiHost = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
+    if (kimiHost.empty()) {
+        kimiHost = m_platform.environment().get("KIMI_OAUTH_HOST").value_or("");
+    }
+    std::vector<std::unique_ptr<OauthRefreshFlow>> flows;
+    for (auto& spec : BuiltinOauthSpecs().all(kimiHost)) {
+        flows.push_back(std::make_unique<OauthRefreshFlow>(std::move(spec), m_platform.http(), m_platform.clock(),
+                                                           m_platform.base64()));
+    }
+    return flows;
+}
+
+std::map<std::string, IOauthFlow*> ModelServices::flowMap() const {
+    std::map<std::string, IOauthFlow*> flows;
+    for (const auto& flow : m_flows) {
+        flows[flow->providerId()] = flow.get();
+    }
+    return flows;
 }
 
 void ModelServices::registerFaux(const std::string& replies) {

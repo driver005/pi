@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "oauth_refresh_flow",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/types/json",
+        "//interfaces/types/oauth_refresh_spec",
+    ],
+    test_deps = [
+        "//interfaces/support/builtin_oauth_specs",
+        "//src/base/base64_codec",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+    ],
+)
