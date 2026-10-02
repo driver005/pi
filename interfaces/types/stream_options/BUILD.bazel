@@ -2,5 +2,5 @@ load("//tools:module.bzl", "pi_interface")
 
 pi_interface(
     name = "stream_options",
-    deps = ["//interfaces/types/model", "//interfaces/types/provider_response", "//interfaces/types/thinking_level", "//interfaces/types/json", ],
+    deps = ["//interfaces/support/abort_signal", "//interfaces/types/model", "//interfaces/types/provider_response", "//interfaces/types/thinking_level", "//interfaces/types/json", ],
 )

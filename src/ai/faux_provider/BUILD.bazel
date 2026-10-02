@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "faux_provider",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_executor",
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+    ],
+)
