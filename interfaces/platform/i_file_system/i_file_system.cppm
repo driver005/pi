@@ -14,8 +14,12 @@ public:
 
     virtual Result<std::string> readFile(const std::string& path) = 0;
     virtual Result<void> writeFile(const std::string& path, const std::string& content) = 0;
+    /** Like writeFile; a newly created file is private to the owner (mode 0600). */
+    virtual Result<void> writeFilePrivate(const std::string& path, const std::string& content) = 0;
     virtual Result<void> appendFile(const std::string& path, const std::string& content) = 0;
     virtual Result<void> createDirectories(const std::string& path) = 0;
+    /** Like createDirectories; created directories are private to the owner (mode 0700). */
+    virtual Result<void> createPrivateDirectories(const std::string& path) = 0;
     virtual Result<void> removeFile(const std::string& path) = 0;
     virtual Result<void> renameFile(const std::string& from, const std::string& to) = 0;
     virtual bool exists(const std::string& path) = 0;

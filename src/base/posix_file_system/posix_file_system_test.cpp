@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <sys/stat.h>
 #include <cstdlib>
 
 import std;
@@ -77,4 +78,21 @@ TEST_F(PosixFileSystemTest, PermissionChecksAndHome) {
     EXPECT_TRUE(m_fs.isReadable(m_dir + "/p"));
     EXPECT_TRUE(m_fs.isWritable(m_dir + "/p"));
     EXPECT_FALSE(m_fs.homeDirectory().empty());
+}
+
+TEST_F(PosixFileSystemTest, PrivateFilesAndDirectoriesUseOwnerOnlyModes) {
+    const std::string nested = m_dir + "/a/b";
+    ASSERT_TRUE(m_fs.createPrivateDirectories(nested).has_value());
+    struct stat info {};
+    ASSERT_EQ(stat(nested.c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 0777, 0700U);
+    const std::string file = nested + "/auth.json";
+    ASSERT_TRUE(m_fs.writeFilePrivate(file, "{}").has_value());
+    ASSERT_EQ(stat(file.c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 0777, 0600U);
+    // Existing files keep their mode when rewritten.
+    chmod(file.c_str(), 0640);
+    ASSERT_TRUE(m_fs.writeFilePrivate(file, "{\"a\":1}").has_value());
+    ASSERT_EQ(stat(file.c_str(), &info), 0);
+    EXPECT_EQ(info.st_mode & 0777, 0640U);
 }

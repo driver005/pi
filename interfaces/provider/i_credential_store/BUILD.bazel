@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_credential_store",
+    deps = [
+        "//interfaces/types/credential",
+        "//interfaces/types/credential_info",
+        "//interfaces/types/result",
+    ],
+)

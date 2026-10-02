@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "credential_codec",
+    deps = [
+        "//interfaces/types/credential",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

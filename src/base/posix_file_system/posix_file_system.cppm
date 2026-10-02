@@ -46,11 +46,15 @@ public:
     }
 
     Result<void> writeFile(const std::string& path, const std::string& content) override {
-        return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_TRUNC);
+        return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    }
+
+    Result<void> writeFilePrivate(const std::string& path, const std::string& content) override {
+        return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     }
 
     Result<void> appendFile(const std::string& path, const std::string& content) override {
-        return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_APPEND);
+        return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_APPEND, 0644);
     }
 
     Result<void> createDirectories(const std::string& path) override {
@@ -58,6 +62,20 @@ public:
         std::filesystem::create_directories(path, error);
         if (error) {
             return std::unexpected(failure(error.value(), "mkdir", path));
+        }
+        return {};
+    }
+
+    Result<void> createPrivateDirectories(const std::string& path) override {
+        std::filesystem::path current;
+        for (const auto& part : std::filesystem::path(path)) {
+            current /= part;
+            if (current.empty() || std::filesystem::exists(current)) {
+                continue;
+            }
+            if (mkdir(current.c_str(), 0700) != 0 && errno != EEXIST) {
+                return std::unexpected(failure(errno, "mkdir", current.string()));
+            }
         }
         return {};
     }
@@ -133,8 +151,9 @@ public:
     }
 
 private:
-    Result<void> writeWithFlags(const std::string& path, const std::string& content, int flags) {
-        const int fd = open(path.c_str(), flags | O_CLOEXEC, 0644);
+    Result<void> writeWithFlags(const std::string& path, const std::string& content, int flags,
+                                mode_t mode) {
+        const int fd = open(path.c_str(), flags | O_CLOEXEC, mode);
         if (fd < 0) {
             return std::unexpected(failure(errno, "open", path));
         }

@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "memory_credential_store",
+    deps = [
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/support/config_value_resolver",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/scripted_process_runner",
+    ],
+)
