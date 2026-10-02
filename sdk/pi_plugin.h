@@ -82,7 +82,8 @@ typedef struct PiHostApi {
 
     /*
      * Runs a program: {"command":..,"args"?:[..],"cwd"?:..,"env"?:{..},"stdin"?:..,"timeoutMs"?:..}.
-     * Returns {"exitCode":n,"stdout":..,"stderr":..,"timedOut":bool} or {"error":"..."}.
+     * Returns {"exitCode":n,"output":<stdout and stderr merged>,"timedOut":bool,"aborted":bool}
+     * or {"error":"..."} when the program could not be started.
      */
     PiOwnedString (*exec)(void* host, PiString request_json, const PiAbort* abort);
 

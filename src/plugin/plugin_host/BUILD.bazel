@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "plugin_host",
+    deps = [
+        "//interfaces/platform/i_dynamic_libraries",
+        "//interfaces/platform/i_logger",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/plugin/i_hook_bus",
+        "//interfaces/plugin/i_plugin_host",
+        "//interfaces/support/plugin_tool_factory",
+        "//interfaces/tool/i_tool_registry",
+        "//interfaces/types/loaded_plugin",
+        "//interfaces/types/plugin_context",
+        "//sdk:pi_plugin_abi",
+    ],
+    test_deps = [
+        "//interfaces/support/hook_bus",
+        "//src/testing/fake_dynamic_libraries",
+        "//src/testing/scripted_process_runner",
+        "//src/tools/tool_registry",
+    ],
+)

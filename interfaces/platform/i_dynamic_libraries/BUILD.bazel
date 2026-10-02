@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_dynamic_libraries",
+    deps = ["//interfaces/types/result"],
+)
