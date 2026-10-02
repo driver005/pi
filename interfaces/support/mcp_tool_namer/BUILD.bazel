@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_tool_namer",
+    deps = ["//interfaces/platform/i_crypto"],
+    test_deps = ["//src/base/boring_crypto"],
+)

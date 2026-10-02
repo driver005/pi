@@ -6,6 +6,7 @@ module;
 export module pi.support.text_truncator;
 
 import std;
+export import pi.types.middle_truncation;
 export import pi.types.truncation_result;
 
 /**
@@ -24,12 +25,18 @@ public:
                                   std::int64_t maxBytes = kDefaultMaxBytes) const;
     TruncationResult truncateTail(const std::string& content, std::int64_t maxLines = kDefaultMaxLines,
                                   std::int64_t maxBytes = kDefaultMaxBytes) const;
+    /**
+     * Keeps the start and the end, half of maxBytes each, and replaces the middle with a
+     * "…N chars truncated…" marker (Codex's format). Cuts only at character boundaries.
+     */
+    MiddleTruncation truncateMiddle(const std::string& content, std::int64_t maxBytes) const;
     /** Cuts to maxChars characters plus "... [truncated]"; second is whether it was cut. */
     std::pair<std::string, bool> truncateLine(const std::string& line,
                                               std::int64_t maxChars = kGrepMaxLineLength) const;
 
 private:
     std::vector<std::string> splitLinesForCounting(const std::string& content) const;
+    bool characterStart(const std::string& text, std::size_t index) const;
     std::string join(const std::vector<std::string>& lines) const;
     std::string tailBytes(const std::string& text, std::int64_t maxBytes) const;
     TruncationResult untruncated(const std::string& content, std::int64_t lines, std::int64_t bytes,
@@ -63,6 +70,38 @@ std::string TextTruncator::join(const std::vector<std::string>& lines) const {
         out += (i > 0 ? "\n" : "") + lines[i];
     }
     return out;
+}
+
+bool TextTruncator::characterStart(const std::string& text, std::size_t index) const {
+    return index >= text.size() || (static_cast<unsigned char>(text[index]) & 0xC0) != 0x80;
+}
+
+MiddleTruncation TextTruncator::truncateMiddle(const std::string& content,
+                                               std::int64_t maxBytes) const {
+    MiddleTruncation result;
+    result.totalBytes = static_cast<std::int64_t>(content.size());
+    result.totalLines = static_cast<std::int64_t>(splitLinesForCounting(content).size());
+    if (result.totalBytes <= maxBytes) {
+        result.content = content;
+        return result;
+    }
+    auto headEnd = static_cast<std::size_t>(maxBytes / 2);
+    while (headEnd > 0 && !characterStart(content, headEnd)) {
+        --headEnd;
+    }
+    std::size_t tailStart = content.size() - static_cast<std::size_t>(maxBytes - maxBytes / 2);
+    while (tailStart < content.size() && !characterStart(content, tailStart)) {
+        ++tailStart;
+    }
+    std::int64_t removed = 0;
+    for (std::size_t i = headEnd; i < tailStart; ++i) {
+        removed += characterStart(content, i) ? 1 : 0;
+    }
+    result.truncated = true;
+    result.removedChars = removed;
+    result.content = content.substr(0, headEnd) + "\xE2\x80\xA6" + std::to_string(removed) +
+                     " chars truncated\xE2\x80\xA6" + content.substr(tailStart);
+    return result;
 }
 
 std::string TextTruncator::formatSize(std::int64_t bytes) const {

@@ -2,5 +2,8 @@ load("//tools:module.bzl", "pi_support")
 
 pi_support(
     name = "text_truncator",
-    deps = ["//interfaces/types/truncation_result"],
+    deps = [
+        "//interfaces/types/middle_truncation",
+        "//interfaces/types/truncation_result",
+    ],
 )

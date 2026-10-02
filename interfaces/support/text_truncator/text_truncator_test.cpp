@@ -75,3 +75,26 @@ TEST_F(TextTruncatorTest, TruncateLineCutsAtCharacters) {
     EXPECT_FALSE(m_truncator.truncateLine("abc", 3).second);
     EXPECT_EQ(m_truncator.truncateLine("\xc3\xa9\xc3\xa9\xc3\xa9", 2).first, "\xc3\xa9\xc3\xa9... [truncated]");
 }
+
+TEST_F(TextTruncatorTest, MiddleKeepsShortTextAndCutsLongTextAtCharacters) {
+    const auto same = m_truncator.truncateMiddle("a\nb", 10);
+    EXPECT_FALSE(same.truncated);
+    EXPECT_EQ(same.content, "a\nb");
+    EXPECT_EQ(same.totalLines, 2);
+    EXPECT_EQ(same.totalBytes, 3);
+
+    const auto cut = m_truncator.truncateMiddle(std::string(100, 'a') + std::string(100, 'b'), 20);
+    EXPECT_TRUE(cut.truncated);
+    EXPECT_EQ(cut.removedChars, 180);
+    EXPECT_EQ(cut.content, std::string(10, 'a') + "\xE2\x80\xA6" "180 chars truncated\xE2\x80\xA6" +
+                               std::string(10, 'b'));
+
+    std::string accents;
+    for (int i = 0; i < 20; ++i) {
+        accents += "\xc3\xa9";
+    }
+    const auto utf8 = m_truncator.truncateMiddle(accents, 11);
+    EXPECT_TRUE(utf8.truncated);
+    // 5 bytes of head round down to 2 characters, 6 bytes of tail are 3 characters.
+    EXPECT_EQ(utf8.removedChars, 15);
+}
