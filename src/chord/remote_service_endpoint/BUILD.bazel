@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "remote_service_endpoint",
+    deps = [
+        "//interfaces/chord/i_service_endpoint",
+        "//interfaces/chord/i_service_provider",
+        "//interfaces/support/service_wire",
+    ],
+    test_deps = [
+        "//src/chord/remote_service_provider",
+        "//src/chord/replicated_state",
+    ],
+)
