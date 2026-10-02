@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "unix_listener_options",
+    deps = [
+        "//interfaces/server/i_socket_connection",
+        "//interfaces/types/error",
+    ],
+)
