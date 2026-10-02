@@ -63,6 +63,12 @@ Result<HttpResponse> CurlHttpClient::send(const HttpRequest& request) {
         const std::string line(data, length);
         if (line.rfind("HTTP/", 0) == 0) {
             response.headers.clear();
+        } else if (line == "\r\n" || line == "\n") {
+            long status = 0;
+            curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &status);
+            if (status >= 200 && request.onResponse) {
+                request.onResponse(static_cast<int>(status), response.headers);
+            }
         } else {
             const std::size_t colon = line.find(':');
             if (colon != std::string::npos) {

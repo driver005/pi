@@ -16,6 +16,12 @@ public:
     /** "<status>: <body>" or "<prefix> (<status>): <body>"; body trimmed and truncated. */
     std::string formatHttp(const HttpResponse& response, const std::string& prefix = "") const;
 
+    /**
+     * Message in the vendor SDK style: "<status> <message>" when the JSON body has a top-level
+     * message string, "<status> <body json>" for other bodies, "<status> status code (no body)".
+     */
+    std::string formatSdk(const HttpResponse& response) const;
+
     /** Appends "... [truncated N chars]" past the limit, without splitting a UTF-8 sequence. */
     std::string truncate(const std::string& text, std::size_t maxChars) const;
 
@@ -75,4 +81,17 @@ std::string ProviderErrorFormatter::extractMessage(const std::string& body) cons
         return json["message"].get<std::string>();
     }
     return "";
+}
+
+std::string ProviderErrorFormatter::formatSdk(const HttpResponse& response) const {
+    const std::string status = std::to_string(response.status);
+    const std::string body = trim(response.body);
+    if (body.empty()) {
+        return status + " status code (no body)";
+    }
+    const Json json = Json::parse(body, nullptr, false);
+    if (json.is_object() && json.contains("message") && json["message"].is_string()) {
+        return status + " " + json["message"].get<std::string>();
+    }
+    return status + " " + truncate(body, MaxBodyChars);
 }

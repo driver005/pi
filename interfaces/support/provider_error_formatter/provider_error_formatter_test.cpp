@@ -43,3 +43,15 @@ TEST(ProviderErrorFormatterTest, ExtractsNestedMessage) {
     EXPECT_EQ(formatter.extractMessage(R"({"message":"m"})"), "m");
     EXPECT_EQ(formatter.extractMessage("not json"), "");
 }
+
+TEST(ProviderErrorFormatterTest, SdkStyleMessages) {
+    ProviderErrorFormatter formatter;
+    HttpResponse response;
+    response.status = 400;
+    response.body = R"({"message":"bad input"})";
+    EXPECT_EQ(formatter.formatSdk(response), "400 bad input");
+    response.body = R"({"type":"error","error":{"type":"x"}})";
+    EXPECT_EQ(formatter.formatSdk(response), "400 " + response.body);
+    response.body = "";
+    EXPECT_EQ(formatter.formatSdk(response), "400 status code (no body)");
+}

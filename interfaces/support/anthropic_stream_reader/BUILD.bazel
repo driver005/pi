@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "anthropic_stream_reader",
+    deps = [
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/support/partial_json_parser",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/sse_event",
+        "//interfaces/types/tool",
+    ],
+)

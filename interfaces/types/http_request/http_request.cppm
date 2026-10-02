@@ -21,5 +21,7 @@ export struct HttpRequest {
      * HttpResponse::body stays empty. Error responses are always collected into body.
      */
     std::function<void(std::string_view)> onBody;
+    /** Called once with the final status and headers, before any body bytes are delivered. */
+    std::function<void(int, const HttpHeaders&)> onResponse;
     std::shared_ptr<AbortSignal> signal;
 };

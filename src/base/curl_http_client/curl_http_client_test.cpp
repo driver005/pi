@@ -144,3 +144,27 @@ TEST_F(CurlHttpClientTest, ConnectionRefusedIsTransportError) {
     ASSERT_FALSE(response.has_value());
     EXPECT_EQ(response.error().code, "http_transport");
 }
+
+TEST_F(CurlHttpClientTest, OnResponseFiresBeforeBodyChunks) {
+    FakeHttpServer server([](const FakeHttpRequest&) {
+        FakeHttpReply reply;
+        reply.headers = {{"X-Mark", "m"}};
+        reply.chunks = {"abc"};
+        return reply;
+    });
+    std::vector<std::string> order;
+    HttpRequest request;
+    request.url = server.url("/a");
+    request.onResponse = [&](int status, const HttpHeaders& headers) {
+        bool marked = false;
+        for (const auto& header : headers) {
+            marked = marked || header.first == "X-Mark";
+        }
+        order.push_back("response:" + std::to_string(status) + (marked ? ":marked" : ""));
+    };
+    request.onBody = [&](std::string_view chunk) { order.push_back("body:" + std::string(chunk)); };
+    ASSERT_TRUE(m_client.send(request).has_value());
+    ASSERT_EQ(order.size(), 2U);
+    EXPECT_EQ(order[0], "response:200:marked");
+    EXPECT_EQ(order[1], "body:abc");
+}

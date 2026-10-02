@@ -41,6 +41,9 @@ Result<HttpResponse> ScriptedHttpClient::send(const HttpRequest& request) {
     }
     auto next = std::move(m_script.front());
     m_script.erase(m_script.begin());
+    if (next.has_value() && request.onResponse) {
+        request.onResponse(next->status, next->headers);
+    }
     if (next.has_value() && request.onBody && next->status >= 200 && next->status < 300) {
         request.onBody(next->body);
         next->body.clear();
