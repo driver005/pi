@@ -209,6 +209,15 @@ TEST_F(GoogleRequestBuilderTest, ThinkingBudgetForTwoPointFiveModels) {
     EXPECT_EQ(build(unknown, context({user("q")}), options)["generationConfig"]["thinkingConfig"]["thinkingBudget"], -1);
 }
 
+TEST_F(GoogleRequestBuilderTest, FlashLiteBudgetsDifferBetweenGoogleAndVertex) {
+    Model m = model("gemini-2.5-flash-lite", true);
+    StreamOptions options;
+    options.reasoning = ThinkingLevel::Minimal;
+    EXPECT_EQ(build(m, context({user("q")}), options)["generationConfig"]["thinkingConfig"]["thinkingBudget"], 512);
+    const auto vertex = m_builder.build(m, context({user("q")}), options, 1, false);
+    EXPECT_EQ((*vertex)["generationConfig"]["thinkingConfig"]["thinkingBudget"], 128);
+}
+
 TEST_F(GoogleRequestBuilderTest, ThinkingLevelForGemini3) {
     const Model m = model("gemini-3.1-pro-preview", true);
     EXPECT_TRUE(m_builder.usesThinkingLevel(m));

@@ -10,7 +10,9 @@ import pi.ai.anthropic_messages_provider;
 import pi.ai.azure_responses_provider;
 import pi.ai.chat_completions_provider;
 import pi.ai.faux_provider;
+import pi.ai.google_adc_auth;
 import pi.ai.google_provider;
+import pi.ai.google_vertex_provider;
 import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.model_runtime;
@@ -40,6 +42,7 @@ private:
     FileCredentialStore m_credentials;
     FileModelsStore m_modelsStore;
     EnvKeyTable m_envKeys;
+    GoogleAdcAuth m_adc;
     ProviderRegistry m_providers;
     std::shared_ptr<FauxProvider> m_faux;
     ModelRuntime m_runtime;
@@ -52,6 +55,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
       m_credentials(agentDir + "/auth.json", platform.files(), platform.locks(), m_configValues),
       m_modelsStore(agentDir + "/models-cache.json", platform.files(), platform.locks()),
       m_envKeys(platform.environment(), platform.files()),
+      m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(),
+            platform.base64()),
       m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore,
                 platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), {}) {
     m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
@@ -64,6 +69,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment()));
     m_providers.registerProvider(std::make_shared<GoogleProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+    m_providers.registerProvider(std::make_shared<GoogleVertexProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(), m_adc));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
         registerFaux(replies.value_or("[]"));

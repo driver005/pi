@@ -24,9 +24,12 @@ export import pi.types.transcript_context;
  */
 export class GoogleRequestBuilder {
 public:
-    /** The request body; an error when the model's thinking level mapping is unusable. */
+    /**
+     * The request body; an error when the model's thinking level mapping is unusable. Vertex has
+     * no separate thinking budgets for flash-lite models (liteBudgets false).
+     */
     Result<Json> build(const Model& model, const TranscriptContext& context, const StreamOptions& options,
-                       std::int64_t nowMs) const;
+                       std::int64_t nowMs, bool liteBudgets = true) const;
 
     Json convertMessages(const Model& model, const TranscriptContext& context, std::int64_t nowMs) const;
     Json convertTools(const std::vector<Tool>& tools) const;
@@ -49,10 +52,10 @@ private:
     void appendAssistant(const Model& model, const AssistantMessage& message, Json& contents) const;
     Json assistantPart(const Model& model, const AssistantContentBlock& block, bool sameModel) const;
     void appendToolResult(const Model& model, const ToolResultMessage& message, Json& contents) const;
-    Result<Json> thinkingConfig(const Model& model, const StreamOptions& options) const;
+    Result<Json> thinkingConfig(const Model& model, const StreamOptions& options, bool liteBudgets) const;
     Result<std::string> googleLevel(const Model& model, ThinkingLevel level) const;
     Json disabledThinking(const Model& model) const;
-    std::int64_t budgetFor(const Model& model, const std::string& level, const Json& custom) const;
+    std::int64_t budgetFor(const Model& model, const std::string& level, const Json& custom, bool liteBudgets) const;
     std::string functionCallingMode(const std::optional<std::string>& toolChoice) const;
 
     TranscriptNormalizer m_normalizer;
@@ -358,7 +361,8 @@ Json GoogleRequestBuilder::disabledThinking(const Model& model) const {
     return level ? Json{{"thinkingLevel", *level}} : Json{{"thinkingBudget", 0}};
 }
 
-std::int64_t GoogleRequestBuilder::budgetFor(const Model& model, const std::string& level, const Json& custom) const {
+std::int64_t GoogleRequestBuilder::budgetFor(const Model& model, const std::string& level, const Json& custom,
+                                             bool liteBudgets) const {
     if (custom.is_object() && custom.contains(level) && custom[level].is_number_integer()) {
         return custom[level].get<std::int64_t>();
     }
@@ -368,7 +372,7 @@ std::int64_t GoogleRequestBuilder::budgetFor(const Model& model, const std::stri
     const std::map<std::string, std::int64_t> flash{{"minimal", 128}, {"low", 2048}, {"medium", 8192}, {"high", 24576}};
     if (model.id.find("2.5-pro") != std::string::npos) {
         budgets = &pro;
-    } else if (model.id.find("2.5-flash-lite") != std::string::npos) {
+    } else if (liteBudgets && model.id.find("2.5-flash-lite") != std::string::npos) {
         budgets = &lite;
     } else if (model.id.find("2.5-flash") != std::string::npos) {
         budgets = &flash;
@@ -376,7 +380,8 @@ std::int64_t GoogleRequestBuilder::budgetFor(const Model& model, const std::stri
     return budgets != nullptr ? budgets->at(level) : -1;
 }
 
-Result<Json> GoogleRequestBuilder::thinkingConfig(const Model& model, const StreamOptions& options) const {
+Result<Json> GoogleRequestBuilder::thinkingConfig(const Model& model, const StreamOptions& options,
+                                                  bool liteBudgets) const {
     if (!model.reasoning) {
         return Json();
     }
@@ -396,13 +401,13 @@ Result<Json> GoogleRequestBuilder::thinkingConfig(const Model& model, const Stre
         config["thinkingLevel"] = *level;
     } else {
         std::string lowered = lower(*level);
-        config["thinkingBudget"] = budgetFor(model, lowered, options.thinkingBudgets);
+        config["thinkingBudget"] = budgetFor(model, lowered, options.thinkingBudgets, liteBudgets);
     }
     return config;
 }
 
 Result<Json> GoogleRequestBuilder::build(const Model& model, const TranscriptContext& rawContext,
-                                         const StreamOptions& options, std::int64_t nowMs) const {
+                                         const StreamOptions& options, std::int64_t nowMs, bool liteBudgets) const {
     const TranscriptContext context = m_normalizer.collapseSystemMessages(rawContext);
     Json body = Json::object();
     body["contents"] = convertMessages(model, context, nowMs);
@@ -429,7 +434,7 @@ Result<Json> GoogleRequestBuilder::build(const Model& model, const TranscriptCon
     if (maxTokens > 0) {
         generation["maxOutputTokens"] = maxTokens;
     }
-    auto thinking = thinkingConfig(model, options);
+    auto thinking = thinkingConfig(model, options, liteBudgets);
     if (!thinking) {
         return std::unexpected(thinking.error());
     }

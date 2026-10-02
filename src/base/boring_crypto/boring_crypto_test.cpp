@@ -36,3 +36,31 @@ TEST_F(BoringCryptoTest, RandomBytesHaveRequestedLengthAndDiffer) {
     EXPECT_EQ(a.size(), 32U);
     EXPECT_NE(a, b);
 }
+
+TEST_F(BoringCryptoTest, RsaSha256SignatureMatchesOpenSsl) {
+    const std::string key = R"(-----BEGIN PRIVATE KEY-----
+MIICeAIBADANBgkqhkiG9w0BAQEFAASCAmIwggJeAgEAAoGBANRLNx6mqBUz4oe5
+LkkKXXSUbbd3LbU1dpIFW9I7NR8jWVBP9S2AYsg2VgTWaiEpZdxcFRagBZccb1my
+klsArUtcK+RpBZ1jJtTSQFbwWd1kGNMgLJM5ZFOv6Xkgt8LBnUr06qxm2UCAGEvW
+w7Gayy89YxMplwqY+vsTMsTuVFonAgMBAAECgYEAmB045paF04N06slOl/l8U19T
+amVT9AbV6fU7AN15x9D9WyWfyTW4EjuU0SyNqStPmGDGn4qT1t4CD2R7qAdJI2sj
+KLECQv69yD0XSOLqcioeOUMAlgB4/nOeve2wyb9qYiWB1vHm9t8//Pnv4e3pTyMU
+DsZjdJUS4R0lW1jgY0kCQQDxY2nQ4Rk8gpAtVbYU9cJF5wsMb+5aVLZvMgRU5OeF
+5kTQpfBPKzZpXi2cXVzUEtZQCnHRk7U2OpCbpPDITGl9AkEA4STzAe41LJL+A7HO
+i6NnUoFr36G1NDK2O+V5sHghChgWBc4jke6BYPTO8kmGnDDvinQqueqZll62QSfe
+8P6DcwJBANnyvecIZ0XYSR91xTp1j1yYOMSZB6ft1u7dRUX1jAm9GKMfQLPqu201
+yI7nSVp+S5znYU8uQ67cABdYPMNNIu0CQFoP1cWn7E1wX3xK3DyvmN1AOE60+S9w
+OcWr/gnBhDXtfKHF3CS8K7UFOONi1h4U1T2lSpIkblvgdzeJI31z0lECQQDhvarD
+YUlbP5V2vpZ6mdnBPeD0iTUJpZBaq/RoxSKuuFbTJVnzEfs6XBQkO8EwmgSJIQfd
+2/lrNVTIFy3LJDqm
+-----END PRIVATE KEY-----
+)";
+    const auto signature = m_crypto.rsaSha256Sign(key, "hello world");
+    ASSERT_TRUE(signature.has_value());
+    EXPECT_EQ(hex(*signature),
+              "2f0421db5f7e43a86893194434c2a73e1f276e3691f7a4cbcd2a02c0b7f0d82e071884ed5bb7379152e926703d077a72abfb66aae678244f32a657857488432abcb1adc3c9be5683a2ee7a36e39263e0a83e4daddfe6a91aed2af5b9e523343227c9e21aa8d97eb35e78a39b6c24ce4f1555a289656312f2df37ad7910cf73ca");
+}
+
+TEST_F(BoringCryptoTest, RsaSignRejectsBadKeys) {
+    EXPECT_FALSE(m_crypto.rsaSha256Sign("not a key", "x").has_value());
+}
