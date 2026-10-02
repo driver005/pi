@@ -82,6 +82,18 @@ private:
         source = "struct Doc {\n    Json header = Json::object();\n    std::string body;\n};\n"
         self.assertEqual(check("interfaces/types/doc/doc.h", source), [])
 
+    def testStdFunctionFieldIsNotAMethod(self):
+        source = "struct Req {\n    std::function<void(std::string_view)> onOutput;\n};\n"
+        self.assertEqual(check("interfaces/types/req/req.h", source), [])
+
+    def testStdFunctionMemberNeedsPrefixInClass(self):
+        source = "class A {\npublic:\n    void f();\nprivate:\n    std::function<void()> cb;\n};\n"
+        self.assertIn("member-prefix", check("src/base/a/a.h", source))
+
+    def testDeletedOperatorIsNotAMember(self):
+        source = "class A {\npublic:\n    A& operator=(const A&) = delete;\nprivate:\n    int m_v;\n};\n"
+        self.assertEqual(check("src/base/a/a.h", source), [])
+
     def testStructWithMethodsNeedsPrefix(self):
         source = "struct Box {\n    int get() const { return value; }\n    int value;\n};\n"
         self.assertIn("member-prefix", check("src/base/box/box.h", source))
@@ -89,6 +101,10 @@ private:
     def testCrossModuleIncludeRejected(self):
         source = '#include "src/base/other/other.h"\nclass A {};\n'
         self.assertIn("src-include", check("src/base/a/a.h", source))
+
+    def testTestingSupportMayBeIncludedAnywhere(self):
+        source = '#include "src/testing/fake_http_server/fake_http_server.h"\n'
+        self.assertEqual(check("src/base/a/a_test.cpp", source), [])
 
     def testAppMayIncludeSrc(self):
         source = '#include "src/base/other/other.h"\n'

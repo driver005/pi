@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_http_client",
+    deps = [
+        "//interfaces/types/http_request",
+        "//interfaces/types/http_response",
+        "//interfaces/types/result",
+    ],
+)

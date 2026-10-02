@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "thread_pool",
+    deps = ["//interfaces/platform/i_executor"],
+)

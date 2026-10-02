@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "curl_http_client",
+    deps = [
+        "//interfaces/platform/i_http_client",
+        "//third_party:curl",
+    ],
+    test_deps = ["//src/testing/fake_http_server"],
+)

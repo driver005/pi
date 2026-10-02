@@ -10,6 +10,7 @@ Rules enforced on .h/.cpp files under interfaces/, src/, app/, sdk/ and plugins/
   header-name            header file name is the snake_case of its class name
   member-prefix          data members of classes (and structs with methods) start with m_
   src-include            src/<pkg>/<module> may only be included by itself or by app/
+                         (src/testing/* is shared test support and may be included anywhere)
 Files named *_test.cpp are exempt from the function and class rules (TEST macros).
 A file whose first 5 lines contain `// style:c-abi` is exempt from every rule
 (used only for the plugin C ABI header and extern "C" glue).
@@ -171,7 +172,7 @@ class FileChecker:
     def _checkIncludes(self, includes):
         for target, line in includes:
             parts = target.split("/")
-            if parts[0] != "src" or len(parts) < 3:
+            if parts[0] != "src" or len(parts) < 3 or parts[1] == "testing":
                 continue
             if self.path.startswith("app/"):
                 continue
@@ -298,20 +299,34 @@ class FileChecker:
 
     def _checkClass(self, scope):
         self.classNames.append((scope.name, scope.openLine))
-        hasMethods = any("(" in self._declarator(w) for w, _ in scope.statements)
+        hasMethods = any(self._hasParen(self._declarator(w)) or "operator" in w for w, _ in scope.statements)
         if scope.isStruct and not hasMethods:
             return
         for words, line in scope.statements:
             self._checkMember(words, line)
 
     def _checkMember(self, words, line):
-        if not words or words[0] in SKIP_LEADING or "(" in self._declarator(words):
+        if not words or words[0] in SKIP_LEADING or "operator" in words:
+            return
+        if self._hasParen(self._declarator(words)):
             return
         if "static" in words and ("constexpr" in words or "const" in words):
             return
         name = self._memberName(self._declarator(words))
         if name and not name.startswith("m_"):
             self._add(line, "member-prefix", f"data member '{name}' must start with m_")
+
+    def _hasParen(self, words):
+        """True for a '(' outside template angle brackets (a function, not std::function<..>)."""
+        depth = 0
+        for word in words:
+            if word == "<":
+                depth += 1
+            elif word == ">":
+                depth = max(0, depth - 1)
+            elif word == "(" and depth == 0:
+                return True
+        return False
 
     def _declarator(self, words):
         out = []

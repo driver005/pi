@@ -70,3 +70,15 @@ def pi_support(name, deps = [], test_deps = [], header_only = False, allow_excep
         deps = [":" + name, "//third_party:gtest"] + test_deps,
         copts = PI_COPTS,
     )
+
+def pi_test_support(name, deps = [], srcs = []):
+    """Test-only helper module (fakes, fixtures). Public so any test can use it."""
+    cc_library(
+        name = name,
+        hdrs = [name + ".h"],
+        srcs = srcs,
+        deps = deps,
+        copts = PI_COPTS,
+        testonly = True,
+        visibility = ["//visibility:public"],
+    )
