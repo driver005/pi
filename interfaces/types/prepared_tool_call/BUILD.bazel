@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "prepared_tool_call",
+    deps = ["//interfaces/tool/i_tool", "//interfaces/types/agent_tool_result", "//interfaces/types/json", "//interfaces/types/tool_call"],
+)

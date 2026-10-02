@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_turn_context",
+    deps = ["//interfaces/types/assistant_message", "//interfaces/types/tool_result_message", "//interfaces/types/agent_context", "//interfaces/types/agent_message", ],
+)

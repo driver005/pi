@@ -9,7 +9,9 @@ Rules enforced on .h/.cpp files under interfaces/, src/, app/, sdk/ and plugins/
   one-class-per-module   at most one class/struct per header, one header per directory
   header-name            header file name is the snake_case of its class name
   member-prefix          data members of classes (and structs with methods) start with m_
-  src-include            src/<pkg>/<module> may only be included by itself or by app/
+  build-dep              every "interfaces/..." or "src/..." include needs its //module label in the
+                         BUILD.bazel next to the file (strict Bazel deps, caught before the build)
+  src-include            src/<pkg>/<module> may only be included by itself, by app/ or by *_test.cpp
                          (src/testing/* is shared test support and may be included anywhere)
 Files named *_test.cpp are exempt from the function and class rules (TEST macros).
 A file whose first 5 lines contain `// style:c-abi` is exempt from every rule
@@ -147,9 +149,10 @@ class Scope:
 
 
 class FileChecker:
-    def __init__(self, path, source):
+    def __init__(self, path, source, buildText=None):
         self.path = path
         self.source = source
+        self.buildText = buildText
         self.violations = []
         self.isTest = path.endswith("_test.cpp")
         self.classNames = []
@@ -169,10 +172,22 @@ class FileChecker:
     def _add(self, line, rule, message):
         self.violations.append(Violation(self.path, line, rule, message))
 
+    def _checkBuildDeps(self, includes):
+        if self.buildText is None:
+            return
+        own = os.path.dirname(self.path)
+        for target, line in includes:
+            if not target.startswith(("interfaces/", "src/")):
+                continue
+            module = os.path.dirname(target)
+            if module != own and f'"//{module}"' not in self.buildText:
+                self._add(line, "build-dep", f'"//{module}" missing from {own}/BUILD.bazel')
+
     def _checkIncludes(self, includes):
+        self._checkBuildDeps(includes)
         for target, line in includes:
             parts = target.split("/")
-            if parts[0] != "src" or len(parts) < 3 or parts[1] == "testing":
+            if parts[0] != "src" or len(parts) < 3 or parts[1] == "testing" or self.isTest:
                 continue
             if self.path.startswith("app/"):
                 continue
@@ -396,7 +411,12 @@ def checkTree(base):
         with open(path, encoding="utf-8") as handle:
             source = handle.read()
         rel = os.path.relpath(path, base)
-        violations.extend(FileChecker(rel, source).run())
+        buildPath = os.path.join(os.path.dirname(path), "BUILD.bazel")
+        buildText = None
+        if os.path.exists(buildPath):
+            with open(buildPath, encoding="utf-8") as handle:
+                buildText = handle.read()
+        violations.extend(FileChecker(rel, source, buildText).run())
     violations.extend(checkDirectoryHeaders(base, files))
     return violations
 

@@ -5,8 +5,8 @@ import unittest
 import check_style
 
 
-def check(path, source):
-    return [v.rule for v in check_style.FileChecker(path, source).run()]
+def check(path, source, build=None):
+    return [v.rule for v in check_style.FileChecker(path, source, build).run()]
 
 
 class CheckStyleTest(unittest.TestCase):
@@ -102,9 +102,22 @@ private:
         source = '#include "src/base/other/other.h"\nclass A {};\n'
         self.assertIn("src-include", check("src/base/a/a.h", source))
 
+    def testTestsMayIncludeOtherModules(self):
+        source = '#include "src/base/other/other.h"\n'
+        self.assertEqual(check("src/base/a/a_test.cpp", source), [])
+
     def testTestingSupportMayBeIncludedAnywhere(self):
         source = '#include "src/testing/fake_http_server/fake_http_server.h"\n'
         self.assertEqual(check("src/base/a/a_test.cpp", source), [])
+
+    def testMissingBuildDepRejected(self):
+        source = '#include "interfaces/types/json/json.h"\nclass A {};\n'
+        self.assertIn("build-dep", check("src/base/a/a.h", source, 'deps = ["//interfaces/types/error"]'))
+        self.assertNotIn("build-dep", check("src/base/a/a.h", source, 'deps = ["//interfaces/types/json"]'))
+
+    def testOwnDirectoryIncludeNeedsNoDep(self):
+        source = '#include "src/base/a/a.h"\n'
+        self.assertEqual(check("src/base/a/a.cpp", source, ""), [])
 
     def testAppMayIncludeSrc(self):
         source = '#include "src/base/other/other.h"\n'

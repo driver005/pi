@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_event",
+    deps = ["//interfaces/types/agent_message", "//interfaces/types/tool_result_message", "//interfaces/types/assistant_message_event", "//interfaces/types/agent_tool_result", "//interfaces/types/json", ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "prepare_request_context",
+    deps = ["//interfaces/types/agent_context", "//interfaces/types/model", "//interfaces/types/thinking_level", ],
+)

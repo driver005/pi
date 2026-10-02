@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_tool_call_runner",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/tool/i_tool",
+        "//interfaces/types/agent_context",
+        "//interfaces/types/agent_loop_config",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/prepared_tool_call",
+        "//interfaces/types/tool_call",
+        "//interfaces/types/tool_call_outcome",
+    ],
+)

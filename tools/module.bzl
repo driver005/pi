@@ -29,7 +29,11 @@ def pi_interface(name, deps = [], srcs = []):
     )
 
 def pi_module(name, deps = [], test_deps = [], data = []):
-    """Implementation module under //src. Only //app may depend on it.
+    """Implementation module under //src.
+
+    Production code may include another module only through its //interfaces headers; the style
+    gate (tools/check_style.py) enforces that. Bazel visibility stays public so integration
+    tests and the composition root can link concrete modules.
 
     The directory must hold <name>.h, <name>.cpp and <name>_test.cpp.
     """
@@ -39,7 +43,7 @@ def pi_module(name, deps = [], test_deps = [], data = []):
         srcs = [name + ".cpp"],
         deps = deps,
         copts = PI_COPTS,
-        visibility = ["//app:__subpackages__"],
+        visibility = ["//visibility:public"],
     )
     cc_test(
         name = name + "_test",
