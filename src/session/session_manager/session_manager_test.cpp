@@ -288,3 +288,20 @@ TEST_F(SessionManagerTest, UsageAndCustomEntries) {
     // Neither usage nor plain custom entries add model context; the custom message does.
     EXPECT_EQ(manager->buildSessionContext().messages.size(), 1U);
 }
+
+TEST_F(SessionManagerTest, ResumingWithoutCwdAdoptsTheRecordedOne) {
+    auto first = create();
+    first->appendMessage(user("hello"));
+    const std::string file = *first->sessionFile();
+    SessionManagerOptions options;
+    options.sessionDir = "/sessions";
+    options.sessionFile = file;
+    SessionManager resumed(options, m_files, m_clock, m_ids);
+    ASSERT_TRUE(resumed.open().has_value());
+    EXPECT_EQ(resumed.cwd(), "/work/project");
+    SessionManagerOptions overridden = options;
+    overridden.cwd = "/elsewhere";
+    SessionManager other(overridden, m_files, m_clock, m_ids);
+    ASSERT_TRUE(other.open().has_value());
+    EXPECT_EQ(other.cwd(), "/elsewhere");
+}

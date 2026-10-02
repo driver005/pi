@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "session_runtime_factory",
+    deps = [
+        "//interfaces/agent/i_agent_factory",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/session/i_session_runtime_factory",
+        "//src/ai/faux_provider",
+        "//src/testing/test_session_handle",
+    ],
+)

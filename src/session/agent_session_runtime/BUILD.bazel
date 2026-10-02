@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "agent_session_runtime",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/session/i_agent_session_runtime",
+        "//interfaces/session/i_session_runtime_factory",
+        "//interfaces/session/i_session_store",
+        "//interfaces/support/path_resolver",
+    ],
+    test_deps = [
+        "//app/session_manager_factory",
+        "//src/session/session_store",
+        "//src/testing/session_harness",
+        "//src/testing/session_runtime_factory",
+    ],
+)

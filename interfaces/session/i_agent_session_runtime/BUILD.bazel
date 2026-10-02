@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_agent_session_runtime",
+    deps = [
+        "//interfaces/session/i_agent_session",
+        "//interfaces/types/fork_result",
+        "//interfaces/types/result",
+        "//interfaces/types/runtime_diagnostic",
+    ],
+)

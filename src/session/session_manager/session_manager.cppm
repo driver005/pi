@@ -147,7 +147,7 @@ SessionManager::SessionManager(SessionManagerOptions options, IFileSystem& files
       m_ids(ids),
       m_paths(files.homeDirectory()),
       m_persist(m_options.persist) {
-    m_cwd = resolve(m_options.cwd);
+    m_cwd = m_options.cwd.empty() ? "" : resolve(m_options.cwd);
     m_sessionDir = m_options.sessionDir.empty() ? "" : resolve(m_options.sessionDir);
 }
 
@@ -311,6 +311,10 @@ Result<void> SessionManager::loadEntries(std::vector<Json> entries) {
         for (const auto& entry : m_fileEntries) {
             if (m_entries.isHeader(entry)) {
                 m_sessionId = entry.value("id", "");
+                // Resuming without an explicit cwd continues where the session was recorded.
+                if (m_cwd.empty()) {
+                    m_cwd = entry.value("cwd", "");
+                }
                 break;
             }
         }
