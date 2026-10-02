@@ -15,6 +15,7 @@ pi_module(
         "//src/ai/google_provider",
         "//src/ai/google_vertex_provider",
         "//src/ai/file_models_store",
+        "//src/ai/mistral_provider",
         "//src/ai/model_runtime",
         "//src/ai/provider_registry",
         "//src/ai/responses_provider",

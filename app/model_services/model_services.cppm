@@ -15,6 +15,7 @@ import pi.ai.google_provider;
 import pi.ai.google_vertex_provider;
 import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
+import pi.ai.mistral_provider;
 import pi.ai.model_runtime;
 import pi.ai.provider_registry;
 import pi.ai.responses_provider;
@@ -71,6 +72,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<GoogleVertexProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(), m_adc));
+    m_providers.registerProvider(std::make_shared<MistralProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
         registerFaux(replies.value_or("[]"));

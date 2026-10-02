@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mistral_stream_reader",
+    deps = [
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/support/short_hash",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/sse_event",
+    ],
+)
