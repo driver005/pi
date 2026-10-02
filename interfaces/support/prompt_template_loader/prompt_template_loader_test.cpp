@@ -58,3 +58,15 @@ TEST_F(PromptTemplateLoaderTest, EmptyDirectoriesYieldNothing) {
     options.agentDir = "/agent";
     EXPECT_TRUE(m_loader.load(options).templates.empty());
 }
+
+TEST_F(PromptTemplateLoaderTest, ProjectTemplatesAreSkippedWhenNotIncluded) {
+    file("/agent/prompts/a.md", "a");
+    file("/work/.pi/prompts/b.md", "b");
+    LoadPromptTemplatesOptions options;
+    options.cwd = "/work";
+    options.agentDir = "/agent";
+    options.includeProject = false;
+    const auto result = m_loader.load(options);
+    ASSERT_EQ(result.templates.size(), 1U);
+    EXPECT_EQ(result.templates[0].name, "a");
+}

@@ -152,7 +152,9 @@ LoadPromptTemplatesResult PromptTemplateLoader::load(const LoadPromptTemplatesOp
     LoadPromptTemplatesResult out;
     if (options.includeDefaults) {
         loadFromDir(globalDir, globalDir, projectDir, out);
-        loadFromDir(projectDir, globalDir, projectDir, out);
+        if (options.includeProject) {
+            loadFromDir(projectDir, globalDir, projectDir, out);
+        }
     }
     for (const auto& raw : options.promptPaths) {
         const std::string path = m_paths.resolveToCwd(trim(raw), cwd);

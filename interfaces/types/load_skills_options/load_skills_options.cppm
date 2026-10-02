@@ -12,4 +12,6 @@ export struct LoadSkillsOptions {
     std::vector<std::string> skillPaths;
     /** Also scan the default user and project skill directories. */
     bool includeDefaults = true;
+    /** With includeDefaults, also scan <cwd>/.pi/skills (off when the project is not trusted). */
+    bool includeProject = true;
 };

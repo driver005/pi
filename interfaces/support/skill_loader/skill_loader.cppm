@@ -265,7 +265,9 @@ LoadSkillsResult SkillLoader::load(const LoadSkillsOptions& options) {
 
     if (options.includeDefaults) {
         add(loadFromDir(userDir, "user"));
-        add(loadFromDir(projectDir, "project"));
+        if (options.includeProject) {
+            add(loadFromDir(projectDir, "project"));
+        }
     }
     for (const auto& rawPath : options.skillPaths) {
         const std::string path = m_paths.resolveToCwd(trim(rawPath), cwd);

@@ -111,3 +111,16 @@ TEST_F(SkillLoaderTest, WithoutDefaultsPathsUnderSkillDirsKeepTheirScope) {
     ASSERT_EQ(result.skills.size(), 1U);
     EXPECT_EQ(result.skills[0].sourceInfo.scope, "project");
 }
+
+TEST_F(SkillLoaderTest, ProjectSkillsAreSkippedWhenNotIncluded) {
+    skill("/home/a/skills/user/SKILL.md", "usr", "User skill");
+    skill("/work/.pi/skills/proj/SKILL.md", "proj", "Project skill");
+    LoadSkillsOptions options;
+    options.cwd = "/work";
+    options.agentDir = "/home/a";
+    EXPECT_EQ(m_loader.load(options).skills.size(), 2U);
+    options.includeProject = false;
+    const auto result = m_loader.load(options);
+    ASSERT_EQ(result.skills.size(), 1U);
+    EXPECT_EQ(result.skills[0].name, "usr");
+}
