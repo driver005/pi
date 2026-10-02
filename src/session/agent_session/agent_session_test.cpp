@@ -301,3 +301,56 @@ TEST_F(AgentSessionTest, DisposedSessionStopsDeliveringEvents) {
     m_session->setSessionName("x");
     EXPECT_EQ(m_events.size(), before);
 }
+
+TEST_F(AgentSessionTest, DispositionCallbackFiresForStartedAndQueuedPrompts) {
+    std::vector<PromptDisposition> seen;
+    PromptOptions options;
+    options.onDisposition = [&](PromptDisposition disposition) { seen.push_back(disposition); };
+    m_harness.provider().enqueue([&](const TranscriptContext&, const StreamOptions&, const Model&) {
+        PromptOptions queued = options;
+        queued.streamingBehavior = StreamingBehavior::Steer;
+        m_session->prompt("steer me", queued);
+        return m_harness.provider().textResponse("first");
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("second"));
+    ASSERT_TRUE(m_session->prompt("go", options).has_value());
+    ASSERT_EQ(seen.size(), 2U);
+    EXPECT_EQ(seen[0], PromptDisposition::Started);
+    EXPECT_EQ(seen[1], PromptDisposition::Queued);
+    // Rejected prompts never report a disposition.
+    seen.clear();
+    m_models.setAuthenticated("faux", false);
+    EXPECT_FALSE(m_session->prompt("again", options).has_value());
+    EXPECT_TRUE(seen.empty());
+}
+
+TEST_F(AgentSessionTest, TreeAccessorsAndQueueModesAndSlashCommands) {
+    LoadedResources resources;
+    PromptTemplate prompt;
+    prompt.name = "ship";
+    prompt.description = "Ship it";
+    resources.promptTemplates.push_back(prompt);
+    Skill skill;
+    skill.name = "pdf";
+    skill.description = "PDFs";
+    resources.skills.push_back(skill);
+    m_resources.set(resources);
+    const auto commands = m_session->slashCommands();
+    ASSERT_EQ(commands.size(), 2U);
+    EXPECT_EQ(commands[0].name, "ship");
+    EXPECT_EQ(commands[0].source, "prompt");
+    EXPECT_EQ(commands[1].name, "skill:pdf");
+    EXPECT_EQ(commands[1].source, "skill");
+
+    EXPECT_FALSE(m_session->leafId().has_value());
+    m_harness.provider().enqueue(m_harness.provider().textResponse("ok"));
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    EXPECT_TRUE(m_session->leafId().has_value());
+    EXPECT_EQ(m_session->entries().size(), m_harness.session().entryCount());
+    ASSERT_EQ(m_session->tree().size(), 1U);
+
+    EXPECT_EQ(m_session->steeringMode(), QueueMode::OneAtATime);
+    m_session->setFollowUpMode(QueueMode::All);
+    EXPECT_EQ(m_session->followUpMode(), QueueMode::All);
+    EXPECT_EQ(m_session->pendingMessageCount(), 0U);
+}

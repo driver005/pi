@@ -25,7 +25,10 @@ export import pi.types.queued_input;
 export import pi.types.result;
 export import pi.types.scoped_model;
 export import pi.types.send_message_options;
+export import pi.types.session_entry;
 export import pi.types.session_stats;
+export import pi.types.session_tree_node;
+export import pi.types.slash_command_info;
 export import pi.types.thinking_level;
 export import pi.types.tool_info;
 
@@ -62,6 +65,9 @@ public:
     virtual bool isCompacting() const = 0;
     virtual bool isRetrying() const = 0;
     virtual int retryAttempt() const = 0;
+    virtual QueueMode steeringMode() const = 0;
+    virtual QueueMode followUpMode() const = 0;
+    virtual std::size_t pendingMessageCount() const = 0;
     virtual std::optional<std::string> lastAssistantText() const = 0;
     virtual SessionStats stats() const = 0;
     virtual std::optional<ContextUsage> contextUsage() const = 0;
@@ -112,7 +118,13 @@ public:
     virtual std::vector<ToolInfo> allTools() const = 0;
     virtual void setActiveToolsByName(const std::vector<std::string>& names) = 0;
 
+    /** Prompt templates and skills a prompt can invoke by name. */
+    virtual std::vector<SlashCommandInfo> slashCommands() const = 0;
+
     // Session tree
+    virtual std::vector<SessionEntry> entries() const = 0;
+    virtual std::optional<std::string> leafId() const = 0;
+    virtual std::vector<SessionTreeNode> tree() const = 0;
     virtual void setSessionName(const std::string& name) = 0;
     virtual Result<NavigateTreeResult> navigateTree(const std::string& targetId,
                                                     const NavigateTreeOptions& options) = 0;

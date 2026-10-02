@@ -58,6 +58,9 @@ public:
     bool isCompacting() const override;
     bool isRetrying() const override;
     int retryAttempt() const override;
+    QueueMode steeringMode() const override;
+    QueueMode followUpMode() const override;
+    std::size_t pendingMessageCount() const override;
     std::optional<std::string> lastAssistantText() const override;
     SessionStats stats() const override;
     std::optional<ContextUsage> contextUsage() const override;
@@ -101,6 +104,11 @@ public:
     std::vector<ToolInfo> allTools() const override;
     void setActiveToolsByName(const std::vector<std::string>& names) override;
 
+    std::vector<SlashCommandInfo> slashCommands() const override;
+
+    std::vector<SessionEntry> entries() const override;
+    std::optional<std::string> leafId() const override;
+    std::vector<SessionTreeNode> tree() const override;
     void setSessionName(const std::string& name) override;
     Result<NavigateTreeResult> navigateTree(const std::string& targetId, const NavigateTreeOptions& options) override;
     std::vector<ForkableMessage> forkableMessages() const override;
@@ -539,7 +547,11 @@ Result<PromptDisposition> AgentSession::prompt(const std::string& text, const Pr
     }
     const std::string expanded = options.expandPromptTemplates ? expand(text) : text;
     if (isStreaming()) {
-        return queueWhileStreaming(expanded, options);
+        auto queued = queueWhileStreaming(expanded, options);
+        if (queued && options.onDisposition) {
+            options.onDisposition(PromptDisposition::Queued);
+        }
+        return queued;
     }
     flushPending();
     if (auto ready = ensureReady(); !ready) {
@@ -554,7 +566,11 @@ Result<PromptDisposition> AgentSession::prompt(const std::string& text, const Pr
             break;
         }
     }
-    if (auto started = runAgentPrompt(buildPromptMessages(expanded, options.images)); !started) {
+    std::vector<AgentMessage> messages = buildPromptMessages(expanded, options.images);
+    if (options.onDisposition) {
+        options.onDisposition(PromptDisposition::Started);
+    }
+    if (auto started = runAgentPrompt(std::move(messages)); !started) {
         return std::unexpected(started.error());
     }
     return PromptDisposition::Started;
@@ -662,6 +678,18 @@ bool AgentSession::isRetrying() const {
 
 int AgentSession::retryAttempt() const {
     return m_retry->attempt();
+}
+
+QueueMode AgentSession::steeringMode() const {
+    return queueMode(m_config.settings.view().steeringMode());
+}
+
+QueueMode AgentSession::followUpMode() const {
+    return queueMode(m_config.settings.view().followUpMode());
+}
+
+std::size_t AgentSession::pendingMessageCount() const {
+    return m_pending->count();
 }
 
 std::optional<std::string> AgentSession::lastAssistantText() const {
@@ -853,6 +881,30 @@ Result<NavigateTreeResult> AgentSession::navigateTree(const std::string& targetI
     }
     notifyIdle();
     return result;
+}
+
+std::vector<SlashCommandInfo> AgentSession::slashCommands() const {
+    const LoadedResources resources = m_config.resources.resources();
+    std::vector<SlashCommandInfo> out;
+    for (const auto& prompt : resources.promptTemplates) {
+        out.push_back(SlashCommandInfo{prompt.name, prompt.description, "prompt", prompt.sourceInfo});
+    }
+    for (const auto& skill : resources.skills) {
+        out.push_back(SlashCommandInfo{"skill:" + skill.name, skill.description, "skill", skill.sourceInfo});
+    }
+    return out;
+}
+
+std::vector<SessionEntry> AgentSession::entries() const {
+    return m_config.session.entries();
+}
+
+std::optional<std::string> AgentSession::leafId() const {
+    return m_config.session.leafId();
+}
+
+std::vector<SessionTreeNode> AgentSession::tree() const {
+    return m_config.session.tree();
 }
 
 std::vector<ForkableMessage> AgentSession::forkableMessages() const {
