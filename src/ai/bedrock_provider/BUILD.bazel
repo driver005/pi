@@ -24,6 +24,7 @@ pi_module(
         "//interfaces/types/json",
     ],
     test_deps = [
+        "//interfaces/support/aws_event_stream_parser",
         "//src/base/base64_codec",
         "//src/base/boring_crypto",
         "//src/testing/fake_environment",
