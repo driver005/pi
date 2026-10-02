@@ -78,6 +78,10 @@ private:
     def testAggregateStructExempt(self):
         self.assertEqual(check("interfaces/types/usage/usage.h", "struct Usage {\n    int input = 0;\n};\n"), [])
 
+    def testAggregateWithInitializerCallsIsStillAggregate(self):
+        source = "struct Doc {\n    Json header = Json::object();\n    std::string body;\n};\n"
+        self.assertEqual(check("interfaces/types/doc/doc.h", source), [])
+
     def testStructWithMethodsNeedsPrefix(self):
         source = "struct Box {\n    int get() const { return value; }\n    int value;\n};\n"
         self.assertIn("member-prefix", check("src/base/box/box.h", source))

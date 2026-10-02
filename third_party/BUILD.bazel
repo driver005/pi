@@ -1,0 +1,35 @@
+# Single entry point for external code. Modules depend on //third_party:<name> only, so a
+# dependency can be swapped or vendored here without touching any module.
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "json",
+    actual = "@nlohmann_json//:json",
+)
+
+alias(
+    name = "curl",
+    actual = "@curl//:curl",
+)
+
+# curl already brings BoringSSL; reuse it for SHA-256/HMAC/random instead of linking a second
+# OpenSSL-family library (duplicate symbols).
+alias(
+    name = "crypto",
+    actual = "@boringssl//:crypto",
+)
+
+alias(
+    name = "zstd",
+    actual = "@zstd",
+)
+
+alias(
+    name = "yaml",
+    actual = "@yaml-cpp",
+)
+
+alias(
+    name = "gtest",
+    actual = "@googletest//:gtest_main",
+)

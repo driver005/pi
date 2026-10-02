@@ -298,7 +298,7 @@ class FileChecker:
 
     def _checkClass(self, scope):
         self.classNames.append((scope.name, scope.openLine))
-        hasMethods = any("(" in w for w, _ in scope.statements)
+        hasMethods = any("(" in self._declarator(w) for w, _ in scope.statements)
         if scope.isStruct and not hasMethods:
             return
         for words, line in scope.statements:

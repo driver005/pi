@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "abort_signal",
+    header_only = True,
+)
