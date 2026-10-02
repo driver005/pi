@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_token_estimator",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/json_writer",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/compaction_settings",
+        "//interfaces/types/context_usage_estimate",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_projection",
+        "//interfaces/types/usage",
+    ],
+)

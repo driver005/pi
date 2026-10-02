@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "cut_point_finder",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/session_projector",
+        "//interfaces/types/cut_point_result",
+        "//interfaces/types/projected_session_entry",
+    ],
+)
