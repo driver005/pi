@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_settings_manager",
+    deps = [
+        "//interfaces/support/settings_view",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/settings_error",
+    ],
+)

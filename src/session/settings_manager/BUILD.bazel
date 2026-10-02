@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "settings_manager",
+    deps = [
+        "//interfaces/platform/i_file_lock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/json_writer",
+        "//interfaces/support/settings_merger",
+    ],
+    test_deps = [
+        "//src/base/posix_file_lock",
+        "//src/base/posix_file_system",
+        "//src/testing/sequential_id_generator",
+    ],
+)
