@@ -13,6 +13,8 @@ public:
     virtual ~IFileSystem() = default;
 
     virtual Result<std::string> readFile(const std::string& path) = 0;
+    /** At most maxBytes from the start of the file (header probing without reading it all). */
+    virtual Result<std::string> readFilePrefix(const std::string& path, std::size_t maxBytes) = 0;
     virtual Result<void> writeFile(const std::string& path, const std::string& content) = 0;
     /** Like writeFile; a newly created file is private to the owner (mode 0600). */
     virtual Result<void> writeFilePrivate(const std::string& path, const std::string& content) = 0;

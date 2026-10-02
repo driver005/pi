@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "session_context",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/session_model_ref",
+    ],
+)

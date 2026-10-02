@@ -96,3 +96,11 @@ TEST_F(PosixFileSystemTest, PrivateFilesAndDirectoriesUseOwnerOnlyModes) {
     ASSERT_EQ(stat(file.c_str(), &info), 0);
     EXPECT_EQ(info.st_mode & 0777, 0640U);
 }
+
+TEST_F(PosixFileSystemTest, ReadFilePrefixStopsAtLimit) {
+    const std::string path = m_dir + "/prefix.txt";
+    ASSERT_TRUE(m_fs.writeFile(path, "0123456789").has_value());
+    EXPECT_EQ(m_fs.readFilePrefix(path, 4).value(), "0123");
+    EXPECT_EQ(m_fs.readFilePrefix(path, 100).value(), "0123456789");
+    EXPECT_EQ(m_fs.readFilePrefix(m_dir + "/missing", 4).error().code, "ENOENT");
+}

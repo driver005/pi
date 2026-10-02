@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_session_manager",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/session_context",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_header",
+        "//interfaces/types/session_projection",
+        "//interfaces/types/session_tree_node",
+        "//interfaces/types/usage",
+    ],
+)

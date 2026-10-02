@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "sequential_id_generator",
+    deps = ["//interfaces/platform/i_id_generator"],
+)

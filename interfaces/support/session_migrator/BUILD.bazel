@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_migrator",
+    deps = [
+        "//interfaces/support/short_id_generator",
+        "//interfaces/types/json",
+    ],
+)

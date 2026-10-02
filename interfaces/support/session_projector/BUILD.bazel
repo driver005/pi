@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_projector",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/types/session_context",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_projection",
+    ],
+    test_deps = ["//interfaces/support/session_entry_codec"],
+)

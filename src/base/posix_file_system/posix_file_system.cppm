@@ -45,6 +45,33 @@ public:
         return content;
     }
 
+    Result<std::string> readFilePrefix(const std::string& path, std::size_t maxBytes) override {
+        const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+        if (fd < 0) {
+            return std::unexpected(failure(errno, "open", path));
+        }
+        std::string content(maxBytes, '\0');
+        std::size_t filled = 0;
+        while (filled < maxBytes) {
+            const ssize_t count = read(fd, content.data() + filled, maxBytes - filled);
+            if (count < 0 && errno == EINTR) {
+                continue;
+            }
+            if (count < 0) {
+                const int code = errno;
+                close(fd);
+                return std::unexpected(failure(code, "read", path));
+            }
+            if (count == 0) {
+                break;
+            }
+            filled += static_cast<std::size_t>(count);
+        }
+        close(fd);
+        content.resize(filled);
+        return content;
+    }
+
     Result<void> writeFile(const std::string& path, const std::string& content) override {
         return writeWithFlags(path, content, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     }

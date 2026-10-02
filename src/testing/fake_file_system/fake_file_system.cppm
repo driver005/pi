@@ -9,6 +9,7 @@ public:
     explicit FakeFileSystem(std::string home = "/home/user");
 
     Result<std::string> readFile(const std::string& path) override;
+    Result<std::string> readFilePrefix(const std::string& path, std::size_t maxBytes) override;
     Result<void> writeFile(const std::string& path, const std::string& content) override;
     Result<void> writeFilePrivate(const std::string& path, const std::string& content) override;
     Result<void> appendFile(const std::string& path, const std::string& content) override;
@@ -75,6 +76,14 @@ Result<std::string> FakeFileSystem::readFile(const std::string& path) {
         return std::unexpected(notFound(path));
     }
     return found->second;
+}
+
+Result<std::string> FakeFileSystem::readFilePrefix(const std::string& path, std::size_t maxBytes) {
+    auto content = readFile(path);
+    if (!content) {
+        return content;
+    }
+    return content->substr(0, maxBytes);
 }
 
 Result<void> FakeFileSystem::writeFile(const std::string& path, const std::string& content) {

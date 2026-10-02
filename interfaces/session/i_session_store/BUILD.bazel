@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_session_store",
+    deps = [
+        "//interfaces/session/i_session_manager",
+        "//interfaces/types/result",
+        "//interfaces/types/session_info",
+        "//interfaces/types/session_manager_options",
+    ],
+)

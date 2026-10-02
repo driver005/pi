@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "projected_session_entry",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/session_entry",
+    ],
+)
