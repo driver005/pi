@@ -1,0 +1,36 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "model_runtime",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/provider/i_models_store",
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/provider/i_provider_registry",
+        "//interfaces/support/builtin_provider_table",
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/env_key_table",
+        "//interfaces/support/error_stream_factory",
+        "//interfaces/support/header_merger",
+        "//interfaces/support/model_catalog_loader",
+        "//interfaces/support/model_composer",
+        "//interfaces/support/models_config_loader",
+        "//interfaces/support/provider_auth_resolver",
+        "//interfaces/types/model_runtime_config",
+        "//interfaces/types/provider_state",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/ai/memory_credential_store",
+        "//src/ai/memory_models_store",
+        "//src/ai/provider_registry",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/scripted_process_runner",
+    ],
+)

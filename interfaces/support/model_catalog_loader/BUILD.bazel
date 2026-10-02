@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "model_catalog_loader",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/model_codec",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

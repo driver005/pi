@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "models_store_entry",
+    deps = ["//interfaces/types/json"],
+)

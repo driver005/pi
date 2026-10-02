@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_oauth_flow",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/credential",
+        "//interfaces/types/model_auth",
+        "//interfaces/types/result",
+    ],
+)

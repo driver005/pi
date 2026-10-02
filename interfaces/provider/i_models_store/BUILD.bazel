@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_models_store",
+    deps = [
+        "//interfaces/types/models_store_entry",
+        "//interfaces/types/result",
+    ],
+)

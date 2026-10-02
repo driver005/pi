@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "provider_registry",
+    deps = ["//interfaces/provider/i_provider_registry"],
+    test_deps = ["//src/ai/faux_provider", "//src/testing/fixed_clock", "//src/testing/inline_executor"],
+)

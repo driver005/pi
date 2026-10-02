@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "error_stream_factory",
+    deps = [
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/types/model",
+    ],
+)
