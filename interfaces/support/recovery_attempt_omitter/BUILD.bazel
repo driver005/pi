@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "recovery_attempt_omitter",
+    deps = [
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/support/message_entry_locator",
+        "//interfaces/support/session_context_refresher",
+        "//interfaces/types/result",
+        "//interfaces/types/tool_result_message",
+    ],
+    test_deps = [
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

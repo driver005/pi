@@ -194,7 +194,7 @@ class FileChecker:
 
     def _moduleDirs(self, module):
         parts = module.split(".")[1:]
-        return [os.path.join(root, *parts) for root in ("interfaces", "src")]
+        return [os.path.join(root, *parts) for root in ("interfaces", "src", "app")]
 
     def _checkImports(self):
         own = os.path.dirname(self.path)

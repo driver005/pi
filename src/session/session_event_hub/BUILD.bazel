@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "session_event_hub",
+    deps = ["//interfaces/session/i_session_event_sink"],
+)

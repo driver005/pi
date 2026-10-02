@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "session_harness",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/agent/i_agent_factory",
+        "//interfaces/session/i_session_manager",
+        "//app/agent_factory",
+        "//src/agent/agent_loop",
+        "//src/agent/tool_call_runner",
+        "//src/ai/faux_provider",
+        "//src/session/session_manager",
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/recording_sleeper",
+        "//src/testing/sequential_id_generator",
+    ],
+)

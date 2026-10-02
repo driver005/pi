@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "agent_factory",
+    deps = [
+        "//interfaces/agent/i_agent_factory",
+        "//interfaces/agent/i_agent_loop",
+        "//interfaces/platform/i_clock",
+        "//src/agent/agent",
+    ],
+    test_deps = [
+        "//src/agent/agent_loop",
+        "//src/agent/tool_call_runner",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+    ],
+)

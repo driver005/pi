@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "message_entry_locator",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/types/session_entry",
+    ],
+)

@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_session_event",
+    deps = [
+        "//interfaces/types/agent_event",
+        "//interfaces/types/compaction_result",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/thinking_level",
+    ],
+)
