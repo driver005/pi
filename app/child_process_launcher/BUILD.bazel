@@ -1,9 +1,9 @@
 load("//tools:module.bzl", "pi_module")
 
 pi_module(
-    name = "posix_child_process_launcher",
+    name = "child_process_launcher",
     deps = [
-        "//interfaces/platform/i_child_process",
         "//interfaces/platform/i_child_process_launcher",
+        "//src/base/posix_child_process",
     ],
 )

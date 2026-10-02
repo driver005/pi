@@ -9,17 +9,23 @@ module;
 #include <cstring>
 extern char** environ;
 
-export module pi.base.posix_child_process_launcher;
+export module pi.base.posix_child_process;
 
 import std;
 export import pi.platform.i_child_process;
-export import pi.platform.i_child_process_launcher;
+export import pi.types.process_request;
 
-/** IChildProcess over three pipes and a posix_spawn'ed child in its own process group. */
+/**
+ * IChildProcess over three pipes and a posix_spawn'ed child in its own process group. Construct,
+ * then start(); the other methods are only meaningful after a successful start.
+ */
 export class PosixChildProcess : public IChildProcess {
 public:
-    PosixChildProcess(pid_t pid, int stdinFd, int stdoutFd, int stderrFd);
+    explicit PosixChildProcess(ProcessRequest request);
     ~PosixChildProcess() override;
+
+    /** Spawns the child. Error when the pipes or the process could not be created. */
+    Result<void> start();
 
     Result<void> write(std::string_view bytes) override;
     void closeStdin() override;
@@ -33,31 +39,24 @@ private:
     std::optional<std::string> readFrom(int fd);
     void signalGroup(int signalNumber);
     bool reap(bool block);
+    std::vector<std::string> environmentOf() const;
+    Result<pid_t> spawn(int stdinRead, int stdoutWrite, int stderrWrite) const;
 
-    pid_t m_pid;
+    ProcessRequest m_request;
+    pid_t m_pid = -1;
     std::mutex m_mutex;
-    int m_stdin;
-    int m_stdout;
-    int m_stderr;
+    int m_stdin = -1;
+    int m_stdout = -1;
+    int m_stderr = -1;
     std::optional<int> m_exitCode;
 };
 
-/** IChildProcessLauncher using posix_spawn. */
-export class PosixChildProcessLauncher : public IChildProcessLauncher {
-public:
-    PosixChildProcessLauncher();
-
-    Result<std::unique_ptr<IChildProcess>> launch(const ProcessRequest& request) override;
-
-private:
-    std::vector<std::string> environmentOf(const ProcessRequest& request) const;
-    Result<pid_t> spawn(const ProcessRequest& request, int stdinRead, int stdoutWrite, int stderrWrite) const;
-};
-
-PosixChildProcess::PosixChildProcess(pid_t pid, int stdinFd, int stdoutFd, int stderrFd)
-    : m_pid(pid), m_stdin(stdinFd), m_stdout(stdoutFd), m_stderr(stderrFd) {}
+PosixChildProcess::PosixChildProcess(ProcessRequest request) : m_request(std::move(request)) {}
 
 PosixChildProcess::~PosixChildProcess() {
+    if (m_pid < 0) {
+        return;
+    }
     closeStdin();
     if (!m_exitCode) {
         signalGroup(SIGTERM);
@@ -168,12 +167,8 @@ void PosixChildProcess::kill() {
     signalGroup(SIGKILL);
 }
 
-PosixChildProcessLauncher::PosixChildProcessLauncher() {
-    // Writing to a pipe whose reader exited must fail with EPIPE instead of killing the host.
-    ::signal(SIGPIPE, SIG_IGN);
-}
-
-std::vector<std::string> PosixChildProcessLauncher::environmentOf(const ProcessRequest& request) const {
+std::vector<std::string> PosixChildProcess::environmentOf() const {
+    const ProcessRequest& request = m_request;
     std::map<std::string, std::string> merged;
     if (request.inheritEnv) {
         for (char** entry = environ; entry != nullptr && *entry != nullptr; ++entry) {
@@ -194,8 +189,8 @@ std::vector<std::string> PosixChildProcessLauncher::environmentOf(const ProcessR
     return lines;
 }
 
-Result<pid_t> PosixChildProcessLauncher::spawn(const ProcessRequest& request, int stdinRead, int stdoutWrite,
-                                               int stderrWrite) const {
+Result<pid_t> PosixChildProcess::spawn(int stdinRead, int stdoutWrite, int stderrWrite) const {
+    const ProcessRequest& request = m_request;
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
     posix_spawn_file_actions_adddup2(&actions, stdinRead, 0);
@@ -219,7 +214,7 @@ Result<pid_t> PosixChildProcessLauncher::spawn(const ProcessRequest& request, in
         argv.push_back(arg.data());
     }
     argv.push_back(nullptr);
-    std::vector<std::string> envStorage = environmentOf(request);
+    std::vector<std::string> envStorage = environmentOf();
     std::vector<char*> envp;
     for (std::string& line : envStorage) {
         envp.push_back(line.data());
@@ -236,7 +231,9 @@ Result<pid_t> PosixChildProcessLauncher::spawn(const ProcessRequest& request, in
     return pid;
 }
 
-Result<std::unique_ptr<IChildProcess>> PosixChildProcessLauncher::launch(const ProcessRequest& request) {
+Result<void> PosixChildProcess::start() {
+    // Writing to a pipe whose reader exited must fail with EPIPE instead of killing the host.
+    ::signal(SIGPIPE, SIG_IGN);
     int stdinPipe[2];
     int stdoutPipe[2];
     int stderrPipe[2];
@@ -244,7 +241,7 @@ Result<std::unique_ptr<IChildProcess>> PosixChildProcessLauncher::launch(const P
         ::pipe2(stderrPipe, O_CLOEXEC) != 0) {
         return std::unexpected(Error{"pipe_failed", std::strerror(errno)});
     }
-    const auto pid = spawn(request, stdinPipe[0], stdoutPipe[1], stderrPipe[1]);
+    const auto pid = spawn(stdinPipe[0], stdoutPipe[1], stderrPipe[1]);
     ::close(stdinPipe[0]);
     ::close(stdoutPipe[1]);
     ::close(stderrPipe[1]);
@@ -254,5 +251,9 @@ Result<std::unique_ptr<IChildProcess>> PosixChildProcessLauncher::launch(const P
         ::close(stderrPipe[0]);
         return std::unexpected(pid.error());
     }
-    return std::unique_ptr<IChildProcess>(std::make_unique<PosixChildProcess>(*pid, stdinPipe[1], stdoutPipe[0], stderrPipe[0]));
+    m_pid = *pid;
+    m_stdin = stdinPipe[1];
+    m_stdout = stdoutPipe[0];
+    m_stderr = stderrPipe[0];
+    return {};
 }
