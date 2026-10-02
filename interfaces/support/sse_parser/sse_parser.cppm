@@ -12,6 +12,12 @@ public:
     /** Flushes a trailing event that was not terminated by a blank line. */
     std::vector<SseEvent> finish();
 
+    /** The last `id` field seen, including on events without data (resumption priming). */
+    const std::string& lastEventId() const;
+
+    /** The last valid `retry` field seen, in milliseconds. */
+    std::optional<int> lastRetryMs() const;
+
 private:
     void handleLine(const std::string& line, std::vector<SseEvent>& out);
     void dispatch(std::vector<SseEvent>& out);
@@ -21,6 +27,7 @@ private:
     std::string m_data;
     std::string m_lastId;
     std::optional<int> m_retry;
+    std::optional<int> m_lastRetry;
     bool m_hasData = false;
     bool m_skipLf = false;
 };
@@ -55,6 +62,14 @@ std::vector<SseEvent> SseParser::finish() {
     return out;
 }
 
+const std::string& SseParser::lastEventId() const {
+    return m_lastId;
+}
+
+std::optional<int> SseParser::lastRetryMs() const {
+    return m_lastRetry;
+}
+
 void SseParser::handleLine(const std::string& line, std::vector<SseEvent>& out) {
     if (line.empty()) {
         dispatch(out);
@@ -84,6 +99,7 @@ void SseParser::handleLine(const std::string& line, std::vector<SseEvent>& out) 
         const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
         if (ec == std::errc() && ptr == value.data() + value.size()) {
             m_retry = parsed;
+            m_lastRetry = parsed;
         }
     }
 }

@@ -51,3 +51,12 @@ TEST(SseParserTest, FinishFlushesUnterminatedEvent) {
     ASSERT_EQ(events.size(), 1U);
     EXPECT_EQ(events[0].data, "tail");
 }
+
+TEST(SseParserTest, ExposesIdAndRetryFromEventsWithoutData) {
+    SseParser parser;
+    const auto events = parser.feed("id: 7\nretry: 250\n\n");
+    EXPECT_TRUE(events.empty());
+    EXPECT_EQ(parser.lastEventId(), "7");
+    ASSERT_TRUE(parser.lastRetryMs().has_value());
+    EXPECT_EQ(*parser.lastRetryMs(), 250);
+}
