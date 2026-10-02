@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "provider_error_formatter",
+    deps = [
+        "//interfaces/types/http_response",
+        "//interfaces/types/json",
+    ],
+)

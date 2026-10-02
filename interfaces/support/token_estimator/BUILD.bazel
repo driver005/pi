@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "token_estimator",
+    deps = [
+        "//interfaces/types/context_usage_estimate",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/message",
+        "//interfaces/types/transcript_context",
+        "//interfaces/types/usage",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_http_client",
+    deps = ["//interfaces/platform/i_http_client"],
+)

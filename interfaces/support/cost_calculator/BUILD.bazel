@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "cost_calculator",
+    deps = [
+        "//interfaces/types/model",
+        "//interfaces/types/usage",
+    ],
+)

@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "retry_policy",
+    deps = [
+        "//interfaces/support/header_merger",
+        "//interfaces/types/http_response",
+        "//interfaces/types/result",
+    ],
+)

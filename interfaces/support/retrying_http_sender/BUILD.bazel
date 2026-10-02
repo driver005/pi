@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "retrying_http_sender",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/provider_error_formatter",
+        "//interfaces/support/retry_policy",
+    ],
+    test_deps = [
+        "//src/testing/fixed_clock",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+    ],
+)
