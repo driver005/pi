@@ -7,6 +7,7 @@ import pi.base.posix_file_system;
 import pi.base.posix_process_runner;
 import pi.base.system_environment;
 import pi.session.agent_session;
+import pi.support.hook_bus;
 import pi.testing.fake_model_runtime;
 import pi.testing.fake_resource_loader;
 import pi.testing.fake_settings_manager;
@@ -38,6 +39,7 @@ protected:
                                   m_tools, m_bash, m_harness.files(), m_harness.clock(), m_harness.ids(),
                                   m_harness.sleeper(), m_model, ThinkingLevel::Off, "/tmp", std::nullopt,
                                   std::nullopt, {}, {}};
+        config.hooks = m_hookBus;
         m_session = std::make_unique<AgentSession>(config);
         m_session->subscribe([this](const AgentSessionEvent& event) { m_events.push_back(event); });
     }
@@ -82,6 +84,7 @@ protected:
         rebuild();
     }
 
+    IHookBus* m_hookBus = nullptr;
     SessionHarness m_harness;
     FakeSettingsManager m_settings{Json{{"retry", Json{{"enabled", true}, {"maxRetries", 2}, {"baseDelayMs", 10}}},
                                         {"compaction", Json{{"keepRecentTokens", 500}, {"reserveTokens", 1000}}}}};
@@ -353,4 +356,55 @@ TEST_F(AgentSessionTest, TreeAccessorsAndQueueModesAndSlashCommands) {
     m_session->setFollowUpMode(QueueMode::All);
     EXPECT_EQ(m_session->followUpMode(), QueueMode::All);
     EXPECT_EQ(m_session->pendingMessageCount(), 0U);
+}
+
+TEST_F(AgentSessionTest, PluginHooksBlockToolCallsAndSeeAgentEvents) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    std::vector<std::string> seen;
+    bus.subscribe("tool_call", [](const std::string&, const Json& payload) -> Result<Json> {
+        EXPECT_EQ(payload["toolName"], "read");
+        return Json{{"block", true}, {"reason", "blocked by plugin"}};
+    });
+    for (const char* event : {"agent_start", "agent_end", "message_end"}) {
+        bus.subscribe(event, [&seen](const std::string& name, const Json&) -> Result<Json> {
+            seen.push_back(name);
+            return Json();
+        });
+    }
+    m_harness.provider().enqueue(m_harness.provider().toolCallResponse("read", Json{{"arg", "x"}}, "call-1"));
+    m_harness.provider().enqueue(m_harness.provider().textResponse("done"));
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    EXPECT_EQ(m_readTool->executions(), 0);
+    EXPECT_EQ(m_session->lastAssistantText(), "done");
+    EXPECT_NE(std::ranges::find(seen, "agent_start"), seen.end());
+    EXPECT_NE(std::ranges::find(seen, "message_end"), seen.end());
+    EXPECT_NE(std::ranges::find(seen, "agent_end"), seen.end());
+}
+
+TEST_F(AgentSessionTest, PluginHooksCanRewriteToolResultsAndArguments) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    bus.subscribe("tool_call", [](const std::string&, const Json&) -> Result<Json> {
+        return Json{{"input", Json{{"arg", "patched"}}}};
+    });
+    Json resultPayload;
+    bus.subscribe("tool_result", [&resultPayload](const std::string&, const Json& payload) -> Result<Json> {
+        resultPayload = payload;
+        return Json{{"content", Json::array({Json{{"type", "text"}, {"text", "rewritten"}}})}};
+    });
+    m_harness.provider().enqueue(m_harness.provider().toolCallResponse("read", Json{{"arg", "x"}}, "call-1"));
+    m_harness.provider().enqueue(m_harness.provider().textResponse("done"));
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    EXPECT_EQ(m_readTool->executions(), 1);
+    EXPECT_EQ(resultPayload["input"]["arg"], "patched");
+    bool rewritten = false;
+    for (const AgentMessage& message : m_session->messages()) {
+        if (const auto* result = std::get_if<ToolResultMessage>(&message)) {
+            rewritten = std::get<TextContent>(result->content.at(0)).text == "rewritten";
+        }
+    }
+    EXPECT_TRUE(rewritten);
 }

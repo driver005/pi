@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_tool.so; load it with `pi rpc --plugin bazel-bin/plugins/hello_tool/libhello_tool.so`.
+cc_binary(
+    name = "hello_tool",
+    srcs = ["hello_tool.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

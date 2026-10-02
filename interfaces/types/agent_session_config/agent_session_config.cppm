@@ -6,6 +6,7 @@ export import pi.platform.i_clock;
 export import pi.platform.i_file_system;
 export import pi.platform.i_id_generator;
 export import pi.platform.i_sleeper;
+export import pi.plugin.i_hook_bus;
 export import pi.provider.i_model_runtime;
 export import pi.session.i_resource_loader;
 export import pi.session.i_session_manager;
@@ -41,4 +42,6 @@ export struct AgentSessionConfig {
     std::optional<std::set<std::string>> allowedTools;
     std::set<std::string> excludedTools;
     std::vector<ScopedModel> scopedModels;
+    /** Plugin hooks (tool_call, tool_result, context and agent events); null disables them. */
+    IHookBus* hooks = nullptr;
 };

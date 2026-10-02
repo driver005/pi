@@ -79,6 +79,7 @@ PreparedToolCall ToolCallRunner::prepare(const AgentContext& context,
     if (!validated.has_value()) {
         return immediate(call, validationMessage(call, validated.error().message));
     }
+    Json finalArgs = *validated;
     if (hooks.beforeToolCall) {
         ToolCallContext hookContext;
         hookContext.assistantMessage = &assistant;
@@ -94,6 +95,9 @@ PreparedToolCall ToolCallRunner::prepare(const AgentContext& context,
             blocked.immediateResult.terminate = before->terminate;
             return blocked;
         }
+        if (before.has_value() && !before->args.is_null()) {
+            finalArgs = before->args;
+        }
     }
     if (signal != nullptr && signal->aborted()) {
         return immediate(call, "Operation aborted");
@@ -101,7 +105,7 @@ PreparedToolCall ToolCallRunner::prepare(const AgentContext& context,
     PreparedToolCall ready;
     ready.toolCall = call;
     ready.tool = std::move(tool);
-    ready.args = std::move(*validated);
+    ready.args = std::move(finalArgs);
     return ready;
 }
 

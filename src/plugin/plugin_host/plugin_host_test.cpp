@@ -4,6 +4,7 @@
 #include "pi_plugin.h"
 
 import std;
+import pi.base.posix_dynamic_libraries;
 import pi.plugin.plugin_host;
 import pi.support.hook_bus;
 import pi.testing.fake_dynamic_libraries;
@@ -236,4 +237,32 @@ TEST_F(PluginHostTest, LoadFailuresAreReportedPerPlugin) {
     EXPECT_EQ(m_registry.find("half"), nullptr);
     EXPECT_NE(m_registry.find("echo"), nullptr);
     EXPECT_EQ(m_host.loaded(), std::vector<std::string>{"/plugins/good.so"});
+}
+
+TEST_F(PluginHostTest, LoadsTheExamplePluginFromARealSharedLibrary) {
+    PosixDynamicLibraries libraries;
+    PluginHost host(libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"});
+    const auto errors = host.load({"plugins/hello_tool/libhello_tool.so"});
+    ASSERT_TRUE(errors.empty()) << (errors.empty() ? "" : errors[0].message);
+    ASSERT_EQ(m_logger.m_entries.size(), 1U);
+    EXPECT_EQ(m_logger.m_entries[0].second, "[plugin libhello_tool] hello plugin loaded");
+
+    const auto tool = m_registry.find("hello");
+    ASSERT_NE(tool, nullptr);
+    EXPECT_EQ(tool->promptSnippet(), "Greet someone by name");
+    std::vector<std::string> updates;
+    const auto result = tool->execute("c1", Json{{"name", "Ada"}}, nullptr, [&updates](const AgentToolResult& update) {
+        updates.push_back(std::get<TextContent>(update.content.at(0)).text);
+    });
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(std::get<TextContent>(result->content.at(0)).text, "Hello, Ada!");
+    EXPECT_EQ(updates, std::vector<std::string>{"looking for Ada"});
+
+    const HookOutcome blocked = m_bus.emit("tool_call", Json{{"toolName", "bash"}, {"input", Json{{"command", "rm -rf /"}}}});
+    ASSERT_EQ(blocked.results.size(), 1U);
+    EXPECT_EQ(blocked.results[0]["reason"], "hello plugin refuses rm -rf");
+    EXPECT_TRUE(m_bus.emit("tool_call", Json{{"toolName", "bash"}, {"input", Json{{"command", "ls"}}}}).results.empty());
+
+    host.shutdown();
+    EXPECT_EQ(m_registry.find("hello"), nullptr);
 }

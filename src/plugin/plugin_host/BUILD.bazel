@@ -16,8 +16,10 @@ pi_module(
     ],
     test_deps = [
         "//interfaces/support/hook_bus",
+        "//src/base/posix_dynamic_libraries",
         "//src/testing/fake_dynamic_libraries",
         "//src/testing/scripted_process_runner",
         "//src/tools/tool_registry",
     ],
+    data = ["//plugins/hello_tool"],
 )

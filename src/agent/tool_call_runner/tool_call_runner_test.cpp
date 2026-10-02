@@ -126,6 +126,18 @@ TEST_F(ToolCallRunnerTest, BeforeHookCanBlock) {
     EXPECT_EQ(m_tool->m_executions, 0);
 }
 
+TEST_F(ToolCallRunnerTest, BeforeHookCanReplaceTheArguments) {
+    m_hooks.beforeToolCall = [](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
+        EXPECT_EQ(context.args["text"], "hi");
+        BeforeToolCallResult result;
+        result.args = Json{{"text", "patched"}};
+        return std::optional<BeforeToolCallResult>(result);
+    };
+    const auto outcome = runCall(call("echo", Json::parse(R"({"text":"hi"})")));
+    EXPECT_FALSE(outcome.isError);
+    EXPECT_EQ(textOf(outcome.result), "patched");
+}
+
 TEST_F(ToolCallRunnerTest, AfterHookOverridesResult) {
     m_hooks.afterToolCall = [](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
         EXPECT_TRUE(context.result.has_value());

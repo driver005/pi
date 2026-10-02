@@ -20,12 +20,14 @@ import pi.support.context_usage_calculator;
 import pi.support.custom_message_queue;
 import pi.support.model_controller;
 import pi.support.pending_input_tracker;
+import pi.support.plugin_hook_dispatcher;
 import pi.support.post_run_handler;
 import pi.support.prompt_loadout;
 import pi.support.prompt_template_expander;
 import pi.support.recovery_attempt_omitter;
 import pi.support.session_bash_controller;
 import pi.support.session_context_refresher;
+import pi.support.session_event_codec;
 import pi.support.session_event_hub;
 import pi.support.session_message_persister;
 import pi.support.session_stats_calculator;
@@ -156,6 +158,8 @@ private:
     AgentMessageConverter m_converter;
     AuthGuidance m_guidance;
     SessionEventHub m_hub;
+    SessionEventCodec m_eventCodec;
+    std::unique_ptr<PluginHookDispatcher> m_hooks;
     SummaryGenerator m_generator;
     Compactor m_compactor;
     BranchSummarizer m_summarizer;
@@ -193,10 +197,16 @@ AgentSession::AgentSession(AgentSessionConfig config)
       m_compactor(m_generator),
       m_summarizer(m_generator),
       m_skills(m_config.files) {
+    if (m_config.hooks != nullptr) {
+        m_hooks = std::make_unique<PluginHookDispatcher>(*m_config.hooks);
+    }
     createAgent();
     createCollaborators();
     m_agentListener = m_agent->subscribe(
         [this](const AgentEvent& event, const std::shared_ptr<AbortSignal>&) { onAgentEvent(event); });
+    if (m_hooks) {
+        m_hub.subscribe([this](const AgentSessionEvent& event) { m_hooks->notify(m_eventCodec.toJson(event)); });
+    }
     m_loadout->rebuild();
     if (m_config.initialActiveTools) {
         m_loadout->setActiveTools(*m_config.initialActiveTools);
@@ -246,6 +256,18 @@ void AgentSession::createAgent() {
     options.loopConfig.prepareRequest = [this](const PrepareRequestContext& request,
                                                const std::shared_ptr<AbortSignal>&) { return prepareRequest(request); };
     options.loopConfig.prepareNextTurn = [this](const AgentTurnContext& turn) { return prepareNextTurn(turn); };
+    if (m_hooks) {
+        options.loopConfig.beforeToolCall = [this](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
+            return m_hooks->beforeToolCall(context);
+        };
+        options.loopConfig.afterToolCall = [this](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
+            return m_hooks->afterToolCall(context);
+        };
+        options.loopConfig.transformContext = [this](const std::vector<AgentMessage>& messages,
+                                                     const std::shared_ptr<AbortSignal>&) {
+            return m_hooks->transformContext(messages);
+        };
+    }
     m_agent = m_config.agents.create(std::move(options));
 }
 
