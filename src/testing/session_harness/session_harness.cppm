@@ -22,7 +22,7 @@ import pi.testing.sequential_id_generator;
  */
 export class SessionHarness {
 public:
-    SessionHarness();
+    explicit SessionHarness(std::string cwd = "/work");
 
     FauxProvider& provider();
     FixedClock& clock();
@@ -51,9 +51,9 @@ private:
     std::unique_ptr<SessionManager> m_session;
 };
 
-SessionHarness::SessionHarness() {
+SessionHarness::SessionHarness(std::string cwd) {
     SessionManagerOptions options;
-    options.cwd = "/work";
+    options.cwd = std::move(cwd);
     options.persist = false;
     m_session = std::make_unique<SessionManager>(options, m_files, m_clock, m_ids);
     m_session->open();

@@ -1,17 +1,18 @@
-load("//tools:module.bzl", "pi_module")
+load("//tools:module.bzl", "pi_support")
 
-pi_module(
-    name = "bash_tool",
+pi_support(
+    name = "bash_command_executor",
     deps = [
         "//interfaces/platform/i_crypto",
         "//interfaces/platform/i_environment",
         "//interfaces/platform/i_file_system",
         "//interfaces/platform/i_process_runner",
-        "//interfaces/support/text_truncator",
-        "//interfaces/support/tool_result_factory",
-        "//interfaces/tool/i_tool",
+        "//interfaces/support/abort_signal",
         "//interfaces/support/output_accumulator",
+        "//interfaces/support/output_sanitizer",
         "//interfaces/support/shell_resolver",
+        "//interfaces/types/bash_result",
+        "//interfaces/types/result",
     ],
     test_deps = [
         "//src/base/boring_crypto",

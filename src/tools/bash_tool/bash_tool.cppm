@@ -11,6 +11,7 @@ import pi.platform.i_process_runner;
 import pi.support.text_truncator;
 import pi.support.tool_result_factory;
 import pi.support.output_accumulator;
+import pi.support.shell_resolver;
 export import pi.tool.i_tool;
 
 /**
@@ -29,7 +30,7 @@ public:
         : m_runner(runner),
           m_fileSystem(fileSystem),
           m_crypto(crypto),
-          m_environment(environment),
+          m_shell(fileSystem, environment),
           m_cwd(std::move(cwd)),
           m_shellPath(std::move(shellPath)),
           m_commandPrefix(std::move(commandPrefix)) {
@@ -89,25 +90,7 @@ public:
 
 private:
     std::string resolveShell() const {
-        if (!m_shellPath.empty() && m_fileSystem.exists(m_shellPath)) {
-            return m_shellPath;
-        }
-        if (m_fileSystem.exists("/bin/bash")) {
-            return "/bin/bash";
-        }
-        if (const auto path = m_environment.get("PATH"); path.has_value()) {
-            std::size_t start = 0;
-            while (start <= path->size()) {
-                std::size_t end = path->find(':', start);
-                end = end == std::string::npos ? path->size() : end;
-                const std::string candidate = path->substr(start, end - start) + "/bash";
-                if (m_fileSystem.exists(candidate)) {
-                    return candidate;
-                }
-                start = end + 1;
-            }
-        }
-        return "sh";
+        return m_shell.resolve(m_shellPath);
     }
 
     std::string appendStatus(const std::string& text, const std::string& status) const {
@@ -208,7 +191,7 @@ private:
     IProcessRunner& m_runner;
     IFileSystem& m_fileSystem;
     ICrypto& m_crypto;
-    IEnvironment& m_environment;
+    ShellResolver m_shell;
     std::string m_cwd;
     std::string m_shellPath;
     std::string m_commandPrefix;
