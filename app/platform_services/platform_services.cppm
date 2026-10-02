@@ -5,6 +5,7 @@ import pi.base.base64_codec;
 import pi.base.boring_crypto;
 import pi.base.curl_http_client;
 import pi.base.posix_file_lock;
+import pi.base.posix_child_process_launcher;
 import pi.base.posix_file_system;
 import pi.base.posix_process_runner;
 import pi.base.system_clock;
@@ -24,6 +25,7 @@ public:
     PosixFileSystem& files();
     PosixFileLock& locks();
     PosixProcessRunner& processes();
+    PosixChildProcessLauncher& children();
     BoringCrypto& crypto();
     Base64Codec& base64();
     ThreadSleeper& sleeper();
@@ -37,6 +39,7 @@ private:
     PosixFileSystem m_files;
     PosixFileLock m_locks;
     PosixProcessRunner m_processes;
+    PosixChildProcessLauncher m_children;
     BoringCrypto m_crypto;
     Base64Codec m_base64;
     ThreadSleeper m_sleeper;
@@ -68,6 +71,10 @@ PosixFileLock& PlatformServices::locks() {
 
 PosixProcessRunner& PlatformServices::processes() {
     return m_processes;
+}
+
+PosixChildProcessLauncher& PlatformServices::children() {
+    return m_children;
 }
 
 BoringCrypto& PlatformServices::crypto() {

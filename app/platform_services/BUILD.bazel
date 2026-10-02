@@ -7,6 +7,7 @@ pi_module(
         "//src/base/boring_crypto",
         "//src/base/curl_http_client",
         "//src/base/posix_file_lock",
+        "//src/base/posix_child_process_launcher",
         "//src/base/posix_file_system",
         "//src/base/posix_process_runner",
         "//src/base/system_clock",

@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_child_process_launcher",
+    deps = [
+        "//interfaces/platform/i_child_process",
+        "//interfaces/types/process_request",
+        "//interfaces/types/result",
+    ],
+)
