@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_tool",
+    deps = [
+        "//interfaces/tool/i_tool",
+        "//interfaces/types/json",
+        "//sdk:pi_plugin_abi",
+    ],
+)

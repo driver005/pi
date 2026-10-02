@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "hook_outcome",
+    deps = [
+        "//interfaces/types/error",
+        "//interfaces/types/json",
+    ],
+)
