@@ -1,6 +1,8 @@
-#include "interfaces/support/json_reader/json_reader.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.json_reader;
 
 class JsonReaderTest : public testing::Test {
 protected:

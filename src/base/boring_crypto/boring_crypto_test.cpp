@@ -1,6 +1,7 @@
-#include "src/base/boring_crypto/boring_crypto.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.base.boring_crypto;
 
 class BoringCryptoTest : public testing::Test {
 protected:

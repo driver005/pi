@@ -1,10 +1,7 @@
-#include "interfaces/support/event_stream/event_stream.h"
-
 #include <gtest/gtest.h>
 
-#include <string>
-#include <thread>
-#include <vector>
+import std;
+import pi.support.event_stream;
 
 TEST(EventStreamTest, DeliversEventsInOrderAndExtractsResult) {
     EventStream<int, std::string> stream([](const int& e) { return e < 0; },

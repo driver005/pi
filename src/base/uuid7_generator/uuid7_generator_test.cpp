@@ -1,8 +1,7 @@
-#include "src/base/uuid7_generator/uuid7_generator.h"
-
 #include <gtest/gtest.h>
 
-#include <set>
+import std;
+import pi.base.uuid7_generator;
 
 class StepClock : public IClock {
 public:

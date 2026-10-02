@@ -1,11 +1,8 @@
-#include "src/base/posix_file_lock/posix_file_lock.h"
-
 #include <gtest/gtest.h>
-
-#include <atomic>
 #include <cstdlib>
-#include <thread>
-#include <vector>
+
+import std;
+import pi.base.posix_file_lock;
 
 class PosixFileLockTest : public testing::Test {
 protected:

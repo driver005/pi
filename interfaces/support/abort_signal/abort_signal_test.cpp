@@ -1,6 +1,7 @@
-#include "interfaces/support/abort_signal/abort_signal.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.support.abort_signal;
 
 TEST(AbortSignalTest, StartsNotAborted) {
     AbortSignal signal;

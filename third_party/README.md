@@ -12,5 +12,7 @@ and exposed to modules only through the aliases in `BUILD.bazel`.
 | yaml     | yaml-cpp      | skill / prompt-template frontmatter   |
 | gtest    | googletest    | tests                                 |
 
+`yaml_bridge` is the exception boundary for yaml-cpp (built with exceptions, plain C++ API).
+
 Not available from the registry or blocked in the dev sandbox, handled in-tree instead:
 JSON Schema validation (hand-written subset validator), sqlite3 (needs sqlite.org, see M6).

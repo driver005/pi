@@ -1,6 +1,8 @@
-#include "src/base/system_clock/system_clock.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.base.system_clock;
+import pi.platform.i_clock;
 
 TEST(SystemClockTest, ReturnsPlausibleEpochMillis) {
     SystemClock clock;

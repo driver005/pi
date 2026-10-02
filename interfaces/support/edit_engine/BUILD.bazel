@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "edit_engine",
+    deps = [
+        "//interfaces/types/applied_edits",
+        "//interfaces/types/fuzzy_match",
+        "//interfaces/types/matched_edit",
+        "//interfaces/types/result",
+        "//interfaces/types/text_edit",
+    ],
+)

@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_file_system",
+    deps = [
+        "//interfaces/types/file_stat",
+        "//interfaces/types/result",
+    ],
+)

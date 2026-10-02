@@ -1,6 +1,14 @@
 # C++ build of the pi backbone. The TypeScript workspace is not built by Bazel.
 build --enable_platform_specific_config
+# Toolchain: clang 20 with libc++ (needed for `import std;`). Override CC in user.bazelrc if your
+# clang is named differently.
+build --repo_env=CC=clang-20
+build --repo_env=BAZEL_CXXOPTS=-stdlib=libc++
+build --repo_env=BAZEL_LINKOPTS=-stdlib=libc++
+build --repo_env=BAZEL_LINKLIBS=-lc++:-lc++abi:-lm
 build --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
+build --cxxopt=-stdlib=libc++ --host_cxxopt=-stdlib=libc++
+build --linkopt=-stdlib=libc++ --host_linkopt=-stdlib=libc++
 build --incompatible_strict_action_env
 build --strip=never
 test --test_output=errors

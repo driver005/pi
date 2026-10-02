@@ -1,15 +1,14 @@
-#include "src/agent/agent/agent.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
-#include <thread>
-
-#include "src/agent/agent_loop/agent_loop.h"
-#include "src/agent/tool_call_runner/tool_call_runner.h"
-#include "src/ai/faux_provider/faux_provider.h"
-#include "src/testing/fixed_clock/fixed_clock.h"
-#include "src/testing/inline_executor/inline_executor.h"
-#include "src/testing/scripted_tool/scripted_tool.h"
+import std;
+import pi.agent.agent;
+import pi.agent.agent_loop;
+import pi.agent.tool_call_runner;
+import pi.ai.faux_provider;
+import pi.testing.fixed_clock;
+import pi.testing.inline_executor;
+import pi.testing.scripted_tool;
 
 class AgentTest : public testing::Test {
 protected:

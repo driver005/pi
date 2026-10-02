@@ -1,6 +1,8 @@
-#include "interfaces/support/schema_validator/schema_validator.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.schema_validator;
 
 class SchemaValidatorTest : public testing::Test {
 protected:

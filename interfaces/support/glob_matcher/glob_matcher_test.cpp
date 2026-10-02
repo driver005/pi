@@ -1,6 +1,7 @@
-#include "interfaces/support/glob_matcher/glob_matcher.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.support.glob_matcher;
 
 class GlobMatcherTest : public testing::Test {
 protected:

@@ -1,8 +1,7 @@
-#include "src/base/posix_process_runner/posix_process_runner.h"
-
 #include <gtest/gtest.h>
 
-#include <thread>
+import std;
+import pi.base.posix_process_runner;
 
 class PosixProcessRunnerTest : public testing::Test {
 protected:

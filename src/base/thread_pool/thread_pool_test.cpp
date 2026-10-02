@@ -1,8 +1,7 @@
-#include "src/base/thread_pool/thread_pool.h"
-
 #include <gtest/gtest.h>
 
-#include <atomic>
+import std;
+import pi.base.thread_pool;
 
 TEST(ThreadPoolTest, RunsAllSubmittedTasksBeforeDestruction) {
     std::atomic<int> done{0};

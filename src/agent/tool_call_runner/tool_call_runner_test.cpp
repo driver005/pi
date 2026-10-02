@@ -1,6 +1,8 @@
-#include "src/agent/tool_call_runner/tool_call_runner.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.agent.tool_call_runner;
 
 class EchoTool : public ITool {
 public:

@@ -1,6 +1,7 @@
-#include "interfaces/support/gitignore_matcher/gitignore_matcher.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.support.gitignore_matcher;
 
 TEST(GitignoreMatcherTest, UnanchoredPatternMatchesAtAnyDepth) {
     GitignoreMatcher matcher("*.log\nnode_modules\n");

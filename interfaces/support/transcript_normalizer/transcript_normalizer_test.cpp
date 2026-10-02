@@ -1,6 +1,8 @@
-#include "interfaces/support/transcript_normalizer/transcript_normalizer.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.transcript_normalizer;
 
 class TranscriptNormalizerTest : public testing::Test {
 protected:

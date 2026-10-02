@@ -1,4 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load(":modules.bzl", "pi_std_module")
 
 py_binary(
     name = "check_style",
@@ -16,4 +17,10 @@ py_test(
     main = "check_style_test.py",
 )
 
-exports_files(["module.bzl"])
+pi_std_module(
+    name = "std_module",
+    copts = ["-fno-exceptions"],
+    visibility = ["//visibility:public"],
+)
+
+exports_files(["module.bzl", "modules.bzl"])

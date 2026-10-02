@@ -1,6 +1,7 @@
-#include "src/base/stderr_logger/stderr_logger.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.base.stderr_logger;
 
 class FixedClock : public IClock {
 public:

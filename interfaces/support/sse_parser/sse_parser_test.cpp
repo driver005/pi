@@ -1,6 +1,7 @@
-#include "interfaces/support/sse_parser/sse_parser.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.support.sse_parser;
 
 TEST(SseParserTest, ParsesSingleEvent) {
     SseParser parser;

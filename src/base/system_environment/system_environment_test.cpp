@@ -1,6 +1,7 @@
-#include "src/base/system_environment/system_environment.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.base.system_environment;
 
 TEST(SystemEnvironmentTest, SetGetUnset) {
     SystemEnvironment env;

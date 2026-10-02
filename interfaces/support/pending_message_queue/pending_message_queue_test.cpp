@@ -1,6 +1,7 @@
-#include "interfaces/support/pending_message_queue/pending_message_queue.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.support.pending_message_queue;
 
 class PendingMessageQueueTest : public testing::Test {
 protected:

@@ -1,10 +1,8 @@
-#include "src/base/curl_http_client/curl_http_client.h"
-
 #include <gtest/gtest.h>
 
-#include <thread>
-
-#include "src/testing/fake_http_server/fake_http_server.h"
+import std;
+import pi.base.curl_http_client;
+import pi.testing.fake_http_server;
 
 class CurlHttpClientTest : public testing::Test {
 protected:

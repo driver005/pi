@@ -1,6 +1,8 @@
-#include "interfaces/support/message_codec/message_codec.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.message_codec;
 
 class MessageCodecTest : public testing::Test {
 protected:

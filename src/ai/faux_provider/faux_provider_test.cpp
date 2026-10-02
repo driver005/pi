@@ -1,9 +1,10 @@
-#include "src/ai/faux_provider/faux_provider.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
 
-#include "src/testing/fixed_clock/fixed_clock.h"
-#include "src/testing/inline_executor/inline_executor.h"
+import std;
+import pi.ai.faux_provider;
+import pi.testing.fixed_clock;
+import pi.testing.inline_executor;
 
 class FauxProviderTest : public testing::Test {
 protected:

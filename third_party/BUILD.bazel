@@ -25,6 +25,11 @@ alias(
 )
 
 alias(
+    name = "yaml_bridge",
+    actual = "//third_party/yaml_bridge",
+)
+
+alias(
     name = "yaml",
     actual = "@yaml-cpp",
 )

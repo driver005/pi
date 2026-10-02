@@ -1,6 +1,8 @@
-#include "interfaces/support/partial_json_parser/partial_json_parser.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.partial_json_parser;
 
 class PartialJsonParserTest : public testing::Test {
 protected:

@@ -1,6 +1,8 @@
-#include "interfaces/support/frontmatter_parser/frontmatter_parser.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.frontmatter_parser;
 
 class FrontmatterParserTest : public testing::Test {
 protected:

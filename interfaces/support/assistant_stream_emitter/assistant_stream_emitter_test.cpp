@@ -1,6 +1,8 @@
-#include "interfaces/support/assistant_stream_emitter/assistant_stream_emitter.h"
-
 #include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+import std;
+import pi.support.assistant_stream_emitter;
 
 class AssistantStreamEmitterTest : public testing::Test {
 protected:

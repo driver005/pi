@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Style gate for the C++ port. See docs/cpp-style.md.
 
-Rules enforced on .h/.cpp files under interfaces/, src/, app/, sdk/ and plugins/:
+Rules enforced on .cppm/.cpp files under interfaces/, src/, app/, sdk/ and plugins/:
   no-static-function     no static member/free functions
   no-anonymous-namespace no `namespace {`
   no-free-function       functions are members of a class (main() and extern "C" excepted)
   no-nested-type         no class/struct/union/enum declared inside a class or function
   one-class-per-module   at most one class/struct per header, one header per directory
-  header-name            header file name is the snake_case of its class name
+  module-name            <name>.cppm is the snake_case of its class name (one .cppm per directory)
+  std-include            C++ standard headers are not #included; use `import std;`
   member-prefix          data members of classes (and structs with methods) start with m_
-  build-dep              every "interfaces/..." or "src/..." include needs its //module label in the
-                         BUILD.bazel next to the file (strict Bazel deps, caught before the build)
-  src-include            src/<pkg>/<module> may only be included by itself, by app/ or by *_test.cpp
-                         (src/testing/* is shared test support and may be included anywhere)
+  build-dep              every `import pi.x.y;` needs //interfaces/x/y or //src/x/y in the BUILD.bazel
+                         next to the file (strict Bazel deps, caught before the build)
+  src-import             production .cppm may not import another src/ module (only interfaces/);
+                         tests, app/ and src/testing/* are exempt
 Files named *_test.cpp are exempt from the function and class rules (TEST macros).
 A file whose first 5 lines contain `// style:c-abi` is exempt from every rule
 (used only for the plugin C ABI header and extern "C" glue).
@@ -23,8 +24,18 @@ import re
 import sys
 
 ROOTS = ("interfaces", "src", "app", "sdk", "plugins")
-EXTENSIONS = (".h", ".cpp")
+EXTENSIONS = (".cppm", ".cpp")
 ACCESS = ("public", "private", "protected")
+CXX_STD_HEADERS = set(
+    "algorithm any array atomic bit bitset charconv chrono codecvt compare complex concepts "
+    "condition_variable coroutine deque exception expected filesystem format forward_list fstream "
+    "functional future initializer_list iomanip ios iosfwd iostream istream iterator latch limits list "
+    "locale map memory memory_resource mutex new numbers numeric optional ostream print queue random "
+    "ranges ratio regex scoped_allocator semaphore set shared_mutex source_location span sstream stack "
+    "stdexcept stop_token streambuf string string_view strstream syncstream system_error thread tuple "
+    "type_traits typeindex typeinfo unordered_map unordered_set utility valarray variant vector version"
+    .split()
+)
 SKIP_LEADING = ("using", "typedef", "friend", "static_assert", "template")
 CLASS_RE = re.compile(
     r"^(?:template\s*<.*>\s*)?(class|struct|union)\s+(?:\[\[[^\]]*\]\]\s*)?(\w+)"
@@ -164,7 +175,8 @@ class FileChecker:
             return self.violations
         tokenizer = Tokenizer(self.source)
         tokens = tokenizer.tokens()
-        self._checkIncludes(tokenizer.includes)
+        self._checkImports()
+        self._checkStdIncludes()
         self._scan(tokens)
         self._checkHeaderRules()
         return self.violations
@@ -172,28 +184,42 @@ class FileChecker:
     def _add(self, line, rule, message):
         self.violations.append(Violation(self.path, line, rule, message))
 
-    def _checkBuildDeps(self, includes):
-        if self.buildText is None:
-            return
-        own = os.path.dirname(self.path)
-        for target, line in includes:
-            if not target.startswith(("interfaces/", "src/")):
-                continue
-            module = os.path.dirname(target)
-            if module != own and f'"//{module}"' not in self.buildText:
-                self._add(line, "build-dep", f'"//{module}" missing from {own}/BUILD.bazel')
+    def _imports(self):
+        found = []
+        for number, line in enumerate(self.source.split("\n"), 1):
+            match = re.match(r"\s*(?:export\s+)?import\s+([\w.]+)\s*;", line)
+            if match and match.group(1) != "std":
+                found.append((match.group(1), number))
+        return found
 
-    def _checkIncludes(self, includes):
-        self._checkBuildDeps(includes)
-        for target, line in includes:
-            parts = target.split("/")
-            if parts[0] != "src" or len(parts) < 3 or parts[1] == "testing" or self.isTest:
+    def _moduleDirs(self, module):
+        parts = module.split(".")[1:]
+        return [os.path.join(root, *parts) for root in ("interfaces", "src")]
+
+    def _checkImports(self):
+        own = os.path.dirname(self.path)
+        for module, line in self._imports():
+            if not module.startswith("pi."):
                 continue
-            if self.path.startswith("app/"):
+            candidates = self._moduleDirs(module)
+            if own in candidates:
                 continue
-            own = self.path.split("/")
-            if own[:3] != parts[:3]:
-                self._add(line, "src-include", f'"{target}" crosses module boundaries')
+            if self.buildText is not None and not any(f'"//{c}"' in self.buildText for c in candidates):
+                self._add(line, "build-dep", f"import {module} needs //{candidates[0]} or //{candidates[1]} in BUILD.bazel")
+            exempt = self.isTest or self.path.startswith(("app/", "src/testing/"))
+            if not exempt and candidates[1].startswith("src/") and self._isSrcModule(module):
+                self._add(line, "src-import", f"{module} is an implementation module; import its interface")
+
+    def _isSrcModule(self, module):
+        return self.buildText is not None and f'"//src/{"/".join(module.split(".")[1:])}"' in self.buildText
+
+    def _checkStdIncludes(self):
+        if self.isTest:
+            return
+        for number, line in enumerate(self.source.split("\n"), 1):
+            match = re.match(r"\s*#\s*include\s*<([\w/]+)>", line)
+            if match and match.group(1) in CXX_STD_HEADERS:
+                self._add(number, "std-include", f"#include <{match.group(1)}>: use `import std;`")
 
     def _scan(self, tokens):
         stack = []
@@ -234,6 +260,8 @@ class FileChecker:
 
     def _classify(self, stmt, stack, line):
         words = self._words(stmt)
+        if words[:1] == ["export"]:
+            words = words[1:]
         joined = " ".join(words)
         inClass = any(s.kind in ("class", "fn") for s in stack)
         if "namespace" in words:
@@ -291,6 +319,8 @@ class FileChecker:
             return
         while words and (words[0] in ACCESS and words[1:2] == [":"]):
             words = words[2:]
+        if words[:1] == ["export"]:
+            words = words[1:]
         scope = stack[-1] if stack else Scope("ns")
         if "static" in words and "(" in words and self._beforeAssign(words):
             self._add(line, "no-static-function", "static function declaration")
@@ -364,16 +394,16 @@ class FileChecker:
         return name
 
     def _checkHeaderRules(self):
-        if self.isTest or not self.path.endswith(".h"):
+        if self.isTest or not self.path.endswith(".cppm"):
             return
         if len(self.classNames) > 1:
             names = ", ".join(n for n, _ in self.classNames)
             self._add(self.classNames[1][1], "one-class-per-module", f"multiple types: {names}")
         if self.classNames:
             name, line = self.classNames[0]
-            expected = self._snake(name) + ".h"
+            expected = self._snake(name) + ".cppm"
             if os.path.basename(self.path) != expected:
-                self._add(line, "header-name", f"{name} must live in {expected}")
+                self._add(line, "module-name", f"{name} must live in {expected}")
 
     def _snake(self, name):
         step = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
@@ -395,12 +425,12 @@ def checkDirectoryHeaders(base, files):
     violations = []
     perDirectory = {}
     for path in files:
-        if path.endswith(".h") and not path.endswith("_test.h"):
+        if path.endswith(".cppm"):
             perDirectory.setdefault(os.path.dirname(path), []).append(path)
     for directory, headers in perDirectory.items():
         if len(headers) > 1:
             rel = os.path.relpath(directory, base)
-            violations.append(Violation(rel, 1, "one-class-per-module", "more than one header"))
+            violations.append(Violation(rel, 1, "one-class-per-module", "more than one .cppm"))
     return violations
 
 

@@ -1,6 +1,7 @@
-#include "src/base/base64_codec/base64_codec.h"
-
 #include <gtest/gtest.h>
+
+import std;
+import pi.base.base64_codec;
 
 class Base64CodecTest : public testing::Test {
 protected:
