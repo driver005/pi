@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "compaction_result",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/usage",
+    ],
+)

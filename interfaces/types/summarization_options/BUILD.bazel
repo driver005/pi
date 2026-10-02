@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "summarization_options",
+    deps = [
+        "//interfaces/types/agent_loop_config",
+        "//interfaces/types/assistant_retry_policy",
+        "//interfaces/types/model",
+        "//interfaces/types/retry_callbacks",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/thinking_level",
+    ],
+)

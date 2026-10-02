@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "assistant_call_retrier",
+    deps = [
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/assistant_error_classifier",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/assistant_retry_policy",
+        "//interfaces/types/retry_callbacks",
+    ],
+    test_deps = ["//src/testing/recording_sleeper"],
+)

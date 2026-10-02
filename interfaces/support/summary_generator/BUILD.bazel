@@ -1,0 +1,27 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "summary_generator",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/agent_message_converter",
+        "//interfaces/support/assistant_call_retrier",
+        "//interfaces/support/conversation_serializer",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/result",
+        "//interfaces/types/summarization_options",
+        "//interfaces/types/summary_result",
+        "//interfaces/types/transcript_context",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/recording_sleeper",
+        "//src/testing/sequential_id_generator",
+    ],
+)
