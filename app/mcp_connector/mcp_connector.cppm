@@ -1,0 +1,140 @@
+export module pi.mcp_connector;
+
+import std;
+export import pi.mcp.i_mcp_connector;
+export import pi.platform.i_child_process_launcher;
+export import pi.platform.i_file_system;
+export import pi.platform.i_http_client;
+export import pi.platform.i_sleeper;
+export import pi.support.config_value_resolver;
+export import pi.support.path_resolver;
+export import pi.types.mcp_http_options;
+export import pi.types.mcp_stdio_options;
+import pi.mcp.mcp_client;
+import pi.mcp.stdio_mcp_transport;
+import pi.mcp.streamable_http_mcp_transport;
+
+/**
+ * Connects configured MCP servers: stdio servers as child processes, HTTP servers over the
+ * streamable HTTP transport. `${VAR}` and `!cmd` values in env and headers are resolved here, `~`
+ * and relative paths too. Port of createDefaultTransport and connectOnce in
+ * packages/coding-agent/src/extensions/mcp/runtime.ts.
+ */
+export class McpConnector : public IMcpConnector {
+public:
+    /** Returns the current token of a pi provider (servers with `auth.provider`), or nullopt. */
+    using ProviderToken = std::function<std::optional<std::string>(const std::string&)>;
+
+    McpConnector(IChildProcessLauncher& launcher, IHttpClient& http, ISleeper& sleeper,
+                 IFileSystem& files, ConfigValueResolver& resolver, ProviderToken providerToken);
+
+    Result<std::unique_ptr<IMcpClient>> connect(const McpServerConfig& config, const std::string& cwd,
+                                                const McpClientOptions& options) override;
+
+private:
+    Result<std::unique_ptr<IMcpTransport>> stdioTransport(const McpServerConfig& config,
+                                                          const std::string& cwd);
+    Result<std::unique_ptr<IMcpTransport>> httpTransport(const McpServerConfig& config);
+    std::string expandHome(const std::string& value) const;
+    std::string describe(const McpServerConfig& config) const;
+    std::string tail(const std::string& text) const;
+
+    IChildProcessLauncher& m_launcher;
+    IHttpClient& m_http;
+    ISleeper& m_sleeper;
+    IFileSystem& m_files;
+    ConfigValueResolver& m_resolver;
+    ProviderToken m_providerToken;
+};
+
+McpConnector::McpConnector(IChildProcessLauncher& launcher, IHttpClient& http, ISleeper& sleeper,
+                           IFileSystem& files, ConfigValueResolver& resolver,
+                           ProviderToken providerToken)
+    : m_launcher(launcher),
+      m_http(http),
+      m_sleeper(sleeper),
+      m_files(files),
+      m_resolver(resolver),
+      m_providerToken(std::move(providerToken)) {}
+
+std::string McpConnector::describe(const McpServerConfig& config) const {
+    return "MCP server \"" + config.name + "\"";
+}
+
+std::string McpConnector::expandHome(const std::string& value) const {
+    const std::string home = m_files.homeDirectory();
+    if (value == "~") {
+        return home;
+    }
+    if (value.starts_with("~/")) {
+        return home + value.substr(1);
+    }
+    return value;
+}
+
+std::string McpConnector::tail(const std::string& text) const {
+    constexpr std::size_t maxChars = 2000;
+    const std::size_t first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    std::string trimmed = text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+    return trimmed.size() > maxChars ? trimmed.substr(trimmed.size() - maxChars) : trimmed;
+}
+
+Result<std::unique_ptr<IMcpTransport>> McpConnector::stdioTransport(const McpServerConfig& config,
+                                                                    const std::string& cwd) {
+    McpStdioOptions stdio;
+    stdio.command = expandHome(config.command);
+    for (const std::string& arg : config.args) {
+        stdio.args.push_back(expandHome(arg));
+    }
+    for (const auto& [key, value] : config.env) {
+        auto resolved = m_resolver.resolveOrError(value, describe(config) + " env \"" + key + "\"", {});
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        stdio.env[key] = *resolved;
+    }
+    stdio.cwd = PathResolver(m_files.homeDirectory()).resolveToCwd(expandHome(config.cwd.value_or(".")), cwd);
+    return std::unique_ptr<IMcpTransport>(std::make_unique<StdioMcpTransport>(m_launcher, std::move(stdio)));
+}
+
+Result<std::unique_ptr<IMcpTransport>> McpConnector::httpTransport(const McpServerConfig& config) {
+    McpHttpOptions http;
+    http.url = config.url;
+    const auto headers = m_resolver.resolveHeadersOrError(config.headers, describe(config), {});
+    if (!headers) {
+        return std::unexpected(headers.error());
+    }
+    for (const auto& [name, value] : *headers) {
+        http.headers.emplace_back(name, value);
+    }
+    if (config.authProvider) {
+        // Read on every request, so the provider's token refreshes apply.
+        const std::string provider = *config.authProvider;
+        http.bearerToken = [this, provider]() { return m_providerToken(provider).value_or(""); };
+    }
+    return std::unique_ptr<IMcpTransport>(
+        std::make_unique<StreamableHttpMcpTransport>(m_http, m_sleeper, std::move(http)));
+}
+
+Result<std::unique_ptr<IMcpClient>> McpConnector::connect(const McpServerConfig& config,
+                                                          const std::string& cwd,
+                                                          const McpClientOptions& options) {
+    auto transport = config.http ? httpTransport(config) : stdioTransport(config, cwd);
+    if (!transport) {
+        return std::unexpected(transport.error());
+    }
+    StdioMcpTransport* stdio = config.http ? nullptr : static_cast<StdioMcpTransport*>(transport->get());
+    auto client = std::make_unique<McpClient>(options);
+    auto connected = client->connect(std::move(*transport));
+    if (!connected) {
+        std::string message = connected.error().message;
+        const std::string stderrTail = stdio != nullptr ? tail(stdio->stderrTail()) : "";
+        client->close();
+        return std::unexpected(Error{connected.error().code,
+                                     stderrTail.empty() ? message : message + "\n" + stderrTail});
+    }
+    return std::unique_ptr<IMcpClient>(std::move(client));
+}
