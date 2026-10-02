@@ -13,6 +13,7 @@ import pi.ai.file_credential_store;
 import pi.ai.file_models_store;
 import pi.ai.model_runtime;
 import pi.ai.provider_registry;
+import pi.ai.responses_provider;
 import pi.platform_services;
 
 /**
@@ -54,6 +55,8 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
     m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+    m_providers.registerProvider(std::make_shared<ResponsesProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
