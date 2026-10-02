@@ -6,7 +6,7 @@ export import pi.support.path_resolver;
 
 /**
  * Whether a working directory holds project-local resources that need a trust decision:
- * <cwd>/.pi/{settings.json, mcp.json, extensions, skills, prompts, themes, SYSTEM.md,
+ * <cwd>/.pi/{settings.json, mcp.json, extensions, plugins, skills, prompts, themes, SYSTEM.md,
  * APPEND_SYSTEM.md} or an .agents/skills directory in the cwd or an ancestor (the user's own
  * ~/.agents/skills does not count). Port of hasTrustRequiringProjectResources in core/trust-manager.ts.
  */
@@ -34,7 +34,7 @@ bool ProjectTrustProbe::requiresTrust(const std::string& cwd) {
     const std::string home = m_files.realPath(m_files.homeDirectory());
     const std::string userSkills = home + "/.agents/skills";
     std::string current = trustPath(cwd);
-    for (const char* entry : {"settings.json", "mcp.json", "extensions", "skills", "prompts", "themes",
+    for (const char* entry : {"settings.json", "mcp.json", "extensions", "plugins", "skills", "prompts", "themes",
                               "SYSTEM.md", "APPEND_SYSTEM.md"}) {
         if (m_files.exists(current + "/.pi/" + entry)) {
             return true;

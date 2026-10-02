@@ -7,13 +7,16 @@ export import pi.types.coding_startup_options;
 export import pi.types.session_runtime_request;
 import pi.mcp_connector;
 import pi.mcp_server_manager;
+import pi.plugin.plugin_host;
 import pi.session.agent_session;
 import pi.session.resource_loader;
 import pi.session.settings_manager;
 import pi.support.bash_command_executor;
+import pi.support.hook_bus;
 import pi.support.mcp_config_loader;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
+import pi.support.plugin_discovery;
 import pi.support.model_selector;
 import pi.tools.bash_tool;
 import pi.tools.edit_tool;
@@ -51,9 +54,10 @@ private:
     ModelChoice chooseModel(const CodingStartupOptions& options);
     std::optional<std::vector<std::string>> activeTools(const CodingStartupOptions& options) const;
     void createSession(const CodingStartupOptions& options);
+    void loadPlugins(const CodingStartupOptions& options);
     void startMcp(const CodingStartupOptions& options);
-    void activateMcpTools(const std::vector<std::string>& names);
-    std::vector<std::string> mcpToolNames() const;
+    void activateExtraTools(const std::vector<std::string>& names);
+    std::vector<std::string> extraToolNames() const;
     std::optional<std::string> providerToken(const std::string& provider);
     void warn(const std::string& message);
 
@@ -66,6 +70,9 @@ private:
     ResourceLoader m_resources;
     FileMutationQueue m_queue;
     ToolRegistry m_tools;
+    HookBus m_hooks;
+    PluginDiscovery m_pluginDiscovery;
+    PluginHost m_plugins;
     BashCommandExecutor m_bash;
     ModelSelector m_selector;
     ConfigValueResolver m_configValues;
@@ -87,6 +94,9 @@ CodingSessionHandle::CodingSessionHandle(SessionRuntimeRequest request, CodingSe
                  services.platform().files(), services.platform().locks(), services.platform().ids()),
       m_resources(resourceOptions(options), m_settings, services.platform().files()),
       m_queue(services.platform().files()),
+      m_pluginDiscovery(services.platform().files()),
+      m_plugins(services.platform().libraries(), m_tools, m_hooks, services.platform().processes(),
+                services.platform().logger(), PluginContext{request.cwd, request.agentDir}),
       m_bash(services.platform().processes(), services.platform().files(), services.platform().crypto(),
              services.platform().environment()),
       m_configValues(services.platform().environment(), services.platform().processes()),
@@ -99,15 +109,19 @@ CodingSessionHandle::CodingSessionHandle(SessionRuntimeRequest request, CodingSe
                      [this](const std::string& provider) { return providerToken(provider); }) {
     resolveTrust(options);
     registerTools();
+    loadPlugins(options);
     startMcp(options);
     if (auto loaded = m_resources.reload(); !loaded) {
         warn(loaded.error().message);
     }
     createSession(options);
-    if (m_mcp) {
-        m_mcp->setToolsListener([this](const std::vector<std::string>& added) { activateMcpTools(added); });
-        activateMcpTools(mcpToolNames());
+    if (!activeTools(options).has_value()) {
+        if (m_mcp) {
+            m_mcp->setToolsListener([this](const std::vector<std::string>& added) { activateExtraTools(added); });
+        }
+        activateExtraTools(extraToolNames());
     }
+    m_hooks.emit("session_start", Json{{"type", "session_start"}, {"cwd", m_cwd}});
     for (const auto& error : m_settings.drainErrors()) {
         warn("Settings (" + error.scope + "): " + error.message);
     }
@@ -118,9 +132,28 @@ void CodingSessionHandle::warn(const std::string& message) {
 }
 
 CodingSessionHandle::~CodingSessionHandle() {
-    // The manager's listener and tools use the session and the registry: stop it first.
+    m_hooks.emit("session_shutdown", Json{{"type", "session_shutdown"}});
+    // The listeners and tools below use the session and the registry: stop them first.
     if (m_mcp) {
         m_mcp->close();
+    }
+    m_plugins.shutdown();
+}
+
+/** Loads plugins from <agent-dir>/plugins, the trusted project's .pi/plugins and --plugin. */
+void CodingSessionHandle::loadPlugins(const CodingStartupOptions& options) {
+    if (options.noPlugins) {
+        return;
+    }
+    std::vector<std::string> paths = m_pluginDiscovery.discover(m_agentDir + "/plugins");
+    if (m_settings.projectTrusted()) {
+        for (std::string& path : m_pluginDiscovery.discover(m_cwd + "/.pi/plugins")) {
+            paths.push_back(std::move(path));
+        }
+    }
+    paths.insert(paths.end(), options.pluginPaths.begin(), options.pluginPaths.end());
+    for (const Error& error : m_plugins.load(paths)) {
+        warn("Plugin: " + error.message);
     }
 }
 
@@ -160,17 +193,20 @@ void CodingSessionHandle::startMcp(const CodingStartupOptions& options) {
     }
 }
 
-std::vector<std::string> CodingSessionHandle::mcpToolNames() const {
+/** Tools beyond the built-in set (from plugins and MCP servers). */
+std::vector<std::string> CodingSessionHandle::extraToolNames() const {
+    static constexpr std::array<std::string_view, 7> builtin{"read", "bash", "edit", "write", "grep", "find", "ls"};
     std::vector<std::string> names;
     for (const auto& tool : m_tools.all()) {
-        if (tool->definition().name.starts_with("mcp__")) {
-            names.push_back(tool->definition().name);
+        const std::string& name = tool->definition().name;
+        if (std::find(builtin.begin(), builtin.end(), name) == builtin.end()) {
+            names.push_back(name);
         }
     }
     return names;
 }
 
-void CodingSessionHandle::activateMcpTools(const std::vector<std::string>& names) {
+void CodingSessionHandle::activateExtraTools(const std::vector<std::string>& names) {
     std::vector<std::string> active = m_session->activeToolNames();
     for (const std::string& name : names) {
         if (std::find(active.begin(), active.end(), name) == active.end()) {
@@ -267,6 +303,7 @@ void CodingSessionHandle::createSession(const CodingStartupOptions& options) {
                               std::nullopt,
                               {},
                               {}};
+    config.hooks = &m_hooks;
     m_session = std::make_unique<AgentSession>(std::move(config));
 }
 

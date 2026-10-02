@@ -24,6 +24,10 @@ export struct CodingStartupOptions {
     std::vector<std::string> promptTemplatePaths;
     /** Explicit answer to "trust this project?"; nullopt resolves it from the trust store. */
     std::optional<bool> trustProject;
+    /** Extra plugin libraries to load (besides the discovered ones). */
+    std::vector<std::string> pluginPaths;
+    /** Do not load plugins. */
+    bool noPlugins = false;
     /** Do not connect the MCP servers of mcp.json. */
     bool noMcp = false;
     /** How long startup waits for MCP servers to connect; slower ones add their tools when ready. */

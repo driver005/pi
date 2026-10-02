@@ -5,9 +5,11 @@ import pi.base.base64_codec;
 import pi.child_process_launcher;
 import pi.base.boring_crypto;
 import pi.base.curl_http_client;
+import pi.base.posix_dynamic_libraries;
 import pi.base.posix_file_lock;
 import pi.base.posix_file_system;
 import pi.base.posix_process_runner;
+import pi.base.stderr_logger;
 import pi.base.system_clock;
 import pi.base.system_environment;
 import pi.base.thread_pool;
@@ -31,6 +33,8 @@ public:
     ThreadSleeper& sleeper();
     CurlHttpClient& http();
     ThreadPool& executor();
+    PosixDynamicLibraries& libraries();
+    StderrLogger& logger();
 
 private:
     SystemClock m_clock;
@@ -45,9 +49,12 @@ private:
     ThreadSleeper m_sleeper;
     CurlHttpClient m_http;
     ThreadPool m_executor;
+    PosixDynamicLibraries m_libraries;
+    StderrLogger m_logger;
 };
 
-PlatformServices::PlatformServices(std::size_t workers) : m_ids(m_clock), m_executor(workers) {}
+PlatformServices::PlatformServices(std::size_t workers)
+    : m_ids(m_clock), m_executor(workers), m_logger(m_clock, LogLevel::Info) {}
 
 SystemClock& PlatformServices::clock() {
     return m_clock;
@@ -95,4 +102,12 @@ CurlHttpClient& PlatformServices::http() {
 
 ThreadPool& PlatformServices::executor() {
     return m_executor;
+}
+
+PosixDynamicLibraries& PlatformServices::libraries() {
+    return m_libraries;
+}
+
+StderrLogger& PlatformServices::logger() {
+    return m_logger;
 }

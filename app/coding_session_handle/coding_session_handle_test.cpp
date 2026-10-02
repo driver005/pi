@@ -138,3 +138,47 @@ TEST_F(CodingSessionHandleTest, BadMcpConfigAndFailingServersAreDiagnostics) {
     EXPECT_NE(diagnostics[1].message.find("MCP server \"broken\""), std::string::npos);
     EXPECT_EQ(handle->session().activeToolNames(), (std::vector<std::string>{"read", "bash", "edit", "write"}));
 }
+
+TEST_F(CodingSessionHandleTest, PluginsFromTheCommandLineContributeTools) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    m_services->models().faux()->enqueue(m_services->models().faux()->toolCallResponse("hello", Json{{"name", "Ada"}}, "c1"));
+    m_services->models().faux()->enqueue(m_services->models().faux()->textResponse("done"));
+    const auto handle = open(options);
+    const auto active = handle->session().activeToolNames();
+    EXPECT_NE(std::find(active.begin(), active.end(), "hello"), active.end());
+    EXPECT_TRUE(handle->diagnostics().empty());
+    ASSERT_TRUE(handle->session().prompt("greet", PromptOptions{}).has_value());
+    handle->session().waitForIdle();
+    bool greeted = false;
+    for (const AgentMessage& message : handle->session().messages()) {
+        if (const auto* result = std::get_if<ToolResultMessage>(&message)) {
+            greeted = std::get<TextContent>(result->content.at(0)).text == "Hello, Ada!";
+        }
+    }
+    EXPECT_TRUE(greeted);
+
+    CodingStartupOptions disabled = options;
+    disabled.noPlugins = true;
+    const auto without = open(disabled)->session().activeToolNames();
+    EXPECT_EQ(std::find(without.begin(), without.end(), "hello"), without.end());
+}
+
+TEST_F(CodingSessionHandleTest, ProjectPluginsLoadOnlyWhenTheProjectIsTrusted) {
+    std::filesystem::create_directories(m_cwd + "/.pi/plugins");
+    std::filesystem::copy_file("plugins/hello_tool/libhello_tool.so", m_cwd + "/.pi/plugins/libhello_tool.so");
+    const auto untrusted = open({})->session().activeToolNames();
+    EXPECT_EQ(std::find(untrusted.begin(), untrusted.end(), "hello"), untrusted.end());
+    CodingStartupOptions trusted;
+    trusted.trustProject = true;
+    const auto active = open(trusted)->session().activeToolNames();
+    EXPECT_NE(std::find(active.begin(), active.end(), "hello"), active.end());
+}
+
+TEST_F(CodingSessionHandleTest, BrokenPluginsAreDiagnostics) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"/definitely/not/a/plugin.so"};
+    const auto diagnostics = open(options)->diagnostics();
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_NE(diagnostics[0].message.find("Plugin: /definitely/not/a/plugin.so"), std::string::npos);
+}

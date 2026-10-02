@@ -30,6 +30,8 @@ TEST_F(ProjectTrustProbeTest, ConfigResourcesRequireTrust) {
     }
     m_files.createDirectories("/work/q/.pi/extensions");
     EXPECT_TRUE(m_probe.requiresTrust("/work/q"));
+    m_files.createDirectories("/work/r/.pi/plugins");
+    EXPECT_TRUE(m_probe.requiresTrust("/work/r"));
 }
 
 TEST_F(ProjectTrustProbeTest, AgentsSkillsInAncestorRequireTrustButUserOnesDoNot) {

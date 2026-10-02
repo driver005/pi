@@ -78,3 +78,11 @@ TEST_F(CommandLineParserTest, McpOptions) {
     EXPECT_FALSE(parse({"rpc"})->options.startup.noMcp);
     EXPECT_EQ(parse({"rpc"})->options.startup.mcpStartupWaitMs, 5000);
 }
+
+TEST_F(CommandLineParserTest, PluginOptions) {
+    const auto line = parse({"rpc", "--plugin", "~/a.so", "--plugin", "/b.so", "--no-plugins"});
+    ASSERT_TRUE(line.has_value());
+    EXPECT_EQ(line->options.startup.pluginPaths, (std::vector<std::string>{"/home/me/a.so", "/b.so"}));
+    EXPECT_TRUE(line->options.startup.noPlugins);
+    EXPECT_FALSE(parse({"rpc"})->options.startup.noPlugins);
+}

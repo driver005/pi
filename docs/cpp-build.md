@@ -20,7 +20,7 @@ pi rpc [--cwd DIR] [--agent-dir DIR] [--model provider/id[:level]] [--thinking L
        [--tools a,b | --no-tools] [--system-prompt TEXT|FILE] [--append-system-prompt TEXT|FILE]
        [--no-context-files] [--no-skills] [--no-prompt-templates]
        [--skill PATH] [--prompt-template PATH] [--trust | --no-trust] [--faux]
-       [--no-mcp] [--mcp-wait MS]
+       [--plugin PATH] [--no-plugins] [--no-mcp] [--mcp-wait MS]
 ```
 
 The agent directory is `$PI_CODING_AGENT_DIR` or `~/.pi/agent`. It holds `auth.json`, `models.json`, `settings.json`, `trust.json` and `sessions/`, in the same formats as the TypeScript implementation.
@@ -40,6 +40,10 @@ Servers connect in parallel at session start. Startup waits at most `--mcp-wait`
 
 Differences from the TypeScript implementation: codemode and `tool_search` are not ported, so every exposure except `hidden` offers tools directly; MCP resources, OAuth sign-in and server log files are not ported (use an `Authorization` header or `auth.provider`).
 
+## Plugins
+
+Shared libraries loaded through a C ABI replace TypeScript extensions: they add tools and subscribe to hooks (`tool_call`, `tool_result`, `context`, agent events). See [cpp-plugins.md](cpp-plugins.md).
+
 ## Wiring
 
 `app/` is the composition root and the only place that constructs concrete classes:
@@ -48,9 +52,10 @@ Differences from the TypeScript implementation: codemode and `tool_search` are n
 - `ModelServices`: credential and models.json stores, providers, `ModelRuntime`.
 - `CodingServices`: the above plus the shared agent loop, session store and trust resolver.
 - `CodingSessionHandle`: per-session settings (project settings only when trusted), resources, tools and the `AgentSession`.
+- `PluginHost` (in `src/plugin`) and the `HookBus` of each session: plugin tools and hooks.
 - `McpServerManager` and `McpConnector`: connect the `mcp.json` servers, register their tools and build their transports.
 - `CodingRuntimeFactory` and `CodingApplication`: session replacement (new, switch, fork) and the RPC run mode.
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugins; durable harness (needs sqlite3); Chord/Delta and the CBOR server; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; durable harness (needs sqlite3); Chord/Delta and the CBOR server; HTML export; the package manager.
