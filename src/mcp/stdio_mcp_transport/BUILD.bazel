@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "stdio_mcp_transport",
+    deps = [
+        "//interfaces/mcp/i_mcp_transport",
+        "//interfaces/platform/i_child_process_launcher",
+        "//interfaces/support/mcp_message_codec",
+        "//interfaces/types/mcp_stdio_options",
+    ],
+    test_deps = [
+        "//app/child_process_launcher",
+        "//src/mcp/mcp_client",
+    ],
+)
