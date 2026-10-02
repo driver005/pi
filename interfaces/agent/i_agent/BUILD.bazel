@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_agent",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/tool/i_tool",
+        "//interfaces/types/agent_event",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/agent_state",
+        "//interfaces/types/image_content",
+        "//interfaces/types/model",
+        "//interfaces/types/queue_mode",
+        "//interfaces/types/result",
+        "//interfaces/types/thinking_level",
+    ],
+)

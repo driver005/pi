@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "pending_message_queue",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/queue_mode",
+    ],
+)
