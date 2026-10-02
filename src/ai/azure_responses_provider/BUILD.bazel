@@ -1,0 +1,29 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "azure_responses_provider",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_executor",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/header_merger",
+        "//interfaces/support/json_writer",
+        "//interfaces/support/provider_error_formatter",
+        "//interfaces/support/responses_request_builder",
+        "//interfaces/support/responses_stream_reader",
+        "//interfaces/support/retrying_http_sender",
+        "//interfaces/support/sse_request_runner",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+    ],
+)

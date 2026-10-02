@@ -28,9 +28,13 @@ export import pi.types.transcript_context;
  */
 export class ResponsesRequestBuilder {
 public:
-    /** The full request body of a streaming call (api.openai.com style). */
+    /**
+     * The full request body of a streaming call (api.openai.com style). toolCallProviders are the
+     * providers whose "callId|itemId" tool call ids are kept in pair form.
+     */
     Json build(const Model& model, const TranscriptContext& context, const StreamOptions& options,
-               std::int64_t nowMs) const;
+               std::int64_t nowMs,
+               const std::set<std::string>& toolCallProviders = {"openai", "openai-codex", "opencode"}) const;
 
     /**
      * The `input` items. allowedToolCallProviders are the providers whose "callId|itemId" tool
@@ -411,13 +415,14 @@ void ResponsesRequestBuilder::applyReasoning(Json& params, const Model& model, c
 }
 
 Json ResponsesRequestBuilder::build(const Model& model, const TranscriptContext& rawContext,
-                                    const StreamOptions& options, std::int64_t nowMs) const {
+                                    const StreamOptions& options, std::int64_t nowMs,
+                                    const std::set<std::string>& toolCallProviders) const {
     const ResponsesCompat compat = m_compat.resolve(model);
     const TranscriptContext context = m_normalizer.resolveTranscript(rawContext, compat.supportsMidConvoSystemMessages);
     const bool omitUnsupported = isChatGptSignIn(model, options);
     Json params = Json::object();
     params["model"] = model.id;
-    params["input"] = convertMessages(model, context, compat, {"openai", "openai-codex", "opencode"}, true, nowMs);
+    params["input"] = convertMessages(model, context, compat, toolCallProviders, true, nowMs);
     params["stream"] = true;
     params["store"] = false;
     applyCache(params, compat, options, omitUnsupported);
