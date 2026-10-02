@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "user_content_block",
+    deps = ["//interfaces/types/text_content", "//interfaces/types/image_content", ],
+)

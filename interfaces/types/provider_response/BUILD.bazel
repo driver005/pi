@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "provider_response",
+    deps = ["//interfaces/types/http_headers", ],
+)

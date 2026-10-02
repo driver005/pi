@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "message_codec",
+    deps = [
+        "//interfaces/support/json_reader",
+        "//interfaces/types/assistant_content_block",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/deferred_handle",
+        "//interfaces/types/json",
+        "//interfaces/types/message",
+        "//interfaces/types/nested_tool_calls",
+        "//interfaces/types/result",
+        "//interfaces/types/stop_reason",
+        "//interfaces/types/system_message",
+        "//interfaces/types/thinking_level",
+        "//interfaces/types/tool",
+        "//interfaces/types/tool_result_message",
+        "//interfaces/types/usage",
+        "//interfaces/types/user_content_block",
+        "//interfaces/types/user_message",
+    ],
+)

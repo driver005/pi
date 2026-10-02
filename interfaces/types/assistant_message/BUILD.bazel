@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "assistant_message",
+    deps = ["//interfaces/types/assistant_content_block", "//interfaces/types/usage", "//interfaces/types/stop_reason", "//interfaces/types/thinking_level", "//interfaces/types/deferred_handle", "//interfaces/types/json", ],
+)

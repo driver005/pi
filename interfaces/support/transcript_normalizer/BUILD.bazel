@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "transcript_normalizer",
+    deps = [
+        "//interfaces/types/context",
+        "//interfaces/types/message",
+        "//interfaces/types/system_message",
+        "//interfaces/types/tool",
+        "//interfaces/types/tool_state_changes",
+        "//interfaces/types/transcript_context",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "nested_tool_call_record",
+    deps = ["//interfaces/types/json", ],
+)

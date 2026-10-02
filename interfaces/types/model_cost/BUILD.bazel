@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "model_cost",
+    deps = ["//interfaces/types/model_cost_tier", ],
+)

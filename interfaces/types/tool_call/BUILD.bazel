@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "tool_call",
+    deps = ["//interfaces/types/json", ],
+)
