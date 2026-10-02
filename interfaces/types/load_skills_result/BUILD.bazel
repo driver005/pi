@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "load_skills_result",
+    deps = [
+        "//interfaces/types/resource_diagnostic",
+        "//interfaces/types/skill",
+    ],
+)

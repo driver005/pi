@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "system_prompt_builder",
+    deps = [
+        "//interfaces/support/skill_prompt_formatter",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/build_system_prompt_options",
+        "//interfaces/types/result",
+        "//interfaces/types/system_message",
+        "//interfaces/types/system_prompt_state",
+    ],
+)

@@ -12,6 +12,12 @@ public:
     /** True when `relativePath` ('/' separated, no leading slash) is ignored. */
     bool ignores(std::string_view relativePath, bool isDirectory) const;
 
+    /**
+     * Verdict of the rules for exactly this path, without looking at parent directories:
+     * true ignored, false re-included by a `!` rule, nullopt no rule matched.
+     */
+    std::optional<bool> decide(std::string_view relativePath, bool isDirectory) const;
+
 private:
     std::string toGlob(const std::string& body, bool anchored) const;
     bool lastRuleIgnores(std::string_view path, bool isDirectory) const;
@@ -82,4 +88,17 @@ bool GitignoreMatcher::ignores(std::string_view relativePath, bool isDirectory) 
         slash = relativePath.find('/', slash + 1);
     }
     return lastRuleIgnores(relativePath, isDirectory);
+}
+
+std::optional<bool> GitignoreMatcher::decide(std::string_view relativePath, bool isDirectory) const {
+    std::optional<bool> verdict;
+    for (std::size_t i = 0; i < m_globs.size(); ++i) {
+        if (m_directoryOnly[i] && !isDirectory) {
+            continue;
+        }
+        if (m_glob.matches(m_globs[i], relativePath)) {
+            verdict = !m_negated[i];
+        }
+    }
+    return verdict;
 }

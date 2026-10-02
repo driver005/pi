@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "skill_prompt_formatter",
+    deps = ["//interfaces/types/skill"],
+)

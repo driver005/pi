@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "prompt_template_expander",
+    deps = ["//interfaces/types/prompt_template"],
+)

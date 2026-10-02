@@ -42,3 +42,14 @@ TEST(GitignoreMatcherTest, ParentExclusionCannotBeUndone) {
     GitignoreMatcher matcher("out/\n!out/keep.txt\n");
     EXPECT_TRUE(matcher.ignores("out/keep.txt", false));
 }
+
+TEST(GitignoreMatcherTest, DecideReportsTriState) {
+    GitignoreMatcher matcher("*.log\n!keep.log\nbuild/\n");
+    EXPECT_EQ(matcher.decide("a.log", false), true);
+    EXPECT_EQ(matcher.decide("keep.log", false), false);
+    EXPECT_FALSE(matcher.decide("a.txt", false).has_value());
+    EXPECT_EQ(matcher.decide("build", true), true);
+    EXPECT_FALSE(matcher.decide("build", false).has_value());
+    // No parent cascade here: only ignores() walks the directories.
+    EXPECT_FALSE(matcher.decide("build/x.txt", false).has_value());
+}
