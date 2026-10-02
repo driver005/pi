@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_project_trust_store",
+    deps = [
+        "//interfaces/types/project_trust_entry",
+        "//interfaces/types/project_trust_update",
+        "//interfaces/types/result",
+    ],
+)

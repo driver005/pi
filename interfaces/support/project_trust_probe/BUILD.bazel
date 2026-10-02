@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "project_trust_probe",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/path_resolver",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)
