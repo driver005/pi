@@ -1,0 +1,1 @@
+# Composition root. The only package allowed to depend on //src modules.

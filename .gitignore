@@ -43,3 +43,10 @@ plans/
 .pi/hf-sessions-backup/
 collect.sh
 packages/agent/docs/extensions/pi-server-artifact/index.md
+
+# C++ / Bazel
+/bazel-*
+user.bazelrc
+compile_commands.json
+__pycache__/
+MODULE.bazel.lock

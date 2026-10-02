@@ -1,0 +1,12 @@
+# C++ build of the pi backbone. The TypeScript workspace is not built by Bazel.
+build --enable_platform_specific_config
+build --cxxopt=-std=c++23 --host_cxxopt=-std=c++23
+build --incompatible_strict_action_env
+build --strip=never
+test --test_output=errors
+
+build:asan --copt=-fsanitize=address,undefined --linkopt=-fsanitize=address,undefined --copt=-fno-omit-frame-pointer
+build:tsan --copt=-fsanitize=thread --linkopt=-fsanitize=thread
+
+# Machine-local settings (registry mirrors, proxies) go in user.bazelrc.
+try-import %workspace%/user.bazelrc

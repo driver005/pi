@@ -1,0 +1,19 @@
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+
+py_binary(
+    name = "check_style",
+    srcs = ["check_style.py"],
+    main = "check_style.py",
+)
+
+py_test(
+    name = "check_style_test",
+    srcs = [
+        "check_style.py",
+        "check_style_test.py",
+    ],
+    imports = ["."],
+    main = "check_style_test.py",
+)
+
+exports_files(["module.bzl"])
