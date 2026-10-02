@@ -58,6 +58,13 @@ public:
     std::optional<ToolExecutionMode> executionMode() const override {
         return std::nullopt;
     }
+    std::string promptSnippet() const override {
+        return "Execute bash commands (ls, grep, find, etc.)";
+    }
+    std::vector<std::string> promptGuidelines() const override {
+        return {
+            "You can inspect PI_* environment variables for current model and session details."};
+    }
     Json prepareArguments(const Json& arguments) const override {
         return arguments;
     }

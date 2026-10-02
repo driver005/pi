@@ -38,6 +38,13 @@ public:
     std::optional<ToolExecutionMode> executionMode() const override {
         return std::nullopt;
     }
+    std::string promptSnippet() const override {
+        return "Create or overwrite files";
+    }
+    std::vector<std::string> promptGuidelines() const override {
+        return {
+            "Use write only for new files or complete rewrites."};
+    }
     Json prepareArguments(const Json& arguments) const override {
         return arguments;
     }

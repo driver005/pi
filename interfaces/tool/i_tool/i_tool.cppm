@@ -26,6 +26,10 @@ public:
     /** Human-readable label for UIs. */
     virtual std::string label() const = 0;
 
+    /** One-line description for the system prompt's tool list; empty leaves the tool unlisted. */
+    virtual std::string promptSnippet() const = 0;
+    /** Usage rules added to the system prompt while the tool is active. */
+    virtual std::vector<std::string> promptGuidelines() const = 0;
     /** Per-tool override of the execution mode; nullopt uses the agent default. */
     virtual std::optional<ToolExecutionMode> executionMode() const = 0;
 

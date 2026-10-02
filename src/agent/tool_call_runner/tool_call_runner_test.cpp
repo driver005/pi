@@ -22,6 +22,12 @@ public:
     std::optional<ToolExecutionMode> executionMode() const override {
         return std::nullopt;
     }
+    std::string promptSnippet() const override {
+        return "";
+    }
+    std::vector<std::string> promptGuidelines() const override {
+        return {};
+    }
     Json prepareArguments(const Json& arguments) const override {
         return arguments;
     }
