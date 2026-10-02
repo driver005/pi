@@ -1,0 +1,103 @@
+#include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+#include <cstdlib>
+
+import std;
+import pi.coding_session_handle;
+import pi.ai.faux_provider;
+
+class CodingSessionHandleTest : public testing::Test {
+protected:
+    CodingSessionHandleTest() {
+        m_dir = std::string(std::getenv("TEST_TMPDIR")) + "/coding_session_handle_" +
+                testing::UnitTest::GetInstance()->current_test_info()->name();
+        std::filesystem::remove_all(m_dir);
+        m_cwd = m_dir + "/project";
+        std::filesystem::create_directories(m_cwd);
+        m_services = std::make_unique<CodingServices>(m_dir + "/agent", m_dir + "/agent/catalog", true);
+    }
+
+    std::unique_ptr<CodingSessionHandle> open(const CodingStartupOptions& options) {
+        SessionRuntimeRequest request;
+        request.cwd = m_cwd;
+        request.agentDir = m_dir + "/agent";
+        auto manager = m_services->sessions().inMemory(m_cwd);
+        request.sessionManager = std::move(*manager);
+        return std::make_unique<CodingSessionHandle>(std::move(request), *m_services, options);
+    }
+
+    void writeProjectSettings(const std::string& json) {
+        std::filesystem::create_directories(m_cwd + "/.pi");
+        std::ofstream(m_cwd + "/.pi/settings.json") << json;
+    }
+
+    std::string m_dir;
+    std::string m_cwd;
+    std::unique_ptr<CodingServices> m_services;
+};
+
+TEST_F(CodingSessionHandleTest, StartsWithTheFauxModelAndDefaultTools) {
+    const auto handle = open({});
+    EXPECT_EQ(handle->session().model().id, "faux-1");
+    EXPECT_EQ(handle->session().activeToolNames(), (std::vector<std::string>{"read", "bash", "edit", "write"}));
+    EXPECT_EQ(handle->session().allTools().size(), 7U);
+    EXPECT_TRUE(handle->diagnostics().empty());
+}
+
+TEST_F(CodingSessionHandleTest, PromptRunsThroughTheFauxProvider) {
+    m_services->models().faux()->enqueue(m_services->models().faux()->textResponse("hello there"));
+    const auto handle = open({});
+    ASSERT_TRUE(handle->session().prompt("hi", PromptOptions{}).has_value());
+    handle->session().waitForIdle();
+    EXPECT_EQ(handle->session().lastAssistantText(), "hello there");
+}
+
+TEST_F(CodingSessionHandleTest, BashToolRunsInTheProjectDirectory) {
+    const auto handle = open({});
+    const auto result = handle->session().executeBash("pwd", {}, false, std::nullopt);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_NE(result->output.find("project"), std::string::npos);
+}
+
+TEST_F(CodingSessionHandleTest, StartupOptionsSelectTools) {
+    CodingStartupOptions options;
+    options.tools = std::vector<std::string>{"ls", "grep"};
+    EXPECT_EQ(open(options)->session().activeToolNames(), (std::vector<std::string>{"grep", "ls"}));
+    CodingStartupOptions none;
+    none.noTools = true;
+    EXPECT_TRUE(open(none)->session().activeToolNames().empty());
+}
+
+TEST_F(CodingSessionHandleTest, UntrustedProjectSettingsAreIgnored) {
+    writeProjectSettings(R"({"defaultTools":["ls"]})");
+    EXPECT_EQ(open({})->session().activeToolNames(), (std::vector<std::string>{"read", "bash", "edit", "write"}));
+    CodingStartupOptions trusted;
+    trusted.trustProject = true;
+    EXPECT_EQ(open(trusted)->session().activeToolNames(), (std::vector<std::string>{"ls"}));
+}
+
+TEST_F(CodingSessionHandleTest, UnknownRequestedModelIsReportedAsDiagnostic) {
+    CodingStartupOptions options;
+    options.model = "nope/none";
+    const auto handle = open(options);
+    ASSERT_EQ(handle->diagnostics().size(), 1U);
+    EXPECT_EQ(handle->diagnostics()[0].type, "warning");
+    EXPECT_EQ(handle->session().model().id, "faux-1");
+}
+
+TEST_F(CodingSessionHandleTest, MalformedSettingsBecomeDiagnostics) {
+    std::filesystem::create_directories(m_dir + "/agent");
+    std::ofstream(m_dir + "/agent/settings.json") << "{ not json";
+    const auto handle = open({});
+    ASSERT_FALSE(handle->diagnostics().empty());
+    EXPECT_NE(handle->diagnostics()[0].message.find("Settings"), std::string::npos);
+}
+
+TEST_F(CodingSessionHandleTest, ReleasingTheSessionManagerKeepsTheTree) {
+    auto handle = open({});
+    const std::string id = handle->sessionManager().sessionId();
+    handle->session().dispose();
+    const auto manager = handle->releaseSessionManager();
+    ASSERT_NE(manager, nullptr);
+    EXPECT_EQ(manager->sessionId(), id);
+}

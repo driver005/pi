@@ -1,0 +1,33 @@
+import std;
+import pi.base.stdio_byte_input;
+import pi.base.stdio_byte_output;
+import pi.base.system_environment;
+import pi.coding_application;
+import pi.support.command_line_parser;
+
+int main(int argc, char** argv) {
+    SystemEnvironment environment;
+    const CommandLineParser parser(environment);
+    std::error_code ignored;
+    const std::vector<std::string> args(argv + 1, argv + argc);
+    const auto line = parser.parse(args, std::filesystem::current_path(ignored).string());
+    if (!line) {
+        std::cerr << "pi: " << line.error().message << "\n\n" << parser.usage();
+        return 2;
+    }
+    if (line->help) {
+        std::cout << parser.usage();
+        return 0;
+    }
+    CodingApplication application(line->options);
+    if (const auto opened = application.open(); !opened) {
+        std::cerr << "pi: " << opened.error().message << "\n";
+        return 1;
+    }
+    for (const auto& diagnostic : application.diagnostics()) {
+        std::cerr << "pi: " << diagnostic.type << ": " << diagnostic.message << "\n";
+    }
+    StdioByteInput input;
+    StdioByteOutput output;
+    return application.runRpc(input, output);
+}

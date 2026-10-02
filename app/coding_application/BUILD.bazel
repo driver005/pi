@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "coding_application",
+    deps = [
+        "//app/coding_runtime_factory",
+        "//app/coding_services",
+        "//interfaces/platform/i_byte_input",
+        "//interfaces/platform/i_byte_output",
+        "//interfaces/session/i_agent_session_runtime",
+        "//interfaces/types/coding_application_options",
+        "//interfaces/types/result",
+        "//src/rpc/rpc_server",
+        "//src/session/agent_session_runtime",
+    ],
+    test_deps = [
+        "//interfaces/types/json",
+        "//src/ai/faux_provider",
+        "//src/testing/capturing_byte_output",
+        "//src/testing/scripted_byte_input",
+    ],
+)

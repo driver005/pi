@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_binary")
+
+pi_binary(
+    name = "pi",
+    deps = [
+        "//app/coding_application",
+        "//interfaces/support/command_line_parser",
+        "//src/base/stdio_byte_input",
+        "//src/base/stdio_byte_output",
+        "//src/base/system_environment",
+    ],
+)

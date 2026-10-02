@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "model_selector",
+    deps = [
+        "//interfaces/support/settings_view",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/types/model_choice",
+        "//interfaces/types/model_selection_input",
+    ],
+)

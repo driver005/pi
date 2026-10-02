@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "coding_runtime_factory",
+    deps = [
+        "//app/coding_services",
+        "//app/coding_session_handle",
+        "//interfaces/session/i_session_runtime_factory",
+        "//interfaces/types/coding_startup_options",
+    ],
+)
