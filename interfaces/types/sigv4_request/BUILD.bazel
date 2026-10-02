@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "sigv4_request",
+    deps = [
+        "//interfaces/types/aws_credentials",
+        "//interfaces/types/http_headers",
+    ],
+)

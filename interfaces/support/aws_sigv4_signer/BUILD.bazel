@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "aws_sigv4_signer",
+    deps = [
+        "//interfaces/platform/i_crypto",
+        "//interfaces/types/http_headers",
+        "//interfaces/types/sigv4_request",
+    ],
+    test_deps = ["//src/base/boring_crypto"],
+)

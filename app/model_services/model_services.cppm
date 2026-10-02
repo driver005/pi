@@ -8,6 +8,7 @@ import std;
 export import pi.provider.i_model_runtime;
 import pi.ai.anthropic_messages_provider;
 import pi.ai.azure_responses_provider;
+import pi.ai.bedrock_provider;
 import pi.ai.chat_completions_provider;
 import pi.ai.faux_provider;
 import pi.ai.google_adc_auth;
@@ -80,6 +81,9 @@ ModelServices::ModelServices(PlatformServices& platform, const std::string& agen
         platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
     m_providers.registerProvider(std::make_shared<CodexProvider>(
         platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.base64()));
+    m_providers.registerProvider(std::make_shared<BedrockProvider>(
+        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(),
+        platform.files(), platform.crypto(), platform.base64()));
     if (faux) {
         const auto replies = platform.environment().get("PI_FAUX_REPLIES");
         registerFaux(replies.value_or("[]"));

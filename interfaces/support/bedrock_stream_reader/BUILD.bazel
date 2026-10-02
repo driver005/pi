@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bedrock_stream_reader",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/types/aws_event_stream_message",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/base/base64_codec"],
+)

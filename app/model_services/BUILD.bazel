@@ -8,6 +8,7 @@ pi_module(
         "//interfaces/types/json",
         "//src/ai/anthropic_messages_provider",
         "//src/ai/azure_responses_provider",
+        "//src/ai/bedrock_provider",
         "//src/ai/chat_completions_provider",
         "//src/ai/faux_provider",
         "//src/ai/codex_provider",
