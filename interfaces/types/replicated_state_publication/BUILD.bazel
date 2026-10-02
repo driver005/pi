@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "replicated_state_publication",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/service_context",
+    ],
+)

@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "replicated_state",
+    deps = [
+        "//interfaces/chord/i_replicated_state",
+        "//interfaces/support/delta_differ",
+        "//interfaces/types/replicated_state_publication",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//interfaces/support/delta_applier"],
+)

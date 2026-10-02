@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "service_context",
+    deps = ["//interfaces/support/abort_signal"],
+)
