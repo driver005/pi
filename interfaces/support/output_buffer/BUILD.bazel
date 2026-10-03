@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "output_buffer",
+    deps = [
+        "//interfaces/support/output_bounder",
+        "//interfaces/types/bounded_output",
+        "//interfaces/types/output_chunk",
+        "//interfaces/types/output_limits",
+    ],
+)

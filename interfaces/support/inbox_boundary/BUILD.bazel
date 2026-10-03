@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "inbox_boundary",
+    deps = [
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/transaction",
+        "//interfaces/types/boundary",
+        "//interfaces/types/boundary_result",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_resolver",
+    deps = [
+        "//interfaces/durable/i_registry_snapshot",
+        "//interfaces/support/registry",
+        "//interfaces/support/resolved_agent",
+        "//interfaces/types/error",
+        "//interfaces/types/json",
+        "//interfaces/types/resolved_settings",
+    ],
+)

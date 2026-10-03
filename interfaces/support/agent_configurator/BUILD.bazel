@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_configurator",
+    deps = [
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/transaction",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)
