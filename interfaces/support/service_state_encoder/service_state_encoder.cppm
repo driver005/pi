@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.service_state_encoder;
 
 import std;

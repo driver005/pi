@@ -23,6 +23,8 @@ public:
     /** Like createDirectories; created directories are private to the owner (mode 0700). */
     virtual Result<void> createPrivateDirectories(const std::string& path) = 0;
     virtual Result<void> removeFile(const std::string& path) = 0;
+    /** Removes a file or a directory with everything in it; a missing path is not an error. */
+    virtual Result<void> removeTree(const std::string& path) = 0;
     virtual Result<void> renameFile(const std::string& from, const std::string& to) = 0;
     virtual bool exists(const std::string& path) = 0;
     virtual bool isReadable(const std::string& path) = 0;

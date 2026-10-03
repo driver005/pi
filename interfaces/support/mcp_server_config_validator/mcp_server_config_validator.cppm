@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.mcp_server_config_validator;
 
 import std;

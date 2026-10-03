@@ -114,6 +114,15 @@ public:
         return {};
     }
 
+    Result<void> removeTree(const std::string& path) override {
+        std::error_code error;
+        std::filesystem::remove_all(path, error);
+        if (error) {
+            return std::unexpected(Error{"EIO", "remove " + path + ": " + error.message()});
+        }
+        return {};
+    }
+
     Result<void> renameFile(const std::string& from, const std::string& to) override {
         if (rename(from.c_str(), to.c_str()) != 0) {
             return std::unexpected(failure(errno, "rename", from));

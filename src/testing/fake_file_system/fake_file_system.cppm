@@ -16,6 +16,7 @@ public:
     Result<void> createDirectories(const std::string& path) override;
     Result<void> createPrivateDirectories(const std::string& path) override;
     Result<void> removeFile(const std::string& path) override;
+    Result<void> removeTree(const std::string& path) override;
     Result<void> renameFile(const std::string& from, const std::string& to) override;
     bool exists(const std::string& path) override;
     bool isReadable(const std::string& path) override;
@@ -127,6 +128,22 @@ Result<void> FakeFileSystem::removeFile(const std::string& path) {
         return std::unexpected(notFound(path));
     }
     m_mtimes.erase(path);
+    return {};
+}
+
+Result<void> FakeFileSystem::removeTree(const std::string& path) {
+    const std::lock_guard<std::mutex> lock(m_mutex);
+    const std::string prefix = path + "/";
+    for (auto it = m_files.begin(); it != m_files.end();) {
+        const bool inside = it->first == path || it->first.starts_with(prefix);
+        if (inside) {
+            m_mtimes.erase(it->first);
+        }
+        it = inside ? m_files.erase(it) : std::next(it);
+    }
+    for (auto it = m_directories.begin(); it != m_directories.end();) {
+        it = (*it == path || it->starts_with(prefix)) ? m_directories.erase(it) : std::next(it);
+    }
     return {};
 }
 

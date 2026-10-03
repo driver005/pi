@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.conversation_serializer;
 
 import std;
@@ -94,7 +90,9 @@ std::string ConversationSerializer::truncate(const std::string& text) const {
 std::string ConversationSerializer::toolCallText(const ToolCall& call) const {
     std::vector<std::string> args;
     if (call.arguments.is_object()) {
-        for (const auto& [key, value] : call.arguments.items()) {
+        for (const auto& entry : call.arguments.items()) {
+            const std::string& key = entry.key();
+            const Json& value = entry.value();
             args.push_back(key + "=" + m_writer.compact(value));
         }
     }

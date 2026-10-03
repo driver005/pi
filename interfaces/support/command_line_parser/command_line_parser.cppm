@@ -22,6 +22,7 @@ private:
     Result<void> applySwitch(const std::string& flag, CommandLine& line) const;
     Result<void> applyValueFlag(const std::string& flag, const std::string& value, CommandLine& line) const;
     Result<void> applyMcpWait(const std::string& value, CodingStartupOptions& startup) const;
+    void resolveServe(CommandLine& line) const;
     std::string expandHome(const std::string& path) const;
     std::string defaultAgentDir() const;
     std::vector<std::string> splitList(const std::string& text) const;
@@ -32,15 +33,16 @@ private:
                                              "--model",         "--thinking",            "--session",
                                              "--session-dir",   "--tools",               "--system-prompt",
                                              "--append-system-prompt", "--skill",        "--prompt-template",
-                                             "--mcp-wait", "--plugin"};
+                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id"};
 };
 
 CommandLineParser::CommandLineParser(const IEnvironment& environment) : m_environment(environment) {}
 
 std::string CommandLineParser::usage() const {
-    return "Usage: pi rpc [options]\n"
+    return "Usage: pi rpc|serve [options]\n"
            "\n"
-           "Serves JSONL commands on stdin and writes responses and events to stdout.\n"
+           "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
+           "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
            "\n"
            "Options:\n"
            "  --cwd <dir>                   Working directory (default: current directory)\n"
@@ -67,6 +69,9 @@ std::string CommandLineParser::usage() const {
            "  --mcp-wait <ms>               How long startup waits for MCP servers (default 5000)\n"
            "  --trust / --no-trust          Answer the project trust question\n"
            "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
+           "  --server-dir <dir>            serve: profile and socket directory (default: $PI_SERVER_DIR or ~/.pi/server)\n"
+           "  --server-id <uuid>            serve: logical server id (default: $PI_SERVER_ID or the directory's default)\n"
+           "                                serve keeps its sessions in --session-dir (default: <agent-dir>/server-sessions)\n"
            "  --help, -h                    Show this help\n";
 }
 
@@ -135,8 +140,11 @@ Result<CommandLine> CommandLineParser::parse(const std::vector<std::string>& arg
     }
     if (line.help) {
         line.command.clear();
-    } else if (line.command != "rpc") {
+    } else if (line.command != "rpc" && line.command != "serve") {
         return std::unexpected(Error{"usage", "Unknown command \"" + line.command + "\""});
+    }
+    if (line.command == "serve") {
+        resolveServe(line);
     }
     return line;
 }
@@ -171,6 +179,24 @@ Result<void> CommandLineParser::applySwitch(const std::string& flag, CommandLine
         return std::unexpected(Error{"usage", "Unknown option " + flag});
     }
     return {};
+}
+
+void CommandLineParser::resolveServe(CommandLine& line) const {
+    if (line.serverDir.empty()) {
+        const auto configured = m_environment.get("PI_SERVER_DIR");
+        line.serverDir = configured && !configured->empty()
+                             ? expandHome(*configured)
+                             : m_environment.get("HOME").value_or("") + "/.pi/server";
+    }
+    if (!line.serverId) {
+        const auto configured = m_environment.get("PI_SERVER_ID");
+        if (configured && !configured->empty()) {
+            line.serverId = *configured;
+        }
+    }
+    if (!line.options.sessionDir) {
+        line.options.sessionDir = line.options.agentDir + "/server-sessions";
+    }
 }
 
 Result<void> CommandLineParser::applyMcpWait(const std::string& value,
@@ -211,6 +237,10 @@ Result<void> CommandLineParser::applyValueFlag(const std::string& flag, const st
             options.startup.appendSystemPrompt = std::vector<std::string>{};
         }
         options.startup.appendSystemPrompt->push_back(value);
+    } else if (flag == "--server-dir") {
+        line.serverDir = expandHome(value);
+    } else if (flag == "--server-id") {
+        line.serverId = value;
     } else if (flag == "--plugin") {
         options.startup.pluginPaths.push_back(expandHome(value));
     } else if (flag == "--mcp-wait") {

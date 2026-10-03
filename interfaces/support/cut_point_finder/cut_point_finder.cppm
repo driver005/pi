@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.cut_point_finder;

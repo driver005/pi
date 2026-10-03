@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.session.i_session_manager;

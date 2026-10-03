@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.model_codec;
@@ -126,7 +124,9 @@ std::vector<std::string> ModelCodec::inputFromJson(const Json& json) const {
 std::map<std::string, std::string> ModelCodec::headersFromJson(const Json& json) const {
     std::map<std::string, std::string> headers;
     if (json.is_object()) {
-        for (const auto& [name, value] : json.items()) {
+        for (const auto& entry : json.items()) {
+            const std::string& name = entry.key();
+            const Json& value = entry.value();
             if (value.is_string()) {
                 headers[name] = value.get<std::string>();
             }

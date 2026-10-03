@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.provider_auth_resolver;
@@ -116,7 +114,9 @@ Result<ModelAuth> ProviderAuthResolver::withConfiguredAuth(ModelAuth auth, const
                                                            const Env& headerEnv) {
     ConfigValueResolver::Headers raw;
     if (config.is_object() && config.contains("headers") && config["headers"].is_object()) {
-        for (const auto& [name, value] : config["headers"].items()) {
+        for (const auto& entry : config["headers"].items()) {
+            const std::string& name = entry.key();
+            const Json& value = entry.value();
             if (value.is_string()) {
                 raw[name] = value.get<std::string>();
             }
@@ -270,7 +270,9 @@ Result<std::optional<AuthResult>> ProviderAuthResolver::resolveOAuth(
     result.source = "OAuth";
     Env headerEnv;
     if (credential.extra.is_object() && credential.extra.contains("env") && credential.extra["env"].is_object()) {
-        for (const auto& [name, value] : credential.extra["env"].items()) {
+        for (const auto& entry : credential.extra["env"].items()) {
+            const std::string& name = entry.key();
+            const Json& value = entry.value();
             if (value.is_string()) {
                 headerEnv[name] = value.get<std::string>();
             }

@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.model_catalog_loader;
@@ -73,8 +71,8 @@ std::vector<Model> ModelCatalogLoader::parseModels(const std::string& providerId
             add(entry);
         }
     } else if (entries.is_object()) {
-        for (const auto& [key, entry] : entries.items()) {
-            add(entry);
+        for (const auto& item : entries.items()) {
+            add(item.value());
         }
     }
     return models;
@@ -89,7 +87,9 @@ Result<ModelCatalogLoader::Catalog> ModelCatalogLoader::loadFlat(const std::stri
     if (!json->is_object()) {
         return std::unexpected(Error{"catalog", "Invalid model catalog: " + path});
     }
-    for (const auto& [providerId, models] : json->items()) {
+    for (const auto& entry : json->items()) {
+        const std::string& providerId = entry.key();
+        const Json& models = entry.value();
         catalog.emplace_back(providerId, parseModels(providerId, models));
     }
     return catalog;
@@ -113,7 +113,8 @@ Result<ModelCatalogLoader::Catalog> ModelCatalogLoader::loadPerProvider(const st
         }
         std::vector<Model> models;
         if (json->is_object()) {
-            for (const auto& [group, entries] : json->items()) {
+            for (const auto& entry : json->items()) {
+                const Json& entries = entry.value();
                 for (auto& model : parseModels(providerId, entries)) {
                     models.push_back(std::move(model));
                 }

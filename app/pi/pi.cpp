@@ -1,8 +1,12 @@
 import std;
+import pi.base.posix_signal_waiter;
 import pi.base.stdio_byte_input;
 import pi.base.stdio_byte_output;
 import pi.base.system_environment;
 import pi.coding_application;
+import pi.coding_runtime_factory;
+import pi.coding_services;
+import pi.serve_application;
 import pi.support.command_line_parser;
 
 int main(int argc, char** argv) {
@@ -17,6 +21,34 @@ int main(int argc, char** argv) {
     }
     if (line->help) {
         std::cout << parser.usage();
+        return 0;
+    }
+    if (line->command == "serve") {
+        PosixSignalWaiter signals;
+        signals.block();
+        const CodingApplicationOptions& options = line->options;
+        CodingServices services(options.agentDir,
+                                options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir,
+                                options.faux);
+        CodingRuntimeFactory runtimes(services, options.startup);
+        PlatformServices& platform = services.platform();
+        ServeDependencies dependencies;
+        dependencies.files = &platform.files();
+        dependencies.clock = &platform.clock();
+        dependencies.ids = &platform.ids();
+        dependencies.crypto = &platform.crypto();
+        dependencies.logger = &platform.logger();
+        dependencies.sessions = &services.sessions();
+        dependencies.runtimes = &runtimes;
+        dependencies.models = &services.models().models();
+        ServeApplication server(*line, dependencies);
+        if (const auto started = server.start(); !started) {
+            std::cerr << "pi: " << started.error().message << "\n";
+            return 1;
+        }
+        std::cerr << "pi: serving " << server.serverId() << " on " << server.socketPath() << "\n";
+        signals.wait();
+        server.stop();
         return 0;
     }
     CodingApplication application(line->options);

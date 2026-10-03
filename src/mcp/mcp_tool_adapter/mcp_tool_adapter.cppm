@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.mcp.mcp_tool_adapter;
 
 import std;

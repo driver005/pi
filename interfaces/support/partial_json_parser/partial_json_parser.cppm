@@ -1,5 +1,4 @@
 module;
-#include <nlohmann/json.hpp>
 
 #include <cstddef>
 #include <cctype>

@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.ai.remote_catalog_client;
@@ -116,8 +114,8 @@ Json RemoteCatalogClient::parseModels(const std::string& providerId, const Json&
             add(entry);
         }
     } else if (body.is_object()) {
-        for (const auto& [key, entry] : body.items()) {
-            add(entry);
+        for (const auto& item : body.items()) {
+            add(item.value());
         }
     }
     return models;

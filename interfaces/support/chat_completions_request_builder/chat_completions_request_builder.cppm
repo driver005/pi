@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.chat_completions_request_builder;
@@ -546,7 +544,9 @@ Json ChatCompletionsRequestBuilder::chatTemplateValues(const Model& model,
     if (!values.is_object()) {
         return out;
     }
-    for (const auto& [key, value] : values.items()) {
+    for (const auto& entry : values.items()) {
+        const std::string& key = entry.key();
+        const Json& value = entry.value();
         if (auto resolved = resolveTemplateValue(model, effort, value, budget)) {
             out[key] = std::move(*resolved);
         }
@@ -784,7 +784,9 @@ Json ChatCompletionsRequestBuilder::build(const Model& model, const TranscriptCo
     applyRouting(params, model);
     for (const Json* extra : {&model.samplingParams, &options.samplingParams}) {
         if (extra->is_object()) {
-            for (const auto& [key, value] : extra->items()) {
+            for (const auto& entry : extra->items()) {
+                const std::string& key = entry.key();
+                const Json& value = entry.value();
                 params[key] = value;
             }
         }

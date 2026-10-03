@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.models_config_loader;
 
 import std;
@@ -52,7 +48,9 @@ Result<Json> ModelsConfigLoader::load(const std::string& path) {
             "models_config",
             "Invalid models.json schema:\n  - providers: expected an object\n\nFile: " + path});
     }
-    for (const auto& [id, provider] : parsed["providers"].items()) {
+    for (const auto& entry : parsed["providers"].items()) {
+        const std::string& id = entry.key();
+        const Json& provider = entry.value();
         if (!provider.is_object()) {
             return std::unexpected(Error{
                 "models_config", "Invalid models.json schema:\n  - providers." + id +

@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.ai.anthropic_messages_provider;
 
 import std;

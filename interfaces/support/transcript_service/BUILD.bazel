@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "transcript_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/session/i_agent_session",
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/replicated_state",
+    ],
+    test_deps = [
+        "//interfaces/support/delta_applier",
+        "//src/session/session_manager",
+        "//src/testing/session_harness",
+        "//src/testing/test_session_handle",
+    ],
+)

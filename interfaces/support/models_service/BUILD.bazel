@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "models_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_agent_session",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/replicated_state",
+    ],
+    test_deps = [
+        "//src/session/session_manager",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/session_harness",
+        "//src/testing/test_session_handle",
+    ],
+)

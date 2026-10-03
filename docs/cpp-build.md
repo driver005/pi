@@ -32,6 +32,40 @@ printf '%s\n' '{"id":"1","type":"prompt","message":"hi"}' |
   PI_FAUX_REPLIES='["hello"]' pi rpc --faux --no-session
 ```
 
+## `pi serve`
+
+Headless protocol server. Clients connect to a unix socket and speak protocol v8 (4-byte length-prefixed strict CBOR, `hello` handshake, request/cancel/response, `service_update` with Delta operations, `attachment`), the same wire protocol as `packages/protocol`.
+
+```
+pi serve [--server-dir DIR] [--server-id UUID] [--session-dir DIR] [--cwd DIR] [--agent-dir DIR]
+         [--model provider/id[:level]] [--faux] [--no-mcp] [--no-plugins] ...
+```
+
+- Socket: `<server-dir>/<server-id>.sock` (mode 0600, directory 0700, same-user peers only). The server directory is `--server-dir`, `$PI_SERVER_DIR` or `~/.pi/server`. A stale socket file is replaced; a live one or a non-socket file is refused.
+- Identity: `--server-id`, `$PI_SERVER_ID`, or the UUIDv4 kept in `<server-dir>/default-server-id`.
+- Sessions: one directory per session under `--session-dir` (default `<agent-dir>/server-sessions`) with `meta.json` (`{createdAt, cwd}`, as in the TS server) and the session's JSONL tree. The TS server keeps `session.sqlite` there instead; the durable harness is not ported, so the two servers should not share a session directory.
+- Stop with SIGINT, SIGTERM or SIGHUP: clients are disconnected, running agents are aborted, the socket is removed.
+
+Services (TS shapes, `packages/coding-agent/src/experimental/services`):
+
+| Scope | Service | Notes |
+|---|---|---|
+| server | `pi.session-directory` | state `{revision, sessions: [{serverId, sessionId, createdAt}]}` |
+| server | `pi.session-management` | `create({id?})`, `remove(id)`, `attach(id)`, `detach()`; id prefixes resolve |
+| session | `pi.agent-controller` | `prompt`, `steer`, `followUp`, `cancelQueued`, `abort`, `compact`, `waitForPrompt`; replies `{accepted, operationId \| entryId, error}` |
+| session | `pi.models` | state `{catalog, configuration, refresh}`, `select`, `selectThinking`, `cycleThinking`, `getThinkingLevels`, `refresh` |
+| session | `pi.transcript` | state `{messages, isStreaming}` (AgentSession messages in session-file JSON) |
+
+`pi.transcript` differs from the TS service, which publishes the durable `ConversationView`; a TS presentation that renders that view does not work against it. `PresentationPlugins`, `SlashCommands`, `PresentationUI` and `SessionPlugins` are not provided. Sessions run in-process (one agent per session, shared by every attached client) rather than in a worker process each.
+
+Requests run on a 64-thread pool and agent runs on a separate 32-thread pool, so calls that wait (`waitForPrompt`, `abort`) cannot starve the runs they wait for.
+
+Offline smoke test:
+
+```
+PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-id 00000000-0000-4000-8000-000000000001
+```
+
 ## MCP servers
 
 Servers are read from `<agent-dir>/mcp.json` and, for trusted projects, `<cwd>/.pi/mcp.json`, in the shared `mcpServers` shape (`command`/`args`/`env`/`cwd` for stdio, `url`/`headers` for streamable HTTP; `enabled`, `exposure`, `toolExposure`, `timeout`, `description`). Project entries replace global ones; a project entry with only `enabled`, `exposure` or `toolExposure` overrides the global server and keeps its credentials. `${VAR}` and `!cmd` values in `env` and `headers` are resolved at connect time; `auth.provider` sends a pi provider's token.
@@ -58,4 +92,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; durable harness (needs sqlite3); Chord/Delta and the CBOR server; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; durable harness (needs sqlite3) and with it the TS-compatible `Transcript` service; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

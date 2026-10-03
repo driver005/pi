@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.agent_message_codec;
@@ -45,7 +43,9 @@ Json AgentMessageCodec::toJson(const AgentMessage& message) const {
         Json out = Json::object();
         out["role"] = custom->role;
         if (custom->data.is_object()) {
-            for (const auto& [key, value] : custom->data.items()) {
+            for (const auto& entry : custom->data.items()) {
+                const std::string& key = entry.key();
+                const Json& value = entry.value();
                 out[key] = value;
             }
         }
@@ -79,7 +79,9 @@ Result<AgentMessage> AgentMessageCodec::fromJson(const Json& json) const {
     }
     CustomMessage custom;
     custom.role = role;
-    for (const auto& [key, value] : json.items()) {
+    for (const auto& entry : json.items()) {
+        const std::string& key = entry.key();
+        const Json& value = entry.value();
         if (key == "role") {
             continue;
         }

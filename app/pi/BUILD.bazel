@@ -4,7 +4,11 @@ pi_binary(
     name = "pi",
     deps = [
         "//app/coding_application",
+        "//app/coding_runtime_factory",
+        "//app/coding_services",
+        "//app/serve_application",
         "//interfaces/support/command_line_parser",
+        "//src/base/posix_signal_waiter",
         "//src/base/stdio_byte_input",
         "//src/base/stdio_byte_output",
         "//src/base/system_environment",

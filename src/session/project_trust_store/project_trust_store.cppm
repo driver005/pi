@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.session.project_trust_store;
 
 import std;
@@ -76,7 +72,9 @@ Result<ProjectTrustStore::Decisions> ProjectTrustStore::load() {
             Error{"invalid_json", "Invalid trust store " + m_path + ": expected an object"});
     }
     Decisions decisions;
-    for (const auto& [key, value] : parsed.items()) {
+    for (const auto& entry : parsed.items()) {
+        const std::string& key = entry.key();
+        const Json& value = entry.value();
         if (value.is_null()) {
             decisions[key] = std::nullopt;
         } else if (value.is_boolean()) {

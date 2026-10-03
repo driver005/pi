@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_directory_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/server/i_session_catalog",
+        "//interfaces/support/replicated_state",
+    ],
+    test_deps = [
+        "//src/testing/fake_session_catalog",
+    ],
+)

@@ -1,6 +1,3 @@
-module;
-#include <nlohmann/json.hpp>
-
 export module pi.tools.ls_tool;
 
 import std;

@@ -104,3 +104,16 @@ TEST_F(PosixFileSystemTest, ReadFilePrefixStopsAtLimit) {
     EXPECT_EQ(m_fs.readFilePrefix(path, 100).value(), "0123456789");
     EXPECT_EQ(m_fs.readFilePrefix(m_dir + "/missing", 4).error().code, "ENOENT");
 }
+
+TEST_F(PosixFileSystemTest, RemoveTreeDeletesDirectoriesAndToleratesMissingPaths) {
+    const std::string root = m_dir + "/tree";
+    ASSERT_TRUE(m_fs.createDirectories(root + "/inner"));
+    ASSERT_TRUE(m_fs.writeFile(root + "/a.txt", "a"));
+    ASSERT_TRUE(m_fs.writeFile(root + "/inner/b.txt", "b"));
+    ASSERT_TRUE(m_fs.removeTree(root));
+    EXPECT_FALSE(m_fs.exists(root));
+    EXPECT_TRUE(m_fs.removeTree(root));
+    ASSERT_TRUE(m_fs.writeFile(m_dir + "/single", "x"));
+    ASSERT_TRUE(m_fs.removeTree(m_dir + "/single"));
+    EXPECT_FALSE(m_fs.exists(m_dir + "/single"));
+}

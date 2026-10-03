@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cmath>
 
 export module pi.support.delta_applier;

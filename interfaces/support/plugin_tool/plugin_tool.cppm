@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include "pi_plugin.h"
 
 export module pi.support.plugin_tool;

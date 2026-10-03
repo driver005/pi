@@ -1,5 +1,4 @@
 module;
-#include <nlohmann/json.hpp>
 
 #include <cstdlib>
 
@@ -223,7 +222,9 @@ void SchemaValidator::checkObject(const Json& root, const Json& schema, const Js
     const Json empty = Json::object();
     const Json& properties =
         schema.contains("properties") && schema["properties"].is_object() ? schema["properties"] : empty;
-    for (const auto& [key, child] : value.items()) {
+    for (const auto& entry : value.items()) {
+        const std::string& key = entry.key();
+        const Json& child = entry.value();
         if (properties.contains(key)) {
             check(root, properties[key], child, join(path, key), out);
         } else if (schema.contains("additionalProperties")) {
@@ -434,13 +435,17 @@ void SchemaValidator::coerceObject(const Json& root, Json& value, const Json& sc
     const Json empty = Json::object();
     const Json& properties =
         schema.contains("properties") && schema["properties"].is_object() ? schema["properties"] : empty;
-    for (const auto& [key, propertySchema] : properties.items()) {
+    for (const auto& entry : properties.items()) {
+        const std::string& key = entry.key();
+        const Json& propertySchema = entry.value();
         if (value.contains(key)) {
             value[key] = coerce(root, value[key], propertySchema);
         }
     }
     if (schema.contains("additionalProperties") && schema["additionalProperties"].is_object()) {
-        for (auto& [key, child] : value.items()) {
+        for (auto& entry : value.items()) {
+            const std::string& key = entry.key();
+            Json& child = entry.value();
             if (!properties.contains(key)) {
                 child = coerce(root, child, schema["additionalProperties"]);
             }
@@ -528,7 +533,9 @@ void SchemaValidator::normalizeOptionalNulls(const Json& root, Json& value,
         return;
     }
     Json required = schema.contains("required") ? schema["required"] : Json::array();
-    for (const auto& [key, propertySchema] : schema["properties"].items()) {
+    for (const auto& entry : schema["properties"].items()) {
+        const std::string& key = entry.key();
+        const Json& propertySchema = entry.value();
         if (!value.contains(key)) {
             continue;
         }

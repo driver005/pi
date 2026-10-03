@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_controller_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/platform/i_executor",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/session/i_agent_session",
+        "//interfaces/types/prompt_operation",
+        "//interfaces/types/queued_entry",
+    ],
+    test_deps = [
+        "//src/base/thread_pool",
+        "//src/session/session_manager",
+        "//src/testing/sequential_id_generator",
+        "//src/testing/session_harness",
+        "//src/testing/test_session_handle",
+    ],
+)

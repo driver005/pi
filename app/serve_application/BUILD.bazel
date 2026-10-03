@@ -1,0 +1,26 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "serve_application",
+    deps = [
+        "//interfaces/support/server_identity",
+        "//interfaces/types/command_line",
+        "//interfaces/types/result",
+        "//interfaces/types/serve_dependencies",
+        "//src/base/posix_byte_connection",
+        "//src/base/posix_unix_listener",
+        "//src/base/thread_pool",
+        "//src/serve/coding_server_host",
+        "//src/serve/directory_session_catalog",
+        "//src/serve/served_session_opener",
+        "//src/serve/server_service_host",
+        "//src/server/server",
+    ],
+    test_deps = [
+        "//app/coding_runtime_factory",
+        "//app/coding_services",
+        "//interfaces/support/protocol_codec",
+        "//interfaces/support/protocol_message_decoder",
+        "//src/ai/faux_provider",
+    ],
+)

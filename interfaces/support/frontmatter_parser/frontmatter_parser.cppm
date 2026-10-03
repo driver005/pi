@@ -1,5 +1,4 @@
 module;
-#include <nlohmann/json.hpp>
 
 #include "third_party/yaml_bridge/yaml_bridge.h"
 

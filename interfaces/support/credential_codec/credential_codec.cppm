@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.credential_codec;
 
 import std;
@@ -48,7 +44,9 @@ Json CredentialCodec::toJson(const Credential& credential) const {
         }
     }
     if (credential.extra.is_object()) {
-        for (const auto& [name, value] : credential.extra.items()) {
+        for (const auto& entry : credential.extra.items()) {
+            const std::string& name = entry.key();
+            const Json& value = entry.value();
             out[name] = value;
         }
     }
@@ -78,7 +76,9 @@ Result<Credential> CredentialCodec::fromJson(const std::string& providerId, cons
                 return std::unexpected(invalid);
             }
             std::map<std::string, std::string> env;
-            for (const auto& [name, value] : json["env"].items()) {
+            for (const auto& entry : json["env"].items()) {
+                const std::string& name = entry.key();
+                const Json& value = entry.value();
                 if (!value.is_string()) {
                     return std::unexpected(invalid);
                 }
@@ -100,7 +100,9 @@ Result<Credential> CredentialCodec::fromJson(const std::string& providerId, cons
     } else {
         return std::unexpected(invalid);
     }
-    for (const auto& [name, value] : json.items()) {
+    for (const auto& entry : json.items()) {
+        const std::string& name = entry.key();
+        const Json& value = entry.value();
         if (!known.contains(name)) {
             credential.extra[name] = value;
         }
@@ -122,7 +124,9 @@ Result<std::vector<std::pair<std::string, Credential>>> CredentialCodec::parseDo
     if (!json.is_object()) {
         return std::unexpected(Error{"invalid_auth_file", "Invalid auth.json: expected an object"});
     }
-    for (const auto& [providerId, value] : json.items()) {
+    for (const auto& entry : json.items()) {
+        const std::string& providerId = entry.key();
+        const Json& value = entry.value();
         auto credential = fromJson(providerId, value);
         if (!credential) {
             return std::unexpected(credential.error());

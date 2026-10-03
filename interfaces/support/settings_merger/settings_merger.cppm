@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.settings_merger;
 
 import std;
@@ -45,7 +41,9 @@ bool SettingsMerger::isToolModifier(const Json& entry) const {
 
 Json SettingsMerger::mergeObjects(const Json& base, const Json& overrides) const {
     Json result = base;
-    for (const auto& [key, value] : overrides.items()) {
+    for (const auto& entry : overrides.items()) {
+        const std::string& key = entry.key();
+        const Json& value = entry.value();
         if (result.contains(key) && result[key].is_object() && value.is_object()) {
             result[key] = mergeObjects(result[key], value);
         } else {

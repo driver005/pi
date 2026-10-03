@@ -1,6 +1,3 @@
-module;
-#include <nlohmann/json.hpp>
-
 export module pi.tools.edit_tool;
 
 import std;

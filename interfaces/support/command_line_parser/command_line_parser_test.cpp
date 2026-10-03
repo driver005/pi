@@ -59,7 +59,7 @@ TEST_F(CommandLineParserTest, HelpClearsTheCommand) {
     ASSERT_TRUE(line.has_value());
     EXPECT_TRUE(line->help);
     EXPECT_TRUE(line->command.empty());
-    EXPECT_NE(m_parser.usage().find("Usage: pi rpc"), std::string::npos);
+    EXPECT_NE(m_parser.usage().find("Usage: pi rpc|serve"), std::string::npos);
 }
 
 TEST_F(CommandLineParserTest, ReportsUsageErrors) {
@@ -85,4 +85,32 @@ TEST_F(CommandLineParserTest, PluginOptions) {
     EXPECT_EQ(line->options.startup.pluginPaths, (std::vector<std::string>{"/home/me/a.so", "/b.so"}));
     EXPECT_TRUE(line->options.startup.noPlugins);
     EXPECT_FALSE(parse({"rpc"})->options.startup.noPlugins);
+}
+
+TEST_F(CommandLineParserTest, ServeDefaultsToTheHomeServerDirectoryAndItsOwnSessions) {
+    const auto line = parse({"serve"});
+    ASSERT_TRUE(line.has_value());
+    EXPECT_EQ(line->command, "serve");
+    EXPECT_EQ(line->serverDir, "/home/me/.pi/server");
+    EXPECT_FALSE(line->serverId.has_value());
+    EXPECT_EQ(line->options.sessionDir, "/home/me/.pi/agent/server-sessions");
+}
+
+TEST_F(CommandLineParserTest, ServeOptionsComeFromEnvironmentThenFlags) {
+    m_environment.set("PI_SERVER_DIR", "~/srv");
+    m_environment.set("PI_SERVER_ID", "00000000-0000-4000-8000-000000000001");
+    const auto fromEnvironment = parse({"serve"});
+    EXPECT_EQ(fromEnvironment->serverDir, "/home/me/srv");
+    EXPECT_EQ(fromEnvironment->serverId, "00000000-0000-4000-8000-000000000001");
+    const auto fromFlags = parse({"serve", "--server-dir", "/run/pi", "--server-id", "abc", "--session-dir", "/data"});
+    EXPECT_EQ(fromFlags->serverDir, "/run/pi");
+    EXPECT_EQ(fromFlags->serverId, "abc");
+    EXPECT_EQ(fromFlags->options.sessionDir, "/data");
+    EXPECT_FALSE(parse({"serve", "--server-dir"}).has_value());
+}
+
+TEST_F(CommandLineParserTest, RpcLeavesTheServeOptionsUnset) {
+    const auto line = parse({"rpc"});
+    EXPECT_TRUE(line->serverDir.empty());
+    EXPECT_FALSE(line->options.sessionDir.has_value());
 }

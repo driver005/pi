@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.ai.model_runtime;
@@ -184,7 +182,9 @@ Json ModelRuntime::configFor(const std::string& id) const {
         if (!merged.is_object()) {
             merged = Json::object();
         }
-        for (const auto& [key, value] : registered->second.items()) {
+        for (const auto& entry : registered->second.items()) {
+            const std::string& key = entry.key();
+            const Json& value = entry.value();
             merged[key] = value;
         }
     }
@@ -225,7 +225,8 @@ void ModelRuntime::buildProviders(const ModelMap& base, const Json& modelsJson) 
         ids.insert(entry.first);
     }
     if (modelsJson.is_object()) {
-        for (const auto& [id, section] : modelsJson.items()) {
+        for (const auto& entry : modelsJson.items()) {
+            const std::string& id = entry.key();
             ids.insert(id);
         }
     }
@@ -424,7 +425,9 @@ HttpHeaders ModelRuntime::configuredModelHeaders(const Model& model, const Json&
     ConfigValueResolver::Headers raw;
     const auto collect = [&](const Json& source) {
         if (source.is_object() && source.contains("headers") && source["headers"].is_object()) {
-            for (const auto& [name, value] : source["headers"].items()) {
+            for (const auto& entry : source["headers"].items()) {
+                const std::string& name = entry.key();
+                const Json& value = entry.value();
                 if (value.is_string()) {
                     raw[name] = value.get<std::string>();
                 }

@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.mcp.streamable_http_mcp_transport;
 
 import std;

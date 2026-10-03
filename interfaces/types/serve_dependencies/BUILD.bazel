@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "serve_dependencies",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_logger",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_session_runtime_factory",
+        "//interfaces/session/i_session_store",
+    ],
+)

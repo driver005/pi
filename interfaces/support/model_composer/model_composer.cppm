@@ -1,7 +1,5 @@
 module;
 
-#include <nlohmann/json.hpp>
-
 #include <cstdint>
 
 export module pi.support.model_composer;
@@ -51,7 +49,9 @@ std::string ModelComposer::stringField(const Json& object, const std::string& ke
 Json ModelComposer::mergeObjects(const Json& base, const Json& override) const {
     Json merged = base.is_object() ? base : Json::object();
     if (override.is_object()) {
-        for (const auto& [key, value] : override.items()) {
+        for (const auto& entry : override.items()) {
+            const std::string& key = entry.key();
+            const Json& value = entry.value();
             merged[key] = value;
         }
     }

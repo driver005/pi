@@ -1,7 +1,3 @@
-module;
-
-#include <nlohmann/json.hpp>
-
 export module pi.support.message_codec;
 
 import std;
@@ -509,7 +505,9 @@ Result<SystemMessage> MessageCodec::systemFromJson(const JsonReader& reader) con
     }
     if (reader.get("sections").is_object()) {
         std::vector<std::pair<std::string, std::optional<std::string>>> sections;
-        for (const auto& [name, value] : reader.get("sections").items()) {
+        for (const auto& entry : reader.get("sections").items()) {
+            const std::string& name = entry.key();
+            const Json& value = entry.value();
             sections.emplace_back(name, value.is_string() ? std::optional<std::string>(value.get<std::string>())
                                                           : std::nullopt);
         }
