@@ -9,6 +9,7 @@ export import pi.durable.i_conversation_host;
 export import pi.durable.i_storage;
 export import pi.support.agent_configurator;
 export import pi.support.agent_resolver;
+export import pi.support.agent_event_watch;
 export import pi.support.bound_conversation;
 export import pi.support.builtin_documents;
 export import pi.support.builtin_tasks;
@@ -151,6 +152,21 @@ public:
             return std::unexpected(open.error());
         }
         return m_graph->state();
+    }
+
+    /**
+     * Attaches to one conversation's agent events (spec section 9.4): the watch's snapshot and its registration for later
+     * commits are captured atomically. Experimental, like the TS counterpart.
+     */
+    Result<std::shared_ptr<AgentEventWatch>> watchEvents(std::int64_t conversationId) {
+        if (auto open = assertOpen(); !open) {
+            return std::unexpected(open.error());
+        }
+        auto watch = std::make_shared<AgentEventWatch>(*m_views, conversationId);
+        if (auto attached = watch->attach(); !attached) {
+            return std::unexpected(attached.error());
+        }
+        return watch;
     }
 
     // ─── Tasks ──────────────────────────────────────────────────────────────

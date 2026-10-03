@@ -9,11 +9,13 @@ export import pi.chord.i_replicated_state;
 export import pi.support.builtin_documents;
 export import pi.support.context_reader;
 export import pi.support.durable_session;
+export import pi.support.delta_differ;
 export import pi.support.replicated_state;
 export import pi.types.doc_address_args;
 export import pi.types.json;
 export import pi.types.result;
 export import pi.types.service_context;
+export import pi.types.view_observation;
 
 /**
  * Observable mounts of conversations: the value `{conversation, entries, docs}` of one conversation, where `entries` are
@@ -27,6 +29,14 @@ export import pi.types.service_context;
  */
 export class ConversationViews {
 public:
+    /**
+     * Called for every publication that reaches the mount, after the mount took it: the view before and after, the view
+     * operations of this publication (possibly none) and the publication `{seq, changes}` itself.
+     */
+    using Observer = std::function<void(const Json& before, const Json& after, const Json& ops, const Json& publication)>;
+    /** Reads committed state on the session line when an observer attaches. */
+    using Hydrator = std::function<Result<void>(IStorage& storage, const Json& value)>;
+
     explicit ConversationViews(DurableSession& session)
         : m_session(session) {
         const BuiltinDocuments documents;
@@ -42,10 +52,20 @@ public:
             m_commitListener = *ordered;
         }
         auto closed = m_session.subscribeClose([this] {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            m_states.clear();
-            m_docIds.clear();
-            m_built.clear();
+            std::map<std::int64_t, std::function<void()>> hooks;
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                m_states.clear();
+                m_docIds.clear();
+                m_built.clear();
+                m_observers.clear();
+                hooks.swap(m_closeHooks);
+            }
+            for (const auto& hook : hooks) {
+                if (hook.second) {
+                    hook.second();
+                }
+            }
         });
         if (closed) {
             m_closeListener = *closed;
@@ -80,6 +100,48 @@ public:
             return std::unexpected(attached.error());
         }
         return std::shared_ptr<IReplicatedState>(mounted);
+    }
+
+    /**
+     * Registers an observer of the mount of a conversation, atomically on the session line: it sees every publication the
+     * mount takes after the returned view and nothing earlier. `hydrate` runs on the line first and may read storage. The
+     * caller holds the mount (see state()) for as long as it observes, because a mount nobody holds is dropped.
+     */
+    Result<ViewObservation> observe(std::int64_t conversationId, const Hydrator& hydrate, Observer observer, std::function<void()> onSessionClosed) {
+        ViewObservation observation;
+        auto attached = m_session.readOnLine([&]() -> Result<void> {
+            const std::shared_ptr<ReplicatedState> mounted = existing(conversationId);
+            if (!mounted) {
+                return std::unexpected(Error{"durable_error", "Conversation " + std::to_string(conversationId) + " has no held view"});
+            }
+            observation.value = mounted->snapshot().value;
+            if (hydrate) {
+                if (auto hydrated = hydrate(m_session.storage(), observation.value); !hydrated) {
+                    return hydrated;
+                }
+            }
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            observation.id = ++m_nextObserver;
+            m_observers[conversationId].emplace(observation.id, std::move(observer));
+            m_closeHooks[observation.id] = std::move(onSessionClosed);
+            return {};
+        });
+        if (!attached) {
+            return std::unexpected(attached.error());
+        }
+        return observation;
+    }
+
+    void unobserve(std::int64_t conversationId, std::int64_t observerId) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        auto found = m_observers.find(conversationId);
+        if (found != m_observers.end()) {
+            found->second.erase(observerId);
+            if (found->second.empty()) {
+                m_observers.erase(found);
+            }
+        }
+        m_closeHooks.erase(observerId);
     }
 
 private:
@@ -161,6 +223,7 @@ private:
             const std::lock_guard<std::mutex> lock(m_mutex);
             ids = m_docIds[conversationId];
         }
+        const Json before = state.value();
         (void)state.change(ServiceContext{}, [&](Json& draft) {
             for (const Json& change : publication.at("changes")) {
                 const std::string type = change.value("type", std::string());
@@ -171,8 +234,25 @@ private:
                 }
             }
         });
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        m_docIds[conversationId] = ids;
+        std::vector<Observer> observers;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_docIds[conversationId] = ids;
+            const auto found = m_observers.find(conversationId);
+            if (found != m_observers.end()) {
+                for (const auto& entry : found->second) {
+                    observers.push_back(entry.second);
+                }
+            }
+        }
+        if (observers.empty()) {
+            return;
+        }
+        const Json after = state.value();
+        const Json ops = before == after ? Json::array() : m_differ.diff(before, after);
+        for (const Observer& observer : observers) {
+            observer(before, after, ops, publication);
+        }
     }
 
     /** A head marker keeps the non-head entries from its head, which are always a suffix, and goes in front. */
@@ -221,6 +301,7 @@ private:
 
     DurableSession& m_session;
     ContextReader m_reader;
+    DeltaDiffer m_differ;
     std::vector<DocDefinition> m_definitions;
     std::int64_t m_lineListener = 0;
     std::int64_t m_commitListener = 0;
@@ -230,4 +311,7 @@ private:
     std::map<std::int64_t, std::weak_ptr<ReplicatedState>> m_states;
     std::map<std::int64_t, std::map<std::string, std::int64_t>> m_docIds;
     std::map<std::int64_t, std::int64_t> m_built;
+    std::int64_t m_nextObserver = 0;
+    std::map<std::int64_t, std::map<std::int64_t, Observer>> m_observers;
+    std::map<std::int64_t, std::function<void()>> m_closeHooks;
 };

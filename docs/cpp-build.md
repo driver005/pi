@@ -86,11 +86,12 @@ All of it lives in `interfaces/support` (logic classes that may hold threads and
 - Built-in tasks `pi.generation`, `pi.tool`, `pi.compaction` (`GenerationTaskDefinition`, `ToolTaskDefinition`, `CompactionTaskDefinition`, registered by `BuiltinTasks`), with retry policy, output bounding, usage ledger, hooks/wraps and extension registration.
 - `Harness` (`interfaces/support/harness`): `open`, `root`, `conversation(id)`, `createConversation` (forks), `getTask`, `submission`, `abortSubmission/abortTask`, `waitForTask/waitForIdle`, `usage`, `inspect`, `resume`. Conversations expose prompt/steer/follow-up submissions, the inbox boundary, compaction and `BoundConversation` handles.
 - Observation: `Harness::viewState(conversationId)` returns an `IReplicatedState` of `{conversation, entries, docs}` (the active transcript entries and the `pi.agent`/`pi.live`/`pi.inbox`/`pi.usage` documents) and `Harness::taskGraph()` one of `{tasks: {id: node}}` for every live task (`ConversationViews`, `TaskGraphView`). A mount is built on the session line by its first holder, advances from the ordered commit publications (so it only shows committed state) and is dropped when the last holder releases it; its published ops are the diff of each commit, so replaying them over the first snapshot rebuilds the value.
+- Agent events (spec section 9.4): `Harness::watchEvents(conversationId)` returns an `AgentEventWatch`: the `snapshot` event, then one batch of events per publication (`run_start`, `turn_start`, `message_start`/`message_update`/`message_end`, `tool_execution_*`, `submission`, `inbox_update`, `usage_changed`, ... in the order of the spec) delivered in order on a thread of its own, with the 100-batch overflow replaced by one snapshot. `AgentEventTranslator` derives the events from the mount's before/after values and the publication; message and tool output changes are computed from the values, so they do not depend on how the mount's diff aligned arrays.
 - Tests run over `MemoryStorage` and over `JsonlStorage` on a fake file system (restart recovery), with `TaskFixture` (`src/testing/task_fixture`), the faux provider and a fixed clock; the scheduler, tasks, harness and submissions pass under `--config=tsan` and 20x stress runs.
 
 A deferred provider response (stream option `deferred`) is polled through the `poll` phase of the generation task (`IProvider::fetchDeferred/cancelDeferred`, routed by `IModelRuntime`; only the faux provider implements it, as in TS) and an abort during polling cancels the handle.
 
-Differences from TS: the agent event stream and the exact-frame committed-state watches are not ported, and `pi serve` still uses the JSONL session store and its own `Transcript` shape rather than publishing the durable `ConversationView` through the `Transcript` service.
+Differences from TS: the exact-frame committed-state watches (`CommittedWatch` frames with operations) are not ported, and the view operations are diffs of the mount rather than the operations the documents recorded, so a consumer that replays them gets the same values but not necessarily the same operation sequence.
 
 ## MCP servers
 
@@ -118,4 +119,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the durable agent event stream; plugin and MCP tools in durable sessions; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; plugin and MCP tools in durable sessions; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

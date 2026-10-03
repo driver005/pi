@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_event_watch",
+    deps = [
+        "//interfaces/support/agent_event_translator",
+        "//interfaces/support/conversation_views",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/tool_bridge",
+        "//src/testing/durable_harness_fixture",
+        "//src/testing/scripted_tool",
+    ],
+)

@@ -162,3 +162,48 @@ TEST_F(ConversationViewsTest, ClosedSessionsRefuseMounts) {
     ASSERT_TRUE(m_session.close().has_value());
     EXPECT_FALSE(m_views.state(id).has_value());
 }
+
+TEST_F(ConversationViewsTest, ObserversSeeEveryPublicationAfterTheirStartingViewUntilTheyLeave) {
+    const std::int64_t id = newConversation();
+    const std::int64_t other = newConversation();
+    auto held = m_views.state(id);
+    ASSERT_TRUE(held.has_value());
+    append(id);
+    std::vector<Json> seen;
+    bool hydrated = false;
+    auto observation = m_views.observe(
+        id,
+        [&](IStorage& storage, const Json& value) -> Result<void> {
+            hydrated = value.at("entries").size() == 1u && storage.conversation(id).has_value();
+            return {};
+        },
+        [&](const Json& before, const Json& after, const Json& ops, const Json& publication) { seen.push_back(Json{{"before", before}, {"after", after}, {"ops", ops}, {"seq", publication.at("seq")}}); }, [] {});
+    ASSERT_TRUE(observation.has_value()) << observation.error().message;
+    EXPECT_TRUE(hydrated);
+    EXPECT_EQ(observation->value.at("entries").size(), 1u);
+    append(id);
+    append(other);
+    ASSERT_EQ(seen.size(), 2u);
+    EXPECT_EQ(seen[0].at("before").at("entries").size(), 1u);
+    EXPECT_EQ(seen[0].at("after").at("entries").size(), 2u);
+    EXPECT_FALSE(seen[0].at("ops").empty());
+    // A publication that changes nothing in this view still reaches the observer, without operations.
+    EXPECT_EQ(seen[1].at("before"), seen[1].at("after"));
+    EXPECT_TRUE(seen[1].at("ops").empty());
+    EXPECT_GT(seen[1].at("seq").get<std::int64_t>(), seen[0].at("seq").get<std::int64_t>());
+    m_views.unobserve(id, observation->id);
+    append(id);
+    EXPECT_EQ(seen.size(), 2u);
+}
+
+TEST_F(ConversationViewsTest, ObservingNeedsAHeldViewAndClosingTheSessionNotifiesObservers) {
+    const std::int64_t id = newConversation();
+    auto none = m_views.observe(id, nullptr, [](const Json&, const Json&, const Json&, const Json&) {}, [] {});
+    ASSERT_FALSE(none.has_value());
+    auto held = m_views.state(id);
+    ASSERT_TRUE(held.has_value());
+    bool closed = false;
+    ASSERT_TRUE(m_views.observe(id, nullptr, [](const Json&, const Json&, const Json&, const Json&) {}, [&] { closed = true; }).has_value());
+    ASSERT_TRUE(m_session.close().has_value());
+    EXPECT_TRUE(closed);
+}

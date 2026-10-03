@@ -6,6 +6,7 @@ pi_support(
         "//interfaces/durable/i_conversation_host",
         "//interfaces/durable/i_storage",
         "//interfaces/support/agent_configurator",
+        "//interfaces/support/agent_event_watch",
         "//interfaces/support/agent_resolver",
         "//interfaces/support/bound_conversation",
         "//interfaces/support/builtin_documents",
