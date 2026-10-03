@@ -137,4 +137,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; interactive MCP OAuth sign-in; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); HTML export; the package manager.
+OAuth login flows; interactive MCP OAuth sign-in; plugin commands, UI APIs, stream-handler providers and virtual models; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); HTML export; the package manager.

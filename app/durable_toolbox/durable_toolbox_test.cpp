@@ -157,3 +157,21 @@ TEST_F(DurableToolboxTest, RepeatedReloadsDoNotStackTools) {
     ASSERT_TRUE(toolbox->reload().has_value());
     EXPECT_EQ(names(*toolbox).size(), 1u);
 }
+
+TEST_F(DurableToolboxTest, PluginsCanRegisterModelProvidersThatEndWithTheToolbox) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_provider/libhello_provider.so"};
+    startup.noMcp = true;
+    IModelRuntime& models = m_services->models().models();
+    {
+        const auto toolbox = open(startup);
+        EXPECT_TRUE(toolbox->diagnostics().empty());
+        const std::optional<Model> model = models.find("hello-proxy", "hello-1");
+        ASSERT_TRUE(model.has_value());
+        EXPECT_EQ(model->name, "Hello 1");
+        EXPECT_EQ(model->baseUrl, "https://proxy.example.com/v1");
+        ASSERT_TRUE(toolbox->reload().has_value());
+        EXPECT_TRUE(models.find("hello-proxy", "hello-1").has_value());
+    }
+    EXPECT_FALSE(models.find("hello-proxy", "hello-1").has_value());
+}

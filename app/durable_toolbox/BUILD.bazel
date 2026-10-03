@@ -23,5 +23,8 @@ pi_module(
     test_deps = [
         "//src/ai/faux_provider",
     ],
-    data = ["//plugins/hello_tool"],
+    data = [
+        "//plugins/hello_provider",
+        "//plugins/hello_tool",
+    ],
 )

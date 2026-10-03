@@ -20,4 +20,5 @@ export struct LoadedPlugin {
     PiHostApi api{};
     std::vector<std::string> tools;
     std::vector<std::uint64_t> subscriptions;
+    std::vector<std::string> providers;
 };

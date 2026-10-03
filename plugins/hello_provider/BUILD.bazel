@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_provider.so; load it with `pi serve --plugin bazel-bin/plugins/hello_provider/libhello_provider.so`.
+cc_binary(
+    name = "hello_provider",
+    srcs = ["hello_provider.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

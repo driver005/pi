@@ -29,7 +29,7 @@ void     pi_plugin_shutdown(void);              /* optional */
 Data crosses the boundary as UTF-8 JSON in `PiString` (borrowed for the call) or `PiOwnedString` (the producer
 allocates, the consumer calls `release` when set). Callbacks may run on any host thread, concurrently; they must
 not throw across the boundary. The host API offers `log`, `register_tool`, `subscribe`, `exec` (run a program, with
-cancellation), `abort_requested` and `get_context` (`cwd`, `agentDir`).
+cancellation), `abort_requested`, `get_context` (`cwd`, `agentDir`), `register_provider` and `unregister_provider`.
 
 ### Tools
 
@@ -37,6 +37,16 @@ cancellation), `abort_requested` and `get_context` (`cwd`, `agentDir`).
 and an execute callback. The callback receives the call id, the validated arguments, an abort handle and an update
 function for partial results, and returns `{"content":[{"type":"text","text":..}|{"type":"image","data":..,"mimeType":..}],"details"?,"structuredContent"?,"isError"?,"terminate"?}`
 or `{"error":"message"}` to fail the call.
+
+### Providers
+
+`register_provider(name, config)` registers or replaces a model provider with a `models.json` provider entry:
+`{"baseUrl"?,"apiKey"?,"api"?,"headers"?,"models"?:[{"id","name"?,"api"?,"reasoning"?,"input"?,"cost"?,"contextWindow"?,"maxTokens"?}]}`,
+the declarative `ProviderConfig` of TypeScript extensions (`apiKey` may be a literal, `$ENV` or `!command`). Without `models`
+it overrides settings of an existing provider. The registration ends when the plugin unloads (or with
+`unregister_provider`), which restores overridden built-in providers. The two functions were added to the end of
+`PiHostApi`; a plugin checks `struct_size` before calling them (the SDK's `Host::registerProvider` does). Hosts without a
+model registry answer `{"error":...}`. `plugins/hello_provider` is an example.
 
 ### Hooks
 
@@ -58,7 +68,7 @@ each model request, `message_end` after each model response and `turn_end` after
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), `registerProvider`, commands and flags, `registerMcpServer`,
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth and virtual models (declarative providers work), commands and flags, `registerMcpServer`,
 the `input`, `before_agent_start`, `before_provider_request` and compaction/tree hooks, and the shared event bus
 between extensions. They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.

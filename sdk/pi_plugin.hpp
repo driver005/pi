@@ -14,6 +14,7 @@
 #ifndef PI_PLUGIN_HPP
 #define PI_PLUGIN_HPP
 
+#include <cstddef>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -134,6 +135,27 @@ public:
 
     Json context() const { return Json::parse(detail::take(m_api->get_context(m_api->host)), nullptr, false); }
 
+    /**
+     * Registers a model provider (see PiHostApi.register_provider). Returns an empty string on success, else the host's
+     * error message; hosts older than this call report that it is unavailable.
+     */
+    std::string registerProvider(const std::string& name, const Json& config) const {
+        if (!hasProviderApi()) {
+            return "the host does not support register_provider";
+        }
+        const std::string text = config.dump();
+        return Json::parse(detail::take(m_api->register_provider(m_api->host, PiString{name.data(), name.size()}, PiString{text.data(), text.size()})), nullptr, false)
+            .value("error", "");
+    }
+
+    /** Removes a provider this plugin registered. Returns an empty string on success. */
+    std::string unregisterProvider(const std::string& name) const {
+        if (!hasProviderApi()) {
+            return "the host does not support unregister_provider";
+        }
+        return Json::parse(detail::take(m_api->unregister_provider(m_api->host, PiString{name.data(), name.size()})), nullptr, false).value("error", "");
+    }
+
     /** Runs a program; see PiHostApi.exec for the request and result shapes. */
     Json exec(const Json& request, const PiAbort* abort = nullptr) const {
         const std::string text = request.dump();
@@ -142,6 +164,11 @@ public:
     }
 
 private:
+    bool hasProviderApi() const {
+        return m_api->struct_size >= offsetof(PiHostApi, unregister_provider) + sizeof(void*) && m_api->register_provider != nullptr &&
+               m_api->unregister_provider != nullptr;
+    }
+
     struct Entry {
         ToolHandler handler;
         const PiHostApi* host;

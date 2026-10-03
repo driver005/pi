@@ -13,6 +13,7 @@ export import pi.platform.i_logger;
 export import pi.platform.i_process_runner;
 export import pi.plugin.i_hook_bus;
 export import pi.plugin.i_plugin_host;
+export import pi.provider.i_model_runtime;
 export import pi.support.plugin_tool_factory;
 export import pi.tool.i_tool_registry;
 export import pi.types.loaded_plugin;
@@ -25,13 +26,15 @@ export import pi.types.plugin_context;
  */
 export class PluginHost : public IPluginHost {
 public:
-    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context)
+    /** `models` (optional) is where plugins register providers; without it register_provider fails. */
+    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context, IModelRuntime* models = nullptr)
         : m_libraries(libraries),
           m_tools(tools),
           m_hooks(hooks),
           m_processes(processes),
           m_logger(logger),
-          m_context(std::move(context)) {}
+          m_context(std::move(context)),
+          m_models(models) {}
 
     ~PluginHost() override {
         shutdown();
@@ -140,6 +143,14 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->context();
         };
+        api.register_provider = [](void* host, PiString name, PiString config) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerProvider(*plugin, std::string(name.data, name.size), std::string(config.data, config.size));
+        };
+        api.unregister_provider = [](void* host, PiString name) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->unregisterProvider(*plugin, std::string(name.data, name.size));
+        };
     }
 
     void unload(LoadedPlugin& plugin) {
@@ -152,8 +163,14 @@ private:
         for (const std::uint64_t id : plugin.subscriptions) {
             m_hooks.unsubscribe(id);
         }
+        if (m_models != nullptr) {
+            for (const std::string& name : plugin.providers) {
+                m_models->unregisterProvider(name);
+            }
+        }
         plugin.tools.clear();
         plugin.subscriptions.clear();
+        plugin.providers.clear();
         m_libraries.close(plugin.library);
     }
 
@@ -166,6 +183,35 @@ private:
         m_tools.add(*tool);
         const std::lock_guard<std::mutex> lock(m_mutex);
         plugin.tools.push_back(name);
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString registerProvider(LoadedPlugin& plugin, const std::string& name, const std::string& configText) {
+        if (m_models == nullptr) {
+            return owned(Json{{"error", "this host has no model registry"}});
+        }
+        const Json config = Json::parse(configText, nullptr, false);
+        if (name.empty() || !config.is_object()) {
+            return owned(Json{{"error", "register_provider needs a provider name and a JSON object"}});
+        }
+        if (auto registered = m_models->registerProvider(name, config); !registered) {
+            return owned(Json{{"error", registered.error().message}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (std::ranges::find(plugin.providers, name) == plugin.providers.end()) {
+            plugin.providers.push_back(name);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString unregisterProvider(LoadedPlugin& plugin, const std::string& name) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = std::ranges::find(plugin.providers, name);
+        if (m_models == nullptr || found == plugin.providers.end()) {
+            return owned(Json{{"error", "provider \"" + name + "\" was not registered by this plugin"}});
+        }
+        plugin.providers.erase(found);
+        m_models->unregisterProvider(name);
         return owned(Json{{"ok", true}});
     }
 
@@ -290,6 +336,7 @@ private:
     ILogger& m_logger;
     PluginContext m_context;
     PluginToolFactory m_factory;
+    IModelRuntime* m_models;
     mutable std::mutex m_mutex;
     std::vector<std::unique_ptr<LoadedPlugin>> m_plugins;
 };

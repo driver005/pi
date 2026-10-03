@@ -89,6 +89,21 @@ typedef struct PiHostApi {
 
     /* {"cwd":..., "agentDir":...} */
     PiOwnedString (*get_context)(void* host);
+
+    /*
+     * Added after the first release of ABI 1: a plugin that uses the functions below checks that
+     * `struct_size` covers them (offsetof(PiHostApi, unregister_provider) + sizeof(void*)).
+     *
+     * Registers (or replaces) a model provider. config_json is a models.json provider entry, the declarative
+     * ProviderConfig of TypeScript extensions without stream handlers: {"baseUrl"?, "apiKey"?, "api"?, "headers"?,
+     * "models"?:[{"id", "name"?, "api"?, "reasoning"?, "input"?, "cost"?, "contextWindow"?, "maxTokens"?, ...}], ...}.
+     * Without "models" it overrides the settings of an existing provider. The registration ends when the plugin is
+     * unloaded. Returns {"ok":true} or {"error":"..."}.
+     */
+    PiOwnedString (*register_provider)(void* host, PiString name, PiString config_json);
+
+    /* Removes a provider this plugin registered. Returns {"ok":true} or {"error":"..."}. */
+    PiOwnedString (*unregister_provider)(void* host, PiString name);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

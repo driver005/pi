@@ -8,6 +8,7 @@ import pi.base.posix_dynamic_libraries;
 import pi.plugin.plugin_host;
 import pi.support.hook_bus;
 import pi.testing.fake_dynamic_libraries;
+import pi.testing.fake_model_runtime;
 import pi.testing.scripted_process_runner;
 import pi.tools.tool_registry;
 
@@ -16,6 +17,7 @@ const PiHostApi* g_host = nullptr;
 std::string g_lastLog;
 std::string g_lastReply;
 int g_shutdowns = 0;
+std::string g_providerConfig;
 
 class RecordingLogger : public ILogger {
 public:
@@ -39,7 +41,7 @@ protected:
               result.output = "ran";
               return result;
           }),
-          m_host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}) {
+          m_host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models) {
         g_host = nullptr;
         g_lastLog.clear();
         g_lastReply.clear();
@@ -96,6 +98,7 @@ protected:
     std::vector<ProcessRequest> m_processRequests;
     std::function<void(const ProcessRequest&)> m_onRun;
     ScriptedProcessRunner m_runner;
+    FakeModelRuntime m_models;
     PluginHost m_host;
 };
 
@@ -265,4 +268,80 @@ TEST_F(PluginHostTest, LoadsTheExamplePluginFromARealSharedLibrary) {
 
     host.shutdown();
     EXPECT_EQ(m_registry.find("hello"), nullptr);
+}
+
+class PluginHostProviderTest : public PluginHostTest {
+protected:
+    /** A plugin that registers the provider "proxy" with the config in `g_providerConfig` and records the replies. */
+    void provideProviderPlugin(const std::string& path) {
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            const std::string name = "proxy";
+            g_lastReply = take(host->register_provider(host->host, view(name), view(g_providerConfig)));
+            return 0;
+        };
+        PiPluginShutdownFn shutdown = []() { ++g_shutdowns; };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)},
+                                   {"pi_plugin_init", reinterpret_cast<void*>(init)},
+                                   {"pi_plugin_shutdown", reinterpret_cast<void*>(shutdown)}});
+    }
+};
+
+TEST_F(PluginHostProviderTest, APluginRegistersAProviderThatEndsWithThePlugin) {
+    g_providerConfig = R"({"baseUrl":"https://proxy.example.com","api":"openai-completions","apiKey":"k","models":[{"id":"m1"}]})";
+    provideProviderPlugin("/plugins/provider.so");
+    EXPECT_TRUE(m_host.load({"/plugins/provider.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    ASSERT_EQ(m_models.registeredProviders().size(), 1u);
+    EXPECT_EQ(m_models.registeredProviders().at("proxy")["baseUrl"], "https://proxy.example.com");
+    m_host.shutdown();
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostProviderTest, TheRegistrysRejectionIsReportedToThePlugin) {
+    m_models.rejectProviders();
+    g_providerConfig = R"({"baseUrl":"x"})";
+    provideProviderPlugin("/plugins/provider.so");
+    EXPECT_TRUE(m_host.load({"/plugins/provider.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["error"], "rejected by the test");
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostProviderTest, ConfigsThatAreNotObjectsAreRefused) {
+    g_providerConfig = "[1]";
+    provideProviderPlugin("/plugins/provider.so");
+    EXPECT_TRUE(m_host.load({"/plugins/provider.so"}).empty());
+    EXPECT_TRUE(Json::parse(g_lastReply).contains("error"));
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostProviderTest, APluginCanUnregisterItsOwnProviderOnly) {
+    g_providerConfig = R"({"baseUrl":"https://proxy.example.com"})";
+    provideProviderPlugin("/plugins/provider.so");
+    ASSERT_TRUE(m_host.load({"/plugins/provider.so"}).empty());
+    const std::string other = "someone-else";
+    EXPECT_TRUE(Json::parse(take(g_host->unregister_provider(g_host->host, view(other)))).contains("error"));
+    const std::string mine = "proxy";
+    EXPECT_EQ(Json::parse(take(g_host->unregister_provider(g_host->host, view(mine))))["ok"], true);
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostTest, WithoutAModelRegistryProvidersCannotBeRegistered) {
+    FakeDynamicLibraries libraries;
+    ToolRegistry registry;
+    HookBus bus;
+    RecordingLogger logger;
+    ScriptedProcessRunner runner([](const ProcessRequest&) -> Result<ProcessResult> { return ProcessResult{}; });
+    PluginHost host(libraries, registry, bus, runner, logger, PluginContext{"/work", "/agent"});
+    PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+    PiPluginInitFn init = [](const PiHostApi* api) {
+        const std::string name = "p";
+        const std::string config = "{}";
+        g_lastReply = take(api->register_provider(api->host, view(name), view(config)));
+        return 0;
+    };
+    libraries.provide("/plugins/p.so", {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)}, {"pi_plugin_init", reinterpret_cast<void*>(init)}});
+    EXPECT_TRUE(host.load({"/plugins/p.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
 }

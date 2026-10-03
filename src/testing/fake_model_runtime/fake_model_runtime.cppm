@@ -146,15 +146,37 @@ public:
         return handler(model, handle, options);
     }
 
-    Result<void> registerProvider(const std::string&, const Json&) override {
+    Result<void> registerProvider(const std::string& providerId, const Json& config) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_rejectProviders) {
+            return std::unexpected(Error{"provider", "rejected by the test"});
+        }
+        m_registered[providerId] = config;
         return {};
     }
-    void unregisterProvider(const std::string&) override {}
+    void unregisterProvider(const std::string& providerId) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_registered.erase(providerId);
+    }
+
+    /** Providers registered through registerProvider and not unregistered since, by id. */
+    std::map<std::string, Json> registeredProviders() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_registered;
+    }
+
+    /** Makes registerProvider fail. */
+    void rejectProviders() {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_rejectProviders = true;
+    }
 
 private:
     mutable std::mutex m_mutex;
     std::vector<Model> m_models;
     std::set<std::string> m_authenticated;
+    std::map<std::string, Json> m_registered;
+    bool m_rejectProviders = false;
     StreamHandler m_handler;
     FetchDeferredHandler m_fetchDeferred;
     CancelDeferredHandler m_cancelDeferred;
