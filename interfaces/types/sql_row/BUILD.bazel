@@ -1,0 +1,8 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "sql_row",
+    deps = [
+        "//interfaces/types/sql_value",
+    ],
+)

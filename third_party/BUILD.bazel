@@ -38,3 +38,8 @@ alias(
     name = "gtest",
     actual = "@googletest//:gtest_main",
 )
+
+alias(
+    name = "sqlite3",
+    actual = "//third_party/sqlite3",
+)

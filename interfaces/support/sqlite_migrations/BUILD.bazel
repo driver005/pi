@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "sqlite_migrations",
+    deps = [
+        "//interfaces/durable/i_sql_database",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/durable/sqlite_database",
+    ],
+)

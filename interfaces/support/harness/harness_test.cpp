@@ -4,6 +4,8 @@ import std;
 import pi.ai.faux_provider;
 import pi.durable.jsonl_storage;
 import pi.durable.memory_storage;
+import pi.durable.sqlite_database;
+import pi.durable.sqlite_storage;
 import pi.support.delta_applier;
 import pi.support.harness;
 import pi.support.json_equality;
@@ -28,6 +30,27 @@ public:
 private:
     MemoryStorage m_memory;
     JsonlStorage m_storage;
+};
+
+/** A SQLite file store: the database and the storage over it. */
+class SqliteBundle {
+public:
+    explicit SqliteBundle(const std::string& path) : m_database(std::make_shared<SqliteDatabase>(path)), m_storage(m_database) {}
+
+    Result<void> open() {
+        if (auto opened = m_database->open(); !opened) {
+            return opened;
+        }
+        return m_storage.open();
+    }
+
+    IStorage& storage() {
+        return m_storage;
+    }
+
+private:
+    std::shared_ptr<SqliteDatabase> m_database;
+    SqliteStorage m_storage;
 };
 
 class HarnessTest : public ::testing::Test {
@@ -83,6 +106,15 @@ protected:
         m_bundle = std::make_shared<JsonlBundle>(m_files, "/data/session");
         ASSERT_TRUE(m_bundle->open().has_value());
         m_harness = std::make_unique<Harness>(std::shared_ptr<IStorage>(m_bundle, &m_bundle->storage()), options());
+        ASSERT_TRUE(m_harness->open().has_value());
+    }
+
+    /** Opens a harness over a SQLite file that survives m_harness being reset, as a restarted process would see it. */
+    void openSqlite() {
+        const std::string path = std::string(std::getenv("TEST_TMPDIR")) + "/harness_sqlite/db.sqlite";
+        m_sqlite = std::make_shared<SqliteBundle>(path);
+        ASSERT_TRUE(m_sqlite->open().has_value());
+        m_harness = std::make_unique<Harness>(std::shared_ptr<IStorage>(m_sqlite, &m_sqlite->storage()), options());
         ASSERT_TRUE(m_harness->open().has_value());
     }
 
@@ -148,6 +180,7 @@ protected:
     FakeModelRuntime m_models;
     FakeFileSystem m_files;
     std::shared_ptr<JsonlBundle> m_bundle;
+    std::shared_ptr<SqliteBundle> m_sqlite;
     HarnessRunSettings m_settings;
     std::unique_ptr<Harness> m_harness;
     std::mutex m_mutex;
@@ -688,4 +721,40 @@ TEST_F(HarnessTest, PollingResumesAfterReopeningTheStore) {
     ASSERT_TRUE(context.has_value());
     EXPECT_EQ(context->at("messages").back().at("content")[0].at("text"), "after restart");
     EXPECT_EQ(m_faux.deferredFetchCount(), 1);
+}
+
+TEST_F(HarnessTest, ARunInterruptedByCloseResumesAfterReopeningASqliteStore) {
+    std::filesystem::remove_all(std::string(std::getenv("TEST_TMPDIR")) + "/harness_sqlite");
+    openSqlite();
+    WaitGate streaming;
+    m_models.setStreamHandler([&](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        streaming.open();
+        (void)WaitGate().wait({options.signal.get()});
+        return m_faux.stream(model, context, options);
+    });
+    auto root = rootWithModel();
+    auto submission = root->submit(input("hello"));
+    ASSERT_TRUE(submission.has_value());
+    const std::int64_t submissionId = (*submission)->id();
+    ASSERT_TRUE(streaming.wait({}).has_value());
+    ASSERT_TRUE(m_harness->close().has_value());
+    m_harness.reset();
+    m_sqlite.reset();
+
+    m_models.setStreamHandler([this](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        return m_faux.stream(model, context, options);
+    });
+    m_faux.enqueue(m_faux.textResponse("welcome back"));
+    openSqlite();
+    auto reacquired = m_harness->submission(submissionId);
+    ASSERT_TRUE(reacquired.has_value() && *reacquired);
+    ASSERT_TRUE(m_harness->resume().has_value());
+    auto settled = (*reacquired)->wait();
+    ASSERT_TRUE(settled.has_value()) << settled.error().message;
+    EXPECT_EQ(settled->at("status"), "done");
+    auto again = m_harness->root();
+    ASSERT_TRUE(again.has_value());
+    auto context = (*again)->context();
+    ASSERT_TRUE(context.has_value());
+    EXPECT_EQ(context->at("messages").back().at("content")[0].at("text"), "welcome back");
 }

@@ -68,12 +68,14 @@ PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-
 
 ## Durable storage (partial port of `packages/durable`)
 
-`IStorage` (`interfaces/durable/i_storage`) is the atomic persistence boundary of the durable session: conversations, entries, tasks, submissions and versioned documents, with fork-aware entry scans, opaque cursors and as-of document reads. Records and writes are JSON in the shape of `packages/durable/src/types.ts`. Two backends exist:
+`IStorage` (`interfaces/durable/i_storage`) is the atomic persistence boundary of the durable session: conversations, entries, tasks, submissions and versioned documents, with fork-aware entry scans, opaque cursors and as-of document reads. Records and writes are JSON in the shape of `packages/durable/src/types.ts`. Three backends exist:
 
 - `MemoryStorage` (`src/durable/memory_storage`): the reference implementation; also an `IStagedStorage` (validate/apply in two steps).
 - `JsonlStorage` (`src/durable/jsonl_storage`): `main.jsonl` commit markers plus `doc-<id>.jsonl` / `task-<id>.jsonl` sidecars, rebuilt into a memory store on open, with torn-tail and unconfirmed-record recovery and sidecar reclamation. Same on-disk format as the TS implementation (format 1).
 
-Both pass the ported conformance suite (`src/testing/storage_conformance`). Not ported: the SQLite backend (sqlite3 cannot be fetched yet).
+- `SqliteStorage` (`src/durable/sqlite_storage`) over `ISqlDatabase` (`interfaces/durable/i_sql_database`; `SqliteDatabase` in `src/durable/sqlite_database` binds the system libsqlite3, WAL journal, immediate transactions). The schema and row encoding are those of the TS SQLite storage (`SqliteMigrations`), so the two implementations are meant to open each other's `session.sqlite` (not yet cross-checked against a file written by the TS server). Reads are SQL queries, not an in-memory copy.
+
+All three pass the ported conformance suite (`src/testing/storage_conformance`); the harness restart-recovery test also runs over a SQLite file. The registry's `sqlite3` module downloads from sqlite.org, which the dev sandbox cannot reach, so `//third_party:sqlite3` links the system library (`libsqlite3-dev`); switch it to the registry module where the download works.
 
 ## Durable harness (port of `packages/durable` Session/Harness)
 
@@ -116,4 +118,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; SQLite storage; the durable agent event stream and the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the durable agent event stream and the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

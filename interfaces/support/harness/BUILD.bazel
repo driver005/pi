@@ -32,6 +32,8 @@ pi_support(
         "//src/ai/faux_provider",
         "//src/durable/jsonl_storage",
         "//src/durable/memory_storage",
+        "//src/durable/sqlite_database",
+        "//src/durable/sqlite_storage",
         "//src/testing/fake_file_system",
         "//src/testing/fake_model_runtime",
         "//src/testing/fixed_clock",
