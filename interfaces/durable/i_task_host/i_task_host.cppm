@@ -9,6 +9,7 @@ export import pi.durable.i_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_registry_snapshot;
+export import pi.provider.i_model_runtime;
 export import pi.support.abort_signal;
 export import pi.support.transaction;
 export import pi.types.doc_address_args;
@@ -43,6 +44,7 @@ public:
     virtual Result<std::shared_ptr<const IAgent>> resolveAgent(TaskInvocation& invocation,
                                                                const std::shared_ptr<const IRegistrySnapshot>& snapshot) = 0;
     virtual ResolvedSettings settings() = 0;
+    virtual IModelRuntime* models() = 0;
     virtual Result<std::shared_ptr<IExecutionEnv>> env(TaskInvocation& invocation) = 0;
     virtual std::int64_t now(TaskInvocation& invocation) = 0;
     virtual void report(TaskInvocation& invocation, const Error& error) = 0;

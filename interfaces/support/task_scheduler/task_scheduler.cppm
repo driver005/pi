@@ -479,6 +479,10 @@ public:
         return m_callbacks.settings();
     }
 
+    IModelRuntime* models() override {
+        return m_callbacks.models ? m_callbacks.models() : nullptr;
+    }
+
     Result<std::shared_ptr<IExecutionEnv>> env(TaskInvocation& invocation) override {
         if (auto live = checkLive(invocation); !live) {
             return std::unexpected(live.error());

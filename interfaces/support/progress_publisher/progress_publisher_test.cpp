@@ -43,6 +43,8 @@ TEST(ProgressPublisherTest, FailuresRejectWaitersAndAreReported) {
     auto result = publisher.await(slot);
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, "io");
+    // The waiter settles before the failure is reported; stopping joins the publisher thread.
+    (void)publisher.stop();
     EXPECT_EQ(reported.load(), 1);
 }
 

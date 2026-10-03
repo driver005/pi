@@ -9,6 +9,7 @@ export import pi.durable.i_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_hook_api;
+export import pi.provider.i_model_runtime;
 export import pi.support.abort_signal;
 export import pi.support.transaction;
 export import pi.types.error;
@@ -26,6 +27,8 @@ public:
     virtual AbortSignal& signal() = 0;
     /** The conversation's agent, resolved at most once per phase, at first use, and fixed for the phase. */
     virtual Result<std::shared_ptr<const IAgent>> agent() = 0;
+    /** The model catalog and request-time authentication; null when the harness has none. */
+    virtual IModelRuntime* models() = 0;
     /** The run settings, resolved at each access. */
     virtual ResolvedSettings settings() = 0;
     /** The conversation's environment, built at each call; null without an environment. */
@@ -39,6 +42,12 @@ public:
      * (`{status: "running"|"waiting"|"terminal", ...}`) replaces the task's state in the same commit; nothing leaves it.
      */
     virtual Result<void> commit(const std::function<Result<std::optional<Json>>(Transaction& tx, const Json& current)>& change) = 0;
+
+    /**
+     * `{version, checkpoint}` of a new task of a registered definition, from the phase's registry snapshot; fails when no
+     * definition of that name is registered. Pair it with `Transaction::createTask`.
+     */
+    virtual Result<Json> newTask(const std::string& name, const Json& input) = 0;
 
     virtual Result<std::optional<Json>> getTask(std::int64_t id) = 0;
     /** Blocks until the task is terminal and returns its record; fails when the invocation ends. */

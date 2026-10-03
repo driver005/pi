@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "task_fixture",
+    deps = [
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/durable_session",
+        "//interfaces/support/registry",
+        "//interfaces/support/resolved_agent",
+        "//interfaces/support/task_scheduler",
+        "//src/durable/memory_storage",
+    ],
+)

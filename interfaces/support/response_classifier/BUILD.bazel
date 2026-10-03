@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "response_classifier",
+    deps = [
+        "//interfaces/support/assistant_error_classifier",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/overflow_detector",
+        "//interfaces/types/conversation_retry_policy",
+        "//interfaces/types/json",
+    ],
+)

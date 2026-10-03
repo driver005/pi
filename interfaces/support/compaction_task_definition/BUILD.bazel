@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "compaction_task_definition",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/compaction_planner",
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/model_requests",
+        "//interfaces/support/response_classifier",
+        "//interfaces/support/submission_admission",
+        "//interfaces/support/usage_ledger",
+    ],
+    test_deps = [
+        "//interfaces/support/context_reader",
+        "//src/ai/faux_provider",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/task_fixture",
+    ],
+)

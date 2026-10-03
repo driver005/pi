@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "compaction_planner",
+    deps = [
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/context_reader",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/token_estimator",
+        "//interfaces/support/transaction",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/task_options",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

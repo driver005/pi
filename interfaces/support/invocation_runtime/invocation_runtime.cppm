@@ -63,6 +63,10 @@ public:
         return m_host.settings();
     }
 
+    IModelRuntime* models() override {
+        return m_host.models();
+    }
+
     Result<std::shared_ptr<IExecutionEnv>> env() override {
         return m_host.env(*m_invocation);
     }
@@ -106,6 +110,15 @@ public:
     Result<std::optional<Json>> snapshotAsOf(const DocDefinition& definition, const DocAddressArgs& args,
                                              std::int64_t entryId) override {
         return m_host.snapshotAsOf(*m_invocation, definition, args, entryId);
+    }
+
+    Result<Json> newTask(const std::string& name, const Json& input) override {
+        auto snapshot = m_snapshot();
+        auto definition = snapshot ? snapshot->task(name) : nullptr;
+        if (!definition || !definition->initial) {
+            return std::unexpected(Error{"missing_task", "Task " + name + " is not registered"});
+        }
+        return Json::object({{"version", definition->version}, {"checkpoint", definition->initial(input)}});
     }
 
     Result<std::optional<Json>> getTask(std::int64_t id) override {

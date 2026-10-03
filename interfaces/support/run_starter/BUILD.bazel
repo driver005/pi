@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "run_starter",
+    deps = [
+        "//interfaces/support/transaction",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/task_options",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

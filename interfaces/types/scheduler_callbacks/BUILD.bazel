@@ -7,6 +7,7 @@ pi_interface(
         "//interfaces/durable/i_conversation_handle",
         "//interfaces/durable/i_execution_env",
         "//interfaces/durable/i_registry_snapshot",
+        "//interfaces/provider/i_model_runtime",
         "//interfaces/support/transaction",
         "//interfaces/types/error",
         "//interfaces/types/json",

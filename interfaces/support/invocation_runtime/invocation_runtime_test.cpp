@@ -75,6 +75,9 @@ public:
     ResolvedSettings settings() override {
         return ResolvedSettings{};
     }
+    IModelRuntime* models() override {
+        return nullptr;
+    }
     Result<std::shared_ptr<IExecutionEnv>> env(TaskInvocation&) override {
         return std::shared_ptr<IExecutionEnv>();
     }

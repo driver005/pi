@@ -9,6 +9,7 @@ export import pi.durable.i_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_registry_snapshot;
+export import pi.provider.i_model_runtime;
 export import pi.support.transaction;
 export import pi.types.error;
 export import pi.types.json;
@@ -22,6 +23,8 @@ export struct SchedulerCallbacks {
     std::function<Result<std::shared_ptr<const IAgent>>(std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>&)> agent;
     /** The settings, read at each access. */
     std::function<ResolvedSettings()> settings;
+    /** The model catalog the built-in tasks call; may be absent (then they fail with no_model). */
+    std::function<IModelRuntime*()> models;
     /** Builds a conversation's environment; null without one. */
     std::function<Result<std::shared_ptr<IExecutionEnv>>(std::int64_t conversationId)> env;
     std::function<std::int64_t()> now;

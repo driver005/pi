@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "tool_call_api",
+    deps = [
+        "//interfaces/durable/i_task_runtime",
+        "//interfaces/durable/i_tool_execution_api",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/delta_differ",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/output_buffer",
+        "//interfaces/support/progress_publisher",
+        "//interfaces/types/bounded_output",
+        "//interfaces/types/output_limits",
+        "//interfaces/types/tool_diagnostic",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "assistant_entries",
+    deps = [
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/transaction",
+        "//interfaces/support/usage_ledger",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)
