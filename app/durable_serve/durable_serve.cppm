@@ -4,6 +4,7 @@ import std;
 export import pi.coding_services;
 export import pi.server.i_session_opener;
 export import pi.types.coding_startup_options;
+import pi.durable_toolbox;
 import pi.durable.sqlite_database;
 import pi.durable.sqlite_storage;
 import pi.serve.durable_session_opener;
@@ -24,8 +25,9 @@ import pi.tools.write_tool;
 /**
  * The composition of durable sessions for `pi serve`: SQLite session files, pi's coding tools and resources per working
  * directory, the user's settings as harness policy, and the model a new session starts with. Everything per directory
- * (settings, tools, resources) is built on first use and kept, like pi at startup. Tools of plugins and MCP servers are not
- * offered to durable sessions yet.
+ * (settings, tools, resources) is built on first use and kept, like pi at startup. The tools of plugins and MCP servers
+ * (`DurableToolbox`) are offered next to the built-in ones; a server that connects late drops the directory's tool set, which
+ * tells the sessions to install their tools again.
  */
 export class DurableServe {
 public:
@@ -88,12 +90,26 @@ private:
         tools.push_back(std::make_shared<GrepTool>(platform.processes(), platform.files(), cwd));
         tools.push_back(std::make_shared<FindTool>(platform.files(), cwd));
         tools.push_back(std::make_shared<LsTool>(platform.files(), cwd));
-        if (m_startup.noTools) {
-            tools.clear();
-        } else if (m_startup.tools) {
-            std::erase_if(tools, [&](const std::shared_ptr<ITool>& tool) { return std::ranges::find(*m_startup.tools, tool->definition().name) == m_startup.tools->end(); });
+        for (const std::shared_ptr<ITool>& tool : toolboxFor(cwd).tools()) {
+            tools.push_back(tool);
+        }
+        const std::optional<std::vector<std::string>> allowed = m_startup.noTools ? std::optional<std::vector<std::string>>(std::vector<std::string>{}) : m_startup.tools ? m_startup.tools : settingsFor(cwd)->view().defaultTools();
+        if (allowed) {
+            std::erase_if(tools, [&](const std::shared_ptr<ITool>& tool) { return std::ranges::find(*allowed, tool->definition().name) == allowed->end(); });
         }
         return tools;
+    }
+
+    /** The toolbox of one directory, made once; tools a server adds later drop the directory's tool set. */
+    DurableToolbox& toolboxFor(const std::string& cwd) {
+        const std::lock_guard<std::mutex> lock(m_toolboxMutex);
+        auto found = m_toolboxes.find(cwd);
+        if (found == m_toolboxes.end()) {
+            auto toolbox = std::make_unique<DurableToolbox>(m_services, *settingsFor(cwd), cwd, m_agentDir, m_startup);
+            toolbox->onChange([this, cwd] { m_tools->invalidate(cwd); });
+            found = m_toolboxes.emplace(cwd, std::move(toolbox)).first;
+        }
+        return *found->second;
     }
 
     LoadedResources loadResources(const std::string& cwd) {
@@ -157,4 +173,7 @@ private:
     std::map<std::string, std::shared_ptr<SettingsManager>> m_settings;
     std::shared_ptr<ToolSetCache> m_tools;
     std::shared_ptr<ResourceSetCache> m_resources;
+    std::mutex m_toolboxMutex;
+    // After the settings the toolboxes use; destroyed first.
+    std::map<std::string, std::unique_ptr<DurableToolbox>> m_toolboxes;
 };

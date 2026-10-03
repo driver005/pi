@@ -15,7 +15,13 @@ class DurableSessionOpenerTest : public ::testing::Test {
 protected:
     DurableSessionOpenerTest()
         : m_faux(m_executor, m_clock),
-          m_tools(std::make_shared<ToolSetCache>([](const std::string& cwd) { return ToolSetCache::ToolSet{std::make_shared<ScriptedTool>("echo", "pong from " + cwd)}; })),
+          m_tools(std::make_shared<ToolSetCache>([this](const std::string& cwd) {
+              ToolSetCache::ToolSet tools{std::make_shared<ScriptedTool>("echo", "pong from " + cwd)};
+              if (m_withExtra) {
+                  tools.push_back(std::make_shared<ScriptedTool>("extra", "extra result"));
+              }
+              return tools;
+          })),
           m_resources(std::make_shared<ResourceSetCache>([](const std::string&) { return LoadedResources{}; })) {
         Model model;
         model.id = "m";
@@ -64,6 +70,7 @@ protected:
     std::vector<std::string> m_paths;
     std::vector<std::string> m_selected;
     bool m_failStorage = false;
+    std::atomic<bool> m_withExtra{false};
 };
 
 TEST_F(DurableSessionOpenerTest, OpensTheSessionsSqliteFileAndServesItsRootConversation) {
@@ -105,4 +112,30 @@ TEST_F(DurableSessionOpenerTest, StorageFailuresFailTheOpen) {
     auto handle = opened.open(m_record, ServiceContext{});
     ASSERT_FALSE(handle.has_value());
     EXPECT_EQ(handle.error().message, "cannot open");
+}
+
+TEST_F(DurableSessionOpenerTest, ToolsThatAppearWhileTheSessionRunsAreOfferedToItsNextRequests) {
+    DurableSessionOpener opened = opener();
+    auto handle = opened.open(m_record, ServiceContext{});
+    ASSERT_TRUE(handle.has_value());
+    auto attachment = (*handle)->attachClient(ServiceContext{});
+    ASSERT_TRUE(attachment.has_value());
+    // Before the change the model's call of `extra` finds no such tool.
+    m_faux.enqueue(m_faux.toolCallResponse("extra", Json::object(), "c1"));
+    m_faux.enqueue(m_faux.textResponse("first"));
+    const Json first = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "go"}, {"images", nullptr}});
+    EXPECT_EQ(call(**attachment, "pi.agent-controller", "waitForPrompt", first.at("operationId")).at("text"), "first");
+    m_withExtra = true;
+    m_tools->invalidate(m_record.cwd);
+    m_faux.enqueue(m_faux.toolCallResponse("extra", Json::object(), "c2"));
+    m_faux.enqueue(m_faux.textResponse("second"));
+    const Json second = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "again"}, {"images", nullptr}});
+    EXPECT_EQ(call(**attachment, "pi.agent-controller", "waitForPrompt", second.at("operationId")).at("text"), "second");
+    // The transcript holds the refusal of the first call and the real result of the second.
+    auto subscribed = (*attachment)->invokeService(Json{{"serviceId", "$chord.service"}, {"member", "subscribe"}, {"args", Json::array({"t", "pi.transcript", "singleton"})}},
+                                                   [](const std::string&, const Json&, const ServiceContext&) {}, ServiceContext{std::make_shared<AbortSignal>()});
+    ASSERT_TRUE(subscribed.has_value() && *subscribed);
+    const std::string transcript = (**subscribed).dump();
+    EXPECT_NE(transcript.find("is not available"), std::string::npos) << transcript;
+    EXPECT_NE(transcript.find("extra result"), std::string::npos) << transcript;
 }

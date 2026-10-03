@@ -84,3 +84,21 @@ TEST_F(DurableServeTest, ANewSessionStartsWithTheStartupModel) {
     const Json levels = call(**attachment, "pi.models", "getThinkingLevels", Json());
     EXPECT_TRUE(levels.is_array());
 }
+
+TEST_F(DurableServeTest, PluginToolsAreOfferedToDurableSessions) {
+    m_startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    m_startup.noPlugins = false;
+    DurableServe durable(*m_services, m_startup, m_dir + "/agent");
+    auto* faux = m_services->models().faux();
+    faux->enqueue(faux->toolCallResponse("hello", Json{{"name", "Ada"}}, "c1"));
+    faux->enqueue(faux->textResponse("done"));
+    auto handle = durable.opener()->open(record(), ServiceContext{});
+    ASSERT_TRUE(handle.has_value()) << handle.error().message;
+    auto attachment = (*handle)->attachClient(ServiceContext{});
+    ASSERT_TRUE(attachment.has_value());
+    const Json prompted = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "greet"}, {"images", nullptr}});
+    ASSERT_TRUE(prompted.at("accepted").get<bool>());
+    EXPECT_EQ(call(**attachment, "pi.agent-controller", "waitForPrompt", prompted.at("operationId")).at("text"), "done");
+    const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
+    EXPECT_NE(subscribed.dump().find("Hello, Ada!"), std::string::npos) << subscribed.dump();
+}

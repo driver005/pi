@@ -4,6 +4,7 @@ pi_module(
     name = "durable_serve",
     deps = [
         "//app/coding_services",
+        "//app/durable_toolbox",
         "//interfaces/server/i_session_opener",
         "//interfaces/support/model_selector",
         "//interfaces/support/resource_set_cache",
@@ -26,4 +27,5 @@ pi_module(
     test_deps = [
         "//src/ai/faux_provider",
     ],
+    data = ["//plugins/hello_tool"],
 )

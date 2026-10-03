@@ -22,7 +22,7 @@ protected:
         m_models.setStreamHandler([this](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
             return m_faux.stream(model, context, options);
         });
-        auto registry = std::make_unique<Registry>(BuiltinTasks().all());
+        auto registry = std::make_shared<Registry>(BuiltinTasks().all());
         HarnessOptions options;
         options.models = &m_models;
         options.registry = registry.get();
@@ -32,7 +32,7 @@ protected:
         create.agent = Json::object({{"model", Json::object({{"provider", "faux"}, {"modelId", "m"}})}});
         auto root = harness->root(create);
         EXPECT_TRUE(root.has_value());
-        m_session = std::make_unique<DurableServedSession>(std::move(registry), std::move(harness), *root, m_models, nullptr);
+        m_session = std::make_unique<DurableServedSession>(std::move(registry), std::move(harness), *root, m_models, nullptr, [this] { ++m_closedHooks; });
     }
 
     Json call(IServiceAttachment& attachment, const std::string& service, const std::string& member, const Json& args) {
@@ -46,6 +46,7 @@ protected:
     FixedClock m_clock;
     FauxProvider m_faux;
     FakeModelRuntime m_models;
+    int m_closedHooks = 0;
     std::unique_ptr<DurableServedSession> m_session;
 };
 
@@ -67,6 +68,7 @@ TEST_F(DurableServedSessionTest, ServesTheThreeSessionServicesToEveryClient) {
 TEST_F(DurableServedSessionTest, ClosingRefusesNewClientsAndIsIdempotent) {
     ASSERT_TRUE(m_session->close(ServiceContext{}).has_value());
     EXPECT_TRUE(m_session->close(ServiceContext{}).has_value());
+    EXPECT_EQ(m_closedHooks, 1);
     auto refused = m_session->attachClient(ServiceContext{});
     ASSERT_FALSE(refused.has_value());
     EXPECT_EQ(refused.error().code, "server_draining");

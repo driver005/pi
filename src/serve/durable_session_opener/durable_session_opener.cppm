@@ -43,7 +43,7 @@ public:
         if (!storage) {
             return std::unexpected(storage.error());
         }
-        auto registry = std::make_unique<Registry>(BuiltinTasks().all());
+        auto registry = std::make_shared<Registry>(BuiltinTasks().all());
         if (auto installed = registry->install(ToolBridge(m_tools, record.cwd).extension("coding-tools")); !installed) {
             return std::unexpected(installed.error());
         }
@@ -70,7 +70,13 @@ public:
         if (auto resumed = harness->resume(); !resumed) {
             return std::unexpected(resumed.error());
         }
-        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(std::move(registry), std::move(harness), *root, m_models, m_onSelected));
+        // Tools of plugins and MCP servers can appear while the session runs: the extension is installed again then.
+        const std::int64_t subscription = m_tools->subscribe([weak = std::weak_ptr<Registry>(registry), tools = m_tools, cwd = record.cwd](const std::string& changed) {
+            if (const std::shared_ptr<Registry> live = weak.lock(); live && changed == cwd) {
+                (void)live->install(ToolBridge(tools, cwd).extension("coding-tools"));
+            }
+        });
+        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }));
     }
 
 private:

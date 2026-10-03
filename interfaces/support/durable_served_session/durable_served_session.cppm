@@ -18,8 +18,11 @@ import pi.support.remote_service_provider;
  */
 export class DurableServedSession : public IRoutedSessionHandle {
 public:
-    DurableServedSession(std::unique_ptr<Registry> registry, std::unique_ptr<Harness> harness, std::shared_ptr<Conversation> root, IModelRuntime& models, DurableModelsService::SelectedListener onSelected)
+    /** `onClosed` runs once when the session closes, before the services and the registry go. */
+    DurableServedSession(std::shared_ptr<Registry> registry, std::unique_ptr<Harness> harness, std::shared_ptr<Conversation> root, IModelRuntime& models, DurableModelsService::SelectedListener onSelected,
+                         std::function<void()> onClosed = nullptr)
         : m_registry(std::move(registry)),
+          m_onClosed(std::move(onClosed)),
           m_harness(std::move(harness)),
           m_root(std::move(root)),
           m_provider(std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{{"pi.agent-controller", "singleton"}, {"pi.models", "singleton"}, {"pi.transcript", "singleton"}})) {
@@ -58,6 +61,9 @@ public:
             }
             m_closed = true;
         }
+        if (m_onClosed) {
+            m_onClosed();
+        }
         // Stop the work first: the services outlive every publication the running tasks still deliver to them.
         (void)m_root->abort();
         auto closed = m_harness->close();
@@ -66,7 +72,8 @@ public:
     }
 
 private:
-    std::unique_ptr<Registry> m_registry;
+    std::shared_ptr<Registry> m_registry;
+    std::function<void()> m_onClosed;
     std::unique_ptr<Harness> m_harness;
     std::shared_ptr<Conversation> m_root;
     std::shared_ptr<RemoteServiceProvider> m_provider;
