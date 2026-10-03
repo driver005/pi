@@ -49,7 +49,7 @@ pi serve [--server-dir DIR] [--server-id UUID] [--session-dir DIR] [--cwd DIR] [
 
 - Socket: `<server-dir>/<server-id>.sock` (mode 0600, directory 0700, same-user peers only). The server directory is `--server-dir`, `$PI_SERVER_DIR` or `~/.pi/server`. A stale socket file is replaced; a live one or a non-socket file is refused.
 - Identity: `--server-id`, `$PI_SERVER_ID`, or the UUIDv4 kept in `<server-dir>/default-server-id`.
-- Sessions: one directory per session under `--session-dir` (default `<agent-dir>/server-sessions`) with `meta.json` (`{createdAt, cwd}`, as in the TS server) and `session.sqlite`: a durable harness (`DurableSessionOpener`, `DurableServe` in the composition root) whose root conversation the services expose. pi's coding tools (`ToolBridge` over the `ITool`s of the conversation's directory) and system prompt (`PiPromptExtension`) are installed in a registry per session, the user's settings give the retry, compaction and queue policy, and tasks a stop interrupted resume when the session opens. The tools of plugins and MCP servers (`DurableToolbox`: plugins from the agent directory, the trusted project and `--plugin`, servers from `mcp.json`) are offered next to the built-in ones, and a server that connects late makes the sessions install their tools again; the hooks of those plugins reach the sessions of their directory through the `plugin-hooks` extension (`PluginHookExtension`): `tool_call` (block or rewrite arguments, from `beforeTool`), `tool_result` (replace content, details or the error flag, from `afterTool`), `context` (replace the request messages, from `beforeRequest`) and the observations `message_end` and `turn_end`; the `terminate` flag of `tool_call` and the other TS events are not mapped. `--session-tree` keeps sessions as JSONL session trees over the AgentSession runtime instead (the two layouts must not share a session directory).
+- Sessions: one directory per session under `--session-dir` (default `<agent-dir>/server-sessions`) with `meta.json` (`{createdAt, cwd}`, as in the TS server) and `session.sqlite`: a durable harness (`DurableSessionOpener`, `DurableServe` in the composition root) whose root conversation the services expose. pi's coding tools (`ToolBridge` over the `ITool`s of the conversation's directory) and system prompt (`PiPromptExtension`) are installed in a registry per session, the user's settings give the retry, compaction and queue policy, and tasks a stop interrupted resume when the session opens. The tools of plugins and MCP servers (`DurableToolbox`, reloadable through the session's `pi.session-plugins` service: plugins from the agent directory, the trusted project and `--plugin`, servers from `mcp.json`) are offered next to the built-in ones, and a server that connects late makes the sessions install their tools again; the hooks of those plugins reach the sessions of their directory through the `plugin-hooks` extension (`PluginHookExtension`): `tool_call` (block or rewrite arguments, from `beforeTool`), `tool_result` (replace content, details or the error flag, from `afterTool`), `context` (replace the request messages, from `beforeRequest`) and the observations `message_end` and `turn_end`; the `terminate` flag of `tool_call` and the other TS events are not mapped. `--session-tree` keeps sessions as JSONL session trees over the AgentSession runtime instead (the two layouts must not share a session directory).
 - Stop with SIGINT, SIGTERM or SIGHUP: clients are disconnected, running agents are aborted, the socket is removed.
 
 Services (TS shapes, `packages/coding-agent/src/experimental/services`):
@@ -62,7 +62,7 @@ Services (TS shapes, `packages/coding-agent/src/experimental/services`):
 | session | `pi.models` | state `{catalog, configuration, refresh}`, `select`, `selectThinking`, `cycleThinking`, `getThinkingLevels`, `refresh` |
 | session | `pi.transcript` | durable sessions: state `{conversation, entries, docs}`, the durable `ConversationView` of the TS service; with `--session-tree`: `{messages, isStreaming}` (AgentSession messages in session-file JSON) |
 
-With durable sessions `operationId` and `entryId` are submission ids (a compaction's `operationId` is its task id), so they survive a restart. `PresentationPlugins`, `SlashCommands`, `PresentationUI` and `SessionPlugins` are not provided. Sessions run in-process (one agent per session, shared by every attached client) rather than in a worker process each.
+With durable sessions `operationId` and `entryId` are submission ids (a compaction's `operationId` is its task id), so they survive a restart. `PresentationPlugins` (empty selection) is provided server-wide and `SessionPlugins` by durable sessions (see Plugin services); `SlashCommands` and `PresentationUI` are client-side services of the TS TUI and not provided. Sessions run in-process (one agent per session, shared by every attached client) rather than in a worker process each.
 
 Requests run on a 64-thread pool and agent runs on a separate 32-thread pool, so calls that wait (`waitForPrompt`, `abort`) cannot starve the runs they wait for.
 
@@ -71,6 +71,10 @@ Offline smoke test:
 ```
 PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-id 00000000-0000-4000-8000-000000000001
 ```
+
+## Plugin services
+
+`pi.presentation-plugins` (server-wide, one per client; `prepareSession`, `reload`) answers the empty selection `{presentationFacetBundles: []}` after the same checks as TS (session exists, `reload` needs a prepared selection, detaching clears it): presentation plugins are JavaScript bundles and this server only hosts native plugins. `pi.session-plugins` (per durable session; `reload`) unloads the plugins of the session's directory and loads them again (`DurableToolbox::reload`), which replaces their tools and hooks in every session of that directory. Nothing may be running a plugin tool during a reload. The session-tree backend does not offer `pi.session-plugins`.
 
 ## Protocol client
 
@@ -129,4 +133,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); HTML export; the package manager.

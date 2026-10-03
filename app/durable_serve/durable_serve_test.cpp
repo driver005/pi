@@ -123,3 +123,25 @@ TEST_F(DurableServeTest, PluginHooksGuardTheToolCallsOfDurableSessions) {
     const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
     EXPECT_NE(subscribed.dump().find("hello plugin refuses rm -rf"), std::string::npos) << subscribed.dump();
 }
+
+TEST_F(DurableServeTest, ASessionReloadsThePluginsOfItsDirectory) {
+    m_startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    m_startup.noPlugins = false;
+    DurableServe durable(*m_services, m_startup, m_dir + "/agent");
+    auto* faux = m_services->models().faux();
+    auto handle = durable.opener()->open(record(), ServiceContext{});
+    ASSERT_TRUE(handle.has_value()) << handle.error().message;
+    auto attachment = (*handle)->attachClient(ServiceContext{});
+    ASSERT_TRUE(attachment.has_value());
+    const Json catalogue = callWith(**attachment, "$chord.service", "catalogue", Json::array());
+    EXPECT_NE(catalogue.dump().find("pi.session-plugins"), std::string::npos);
+    // Warm the directory's tool set, reload, and prove the new plugin generation serves the tool.
+    callWith(**attachment, "pi.session-plugins", "reload", Json::array());
+    faux->enqueue(faux->toolCallResponse("hello", Json{{"name", "Grace"}}, "c1"));
+    faux->enqueue(faux->textResponse("done"));
+    const Json prompted = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "greet"}, {"images", nullptr}});
+    ASSERT_TRUE(prompted.at("accepted").get<bool>());
+    EXPECT_EQ(call(**attachment, "pi.agent-controller", "waitForPrompt", prompted.at("operationId")).at("text"), "done");
+    const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
+    EXPECT_NE(subscribed.dump().find("Hello, Grace!"), std::string::npos) << subscribed.dump();
+}

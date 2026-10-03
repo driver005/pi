@@ -30,6 +30,7 @@ public:
     DurableToolbox(CodingServices& services, SettingsManager& settings, std::string cwd, std::string agentDir, const CodingStartupOptions& startup)
         : m_services(services),
           m_settings(settings),
+          m_startup(startup),
           m_cwd(std::move(cwd)),
           m_agentDir(std::move(agentDir)),
           m_pluginDiscovery(services.platform().files()),
@@ -60,11 +61,43 @@ public:
         return m_tools.all();
     }
 
-    /** Runs `listener` whenever a server adds tools after startup. */
+    /** Runs `listener` whenever a server adds tools after startup and after reload(). */
     void onChange(ChangeListener listener) {
+        {
+            const std::lock_guard<std::mutex> lock(m_listenerMutex);
+            m_listener = listener;
+        }
         if (m_mcp) {
             m_mcp->setToolsListener([listener = std::move(listener)](const std::vector<std::string>&) { listener(); });
         }
+    }
+
+    /**
+     * Unloads the plugins and loads them again from the same places, so plugins added, removed or rebuilt on disk take
+     * effect; their tools and hooks are replaced and the change listener runs. Nothing may be executing a plugin's tool
+     * meanwhile: the plugin's code is unmapped. Reloads run one at a time. Plugin problems become diagnostics; the
+     * result fails only when a plugin could not be loaded, after the others did load.
+     */
+    Result<void> reload() {
+        const std::lock_guard<std::mutex> serial(m_reloadMutex);
+        m_plugins.shutdown();
+        {
+            const std::lock_guard<std::mutex> lock(m_listenerMutex);
+            std::erase_if(m_diagnostics, [](const std::string& line) { return line.starts_with("Plugin: "); });
+        }
+        const std::vector<std::string> problems = loadPlugins(m_startup);
+        ChangeListener listener;
+        {
+            const std::lock_guard<std::mutex> lock(m_listenerMutex);
+            listener = m_listener;
+        }
+        if (listener) {
+            listener();
+        }
+        if (!problems.empty()) {
+            return std::unexpected(Error{"plugin", problems.front()});
+        }
+        return {};
     }
 
     /** The bus the directory's plugins subscribe to; stays valid after the plugins shut down (then without handlers). */
@@ -73,13 +106,15 @@ public:
     }
 
     std::vector<std::string> diagnostics() const {
+        const std::lock_guard<std::mutex> lock(m_listenerMutex);
         return m_diagnostics;
     }
 
 private:
-    void loadPlugins(const CodingStartupOptions& startup) {
+    std::vector<std::string> loadPlugins(const CodingStartupOptions& startup) {
+        std::vector<std::string> problems;
         if (startup.noPlugins) {
-            return;
+            return problems;
         }
         std::vector<std::string> paths = m_pluginDiscovery.discover(m_agentDir + "/plugins");
         if (m_settings.projectTrusted()) {
@@ -89,8 +124,10 @@ private:
         }
         paths.insert(paths.end(), startup.pluginPaths.begin(), startup.pluginPaths.end());
         for (const Error& error : m_plugins.load(paths)) {
-            m_diagnostics.push_back("Plugin: " + error.message);
+            addDiagnostic("Plugin: " + error.message);
+            problems.push_back(error.message);
         }
+        return problems;
     }
 
     /** Skipped when the tool set is restricted, since MCP tools are not in it. */
@@ -104,7 +141,7 @@ private:
         load.projectTrusted = m_settings.projectTrusted();
         const McpConfigResult config = m_mcpConfigs.load(load);
         for (const std::string& error : config.errors) {
-            m_diagnostics.push_back("MCP config: " + error);
+            addDiagnostic("MCP config: " + error);
         }
         if (config.servers.empty()) {
             return;
@@ -114,9 +151,14 @@ private:
         m_mcp->start(config.servers, m_cwd, std::chrono::milliseconds(startup.mcpStartupWaitMs));
         for (const McpServerStatus& status : m_mcp->status()) {
             if (status.state == McpServerState::Failed || status.state == McpServerState::NeedsAuth) {
-                m_diagnostics.push_back("MCP server \"" + status.name + "\": " + (status.error.empty() ? "needs authentication" : status.error));
+                addDiagnostic("MCP server \"" + status.name + "\": " + (status.error.empty() ? "needs authentication" : status.error));
             }
         }
+    }
+
+    void addDiagnostic(const std::string& line) {
+        const std::lock_guard<std::mutex> lock(m_listenerMutex);
+        m_diagnostics.push_back(line);
     }
 
     std::optional<std::string> providerToken(const std::string& provider) {
@@ -129,6 +171,7 @@ private:
 
     CodingServices& m_services;
     SettingsManager& m_settings;
+    CodingStartupOptions m_startup;
     std::string m_cwd;
     std::string m_agentDir;
     std::vector<std::string> m_diagnostics;
@@ -142,4 +185,7 @@ private:
     McpResultConverter m_mcpResults;
     McpConnector m_mcpConnector;
     std::unique_ptr<McpServerManager> m_mcp;
+    std::mutex m_reloadMutex;
+    mutable std::mutex m_listenerMutex;
+    ChangeListener m_listener;
 };

@@ -51,7 +51,7 @@ TEST_F(ServerServiceHostTest, OffersTheDirectoryAndManagementServices) {
     for (const Json& entry : catalogue) {
         ids.insert(entry["serviceId"].get<std::string>());
     }
-    EXPECT_EQ(ids, (std::set<std::string>{"pi.session-directory", "pi.session-management"}));
+    EXPECT_EQ(ids, (std::set<std::string>{"pi.session-directory", "pi.session-management", "pi.presentation-plugins"}));
 }
 
 TEST_F(ServerServiceHostTest, ManagementCallsReachThePresentationAndTheCatalog) {
@@ -100,4 +100,17 @@ TEST_F(ServerServiceHostTest, ReleasedAttachmentsStopWorking) {
     (*attachment)->release(context());
     const Json call = {{"serviceId", "pi.session-management"}, {"member", "detach"}, {"args", Json::array()}};
     EXPECT_FALSE((*attachment)->invokeService(call, [](const std::string&, const Json&, const ServiceContext&) {}, context()));
+}
+
+TEST_F(ServerServiceHostTest, PresentationPluginsFollowTheClientsAttachment) {
+    ASSERT_TRUE(m_catalog.create(std::string("demo")).has_value());
+    auto attachment = m_host.attachClient(m_presentation, context());
+    ASSERT_TRUE(attachment);
+    const Json selection = invoke(**attachment, "pi.presentation-plugins", "prepareSession", Json::array({Json{{"sessionId", "demo"}, {"packagePaths", nullptr}}}));
+    EXPECT_EQ(selection, Json::parse(R"({"presentationFacetBundles":[]})"));
+    EXPECT_EQ(invoke(**attachment, "pi.presentation-plugins", "reload"), Json::parse(R"({"presentationFacetBundles":[]})"));
+    invoke(**attachment, "pi.session-management", "detach");
+    const Json call = {{"serviceId", "pi.presentation-plugins"}, {"member", "reload"}, {"args", Json::array()}};
+    const auto after = (*attachment)->invokeService(call, [](const std::string&, const Json&, const ServiceContext&) {}, context());
+    EXPECT_FALSE(after.has_value());
 }

@@ -12,6 +12,7 @@ pi_support(
         "//interfaces/support/provider_service_attachment",
         "//interfaces/support/registry",
         "//interfaces/support/remote_service_provider",
+        "//interfaces/support/session_plugins_service",
     ],
     test_deps = [
         "//src/ai/faux_provider",

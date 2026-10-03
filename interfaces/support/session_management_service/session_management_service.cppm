@@ -12,10 +12,12 @@ export import pi.support.session_directory_service;
  */
 export class SessionManagementService : public IRemoteService {
 public:
-    SessionManagementService(IServerPresentation& presentation, ISessionCatalog& catalog, SessionDirectoryService& directory)
+    /** `onDetached` runs after the client's session detached, under the mutation lock. */
+    SessionManagementService(IServerPresentation& presentation, ISessionCatalog& catalog, SessionDirectoryService& directory, std::function<void()> onDetached = nullptr)
         : m_presentation(presentation),
           m_catalog(catalog),
-          m_directory(directory) {}
+          m_directory(directory),
+          m_onDetached(std::move(onDetached)) {}
 
     std::map<std::string, Method> methods() override {
         std::map<std::string, Method> methods;
@@ -98,6 +100,9 @@ private:
         if (auto detached = m_presentation.detachSession(context); !detached) {
             return std::unexpected(detached.error());
         }
+        if (m_onDetached) {
+            m_onDetached();
+        }
         return std::optional<Json>();
     }
 
@@ -111,4 +116,5 @@ private:
     IServerPresentation& m_presentation;
     ISessionCatalog& m_catalog;
     SessionDirectoryService& m_directory;
+    std::function<void()> m_onDetached;
 };

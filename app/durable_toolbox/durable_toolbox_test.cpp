@@ -112,3 +112,48 @@ TEST_F(DurableToolboxTest, BadMcpConfigAndFailingServersAreDiagnostics) {
     EXPECT_NE(diagnostics[1].find("MCP server \"broken\""), std::string::npos);
     EXPECT_TRUE(toolbox->tools().empty());
 }
+
+TEST_F(DurableToolboxTest, ReloadLoadsThePluginsAgainAndTellsTheListener) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    startup.noMcp = true;
+    const auto toolbox = open(startup);
+    std::atomic<int> changes{0};
+    toolbox->onChange([&changes] { ++changes; });
+    const std::shared_ptr<ITool> before = toolbox->tools().at(0);
+    ASSERT_TRUE(toolbox->reload().has_value());
+    EXPECT_EQ(names(*toolbox), std::vector<std::string>{"hello"});
+    EXPECT_NE(toolbox->tools().at(0), before);
+    EXPECT_EQ(changes.load(), 1);
+    EXPECT_TRUE(toolbox->hooks()->hasHandlers("tool_call"));
+    EXPECT_TRUE(toolbox->diagnostics().empty());
+}
+
+TEST_F(DurableToolboxTest, ReloadReportsAPluginThatNoLongerLoadsAndKeepsTheOthers) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    startup.noMcp = true;
+    const auto toolbox = open(startup);
+    const std::string broken = m_dir + "/agent/plugins/broken.so";
+    std::filesystem::create_directories(m_dir + "/agent/plugins");
+    std::ofstream(broken) << "not a shared object";
+    const auto reloaded = toolbox->reload();
+    ASSERT_FALSE(reloaded.has_value());
+    EXPECT_EQ(reloaded.error().code, "plugin");
+    EXPECT_EQ(names(*toolbox), std::vector<std::string>{"hello"});
+    EXPECT_EQ(toolbox->diagnostics().size(), 1u);
+    std::filesystem::remove(broken);
+    ASSERT_TRUE(toolbox->reload().has_value());
+    EXPECT_TRUE(toolbox->diagnostics().empty());
+}
+
+TEST_F(DurableToolboxTest, RepeatedReloadsDoNotStackTools) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    startup.noMcp = true;
+    const auto toolbox = open(startup);
+    ASSERT_EQ(names(*toolbox).size(), 1u);
+    ASSERT_TRUE(toolbox->reload().has_value());
+    ASSERT_TRUE(toolbox->reload().has_value());
+    EXPECT_EQ(names(*toolbox).size(), 1u);
+}

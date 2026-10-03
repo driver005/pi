@@ -14,6 +14,7 @@ import pi.support.pi_prompt_extension;
 import pi.support.plugin_hook_extension;
 import pi.support.registry;
 import pi.support.resource_set_cache;
+import pi.support.session_plugins_service;
 import pi.support.tool_bridge;
 import pi.support.tool_set_cache;
 
@@ -22,7 +23,8 @@ import pi.support.tool_set_cache;
  * directory (the layout of the TS server), over which a harness runs with pi's coding tools and system prompt installed
  * in a registry of its own. The root conversation is created on first open with the agent seed (directory, model, thinking
  * level) and found again after that; tasks a stop interrupted resume. When a hook source is given, the plugin hooks of the
- * session's directory are installed as an extension (`plugin-hooks`). Counterpart of createSessionWorkerServices.
+ * session's directory are installed as an extension (`plugin-hooks`), and when a plugin reload is given the session offers
+ * `pi.session-plugins`. Counterpart of createSessionWorkerServices.
  */
 export class DurableSessionOpener : public ISessionOpener {
 public:
@@ -32,9 +34,11 @@ public:
     using AgentSeed = std::function<Json(const std::string& cwd)>;
     /** The hook bus of a directory's plugins. */
     using HooksSource = std::function<std::shared_ptr<IHookBus>(const std::string& cwd)>;
+    /** Reloads the plugins of a directory. */
+    using PluginsReload = std::function<Result<void>(const std::string& cwd)>;
 
     DurableSessionOpener(IModelRuntime& models, StorageOpener storage, std::shared_ptr<ToolSetCache> tools, std::shared_ptr<ResourceSetCache> resources, SettingsSource settings, AgentSeed seed,
-                         DurableModelsService::SelectedListener onSelected, HooksSource hooks = {})
+                         DurableModelsService::SelectedListener onSelected, HooksSource hooks = {}, PluginsReload reloadPlugins = {})
         : m_models(models),
           m_storage(std::move(storage)),
           m_tools(std::move(tools)),
@@ -42,7 +46,8 @@ public:
           m_settings(std::move(settings)),
           m_seed(std::move(seed)),
           m_onSelected(std::move(onSelected)),
-          m_hooks(std::move(hooks)) {}
+          m_hooks(std::move(hooks)),
+          m_reloadPlugins(std::move(reloadPlugins)) {}
 
     Result<std::shared_ptr<IRoutedSessionHandle>> open(const SessionRecord& record, const ServiceContext&) override {
         auto storage = m_storage(record.directory + "/session.sqlite");
@@ -89,10 +94,17 @@ public:
                 (void)live->install(ToolBridge(tools, cwd).extension("coding-tools"));
             }
         });
-        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }));
+        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }, sessionReload(record.cwd)));
     }
 
 private:
+    SessionPluginsService::Reload sessionReload(const std::string& cwd) const {
+        if (!m_reloadPlugins) {
+            return nullptr;
+        }
+        return [reload = m_reloadPlugins, cwd]() { return reload(cwd); };
+    }
+
     IModelRuntime& m_models;
     StorageOpener m_storage;
     std::shared_ptr<ToolSetCache> m_tools;
@@ -101,4 +113,5 @@ private:
     AgentSeed m_seed;
     DurableModelsService::SelectedListener m_onSelected;
     HooksSource m_hooks;
+    PluginsReload m_reloadPlugins;
 };

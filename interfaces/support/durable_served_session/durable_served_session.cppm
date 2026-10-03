@@ -10,27 +10,31 @@ export import pi.support.harness;
 export import pi.support.registry;
 import pi.support.provider_service_attachment;
 import pi.support.remote_service_provider;
+import pi.support.session_plugins_service;
 
 /**
  * One live durable session offered to connections: the agent controller, models and transcript services of the root
- * conversation of a harness, shared by every attached client. It owns the harness and the registry the harness reads, and
+ * conversation of a harness, shared by every attached client, plus `pi.session-plugins` when the host can reload its plugins. It owns the harness and the registry the harness reads, and
  * closing it disposes the services, aborts the run and closes the harness (and with it the storage).
  */
 export class DurableServedSession : public IRoutedSessionHandle {
 public:
     /** `onClosed` runs once when the session closes, before the services and the registry go. */
     DurableServedSession(std::shared_ptr<Registry> registry, std::unique_ptr<Harness> harness, std::shared_ptr<Conversation> root, IModelRuntime& models, DurableModelsService::SelectedListener onSelected,
-                         std::function<void()> onClosed = nullptr)
+                         std::function<void()> onClosed = nullptr, SessionPluginsService::Reload reloadPlugins = nullptr)
         : m_registry(std::move(registry)),
           m_onClosed(std::move(onClosed)),
           m_harness(std::move(harness)),
           m_root(std::move(root)),
-          m_provider(std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{{"pi.agent-controller", "singleton"}, {"pi.models", "singleton"}, {"pi.transcript", "singleton"}})) {
+          m_provider(std::make_shared<RemoteServiceProvider>(definitions(static_cast<bool>(reloadPlugins)))) {
         auto view = m_harness->viewState(m_root->id());
         if (view) {
             m_provider->provide("pi.agent-controller", std::make_shared<DurableAgentControllerService>(*m_harness, m_root));
             m_provider->provide("pi.models", std::make_shared<DurableModelsService>(m_root, *view, models, std::move(onSelected)));
             m_provider->provide("pi.transcript", std::make_shared<DurableTranscriptService>(*view));
+            if (reloadPlugins) {
+                m_provider->provide("pi.session-plugins", std::make_shared<SessionPluginsService>(std::move(reloadPlugins)));
+            }
         }
     }
 
@@ -72,6 +76,14 @@ public:
     }
 
 private:
+    std::vector<ServiceDefinition> definitions(bool withPlugins) const {
+        std::vector<ServiceDefinition> found{{"pi.agent-controller", "singleton"}, {"pi.models", "singleton"}, {"pi.transcript", "singleton"}};
+        if (withPlugins) {
+            found.push_back({"pi.session-plugins", "singleton"});
+        }
+        return found;
+    }
+
     std::shared_ptr<Registry> m_registry;
     std::function<void()> m_onClosed;
     std::unique_ptr<Harness> m_harness;
