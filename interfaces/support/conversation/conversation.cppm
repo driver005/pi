@@ -5,7 +5,7 @@ module;
 export module pi.support.conversation;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.durable.i_conversation_host;
 export import pi.durable.i_submission;
 export import pi.support.entry_kinds;
@@ -29,7 +29,7 @@ public:
     }
 
     /** The conversation's agent resolved with the current registry snapshot and settings. */
-    Result<std::shared_ptr<const IAgent>> agent() {
+    Result<std::shared_ptr<const IConversationAgent>> agent() {
         return m_host.agent(m_id);
     }
 

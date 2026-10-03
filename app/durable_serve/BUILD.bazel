@@ -1,0 +1,29 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "durable_serve",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/server/i_session_opener",
+        "//interfaces/support/model_selector",
+        "//interfaces/support/resource_set_cache",
+        "//interfaces/support/tool_set_cache",
+        "//interfaces/types/coding_startup_options",
+        "//src/durable/sqlite_database",
+        "//src/durable/sqlite_storage",
+        "//src/serve/durable_session_opener",
+        "//src/session/resource_loader",
+        "//src/session/settings_manager",
+        "//src/tools/bash_tool",
+        "//src/tools/edit_tool",
+        "//src/tools/file_mutation_queue",
+        "//src/tools/find_tool",
+        "//src/tools/grep_tool",
+        "//src/tools/ls_tool",
+        "//src/tools/read_tool",
+        "//src/tools/write_tool",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+    ],
+)

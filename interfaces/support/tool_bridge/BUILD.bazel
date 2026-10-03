@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "tool_bridge",
+    deps = [
+        "//interfaces/support/message_codec",
+        "//interfaces/support/tool_set_cache",
+        "//interfaces/types/extension",
+    ],
+    test_deps = [
+        "//interfaces/support/directory_execution_env",
+        "//interfaces/support/harness",
+        "//src/ai/faux_provider",
+        "//src/durable/memory_storage",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/scripted_tool",
+    ],
+)

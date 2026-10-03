@@ -24,8 +24,8 @@ public:
     std::int64_t now() override {
         return 0;
     }
-    Result<std::shared_ptr<const IAgent>> agent(std::int64_t) override {
-        return std::shared_ptr<const IAgent>();
+    Result<std::shared_ptr<const IConversationAgent>> agent(std::int64_t) override {
+        return std::shared_ptr<const IConversationAgent>();
     }
     Result<void> configure(std::int64_t, const Json&) override {
         return {};

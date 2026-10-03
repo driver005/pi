@@ -13,4 +13,6 @@ export struct CommandLine {
     std::string serverDir;
     /** `serve`: the logical server id (--server-id, else $PI_SERVER_ID); the directory's default when absent. */
     std::optional<std::string> serverId;
+    /** `serve`: keep sessions as session trees over the AgentSession runtime instead of durable harness sessions. */
+    bool sessionTree = false;
 };

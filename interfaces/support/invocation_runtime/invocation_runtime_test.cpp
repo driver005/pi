@@ -3,7 +3,7 @@
 import std;
 import pi.support.invocation_runtime;
 
-class RecordingAgent : public IAgent {
+class RecordingAgent : public IConversationAgent {
 public:
     std::shared_ptr<const AgentSnapshot> snapshot() const override {
         return std::make_shared<AgentSnapshot>();
@@ -68,9 +68,9 @@ public:
     Result<Json> context(TaskInvocation&, std::int64_t, const std::optional<std::int64_t>&) override {
         return Json::object();
     }
-    Result<std::shared_ptr<const IAgent>> resolveAgent(TaskInvocation&, const std::shared_ptr<const IRegistrySnapshot>&) override {
+    Result<std::shared_ptr<const IConversationAgent>> resolveAgent(TaskInvocation&, const std::shared_ptr<const IRegistrySnapshot>&) override {
         ++m_resolutions;
-        return std::shared_ptr<const IAgent>(m_agent);
+        return std::shared_ptr<const IConversationAgent>(m_agent);
     }
     ResolvedSettings settings() override {
         return ResolvedSettings{};

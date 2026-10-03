@@ -20,7 +20,7 @@ protected:
         ASSERT_TRUE(m_registry.install(std::move(extension)).has_value());
     }
 
-    std::vector<std::string> toolNames(const IAgent& agent) {
+    std::vector<std::string> toolNames(const IConversationAgent& agent) {
         std::vector<std::string> names;
         for (const ToolRegistration& registration : agent.snapshot()->tools) {
             names.push_back(registration.name);

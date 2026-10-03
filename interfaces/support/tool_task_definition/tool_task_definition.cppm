@@ -187,7 +187,7 @@ private:
                                                           " has no tool call " + callId});
     }
 
-    const ToolRegistration* find(const IAgent& agent, const std::string& name) const {
+    const ToolRegistration* find(const IConversationAgent& agent, const std::string& name) const {
         for (const ToolRegistration& tool : agent.snapshot()->tools) {
             if (tool.name == name) {
                 return &tool;

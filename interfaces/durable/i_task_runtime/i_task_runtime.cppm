@@ -5,7 +5,7 @@ module;
 export module pi.durable.i_task_runtime;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_hook_api;
@@ -26,7 +26,7 @@ export class ITaskRuntime : public IHookApi {
 public:
     virtual AbortSignal& signal() = 0;
     /** The conversation's agent, resolved at most once per phase, at first use, and fixed for the phase. */
-    virtual Result<std::shared_ptr<const IAgent>> agent() = 0;
+    virtual Result<std::shared_ptr<const IConversationAgent>> agent() = 0;
     /** The model catalog and request-time authentication; null when the harness has none. */
     virtual IModelRuntime* models() = 0;
     /** The run settings, resolved at each access. */

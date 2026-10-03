@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_agent_controller_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/support/harness",
+    ],
+    test_deps = [
+        "//interfaces/support/wait_gate",
+        "//src/testing/durable_harness_fixture",
+    ],
+)

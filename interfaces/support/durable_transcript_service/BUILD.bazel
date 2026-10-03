@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_transcript_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/chord/i_replicated_state",
+    ],
+    test_deps = [
+        "//src/testing/durable_harness_fixture",
+    ],
+)

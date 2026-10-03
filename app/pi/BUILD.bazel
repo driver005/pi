@@ -6,6 +6,7 @@ pi_binary(
         "//app/coding_application",
         "//app/coding_runtime_factory",
         "//app/coding_services",
+        "//app/durable_serve",
         "//app/serve_application",
         "//interfaces/support/command_line_parser",
         "//src/base/posix_signal_waiter",

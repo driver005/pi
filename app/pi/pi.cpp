@@ -6,6 +6,7 @@ import pi.base.system_environment;
 import pi.coding_application;
 import pi.coding_runtime_factory;
 import pi.coding_services;
+import pi.durable_serve;
 import pi.serve_application;
 import pi.support.command_line_parser;
 
@@ -41,7 +42,13 @@ int main(int argc, char** argv) {
         dependencies.sessions = &services.sessions();
         dependencies.runtimes = &runtimes;
         dependencies.models = &services.models().models();
-        ServeApplication server(*line, dependencies);
+        std::unique_ptr<DurableServe> durable;
+        std::shared_ptr<ISessionOpener> opener;
+        if (!line->sessionTree) {
+            durable = std::make_unique<DurableServe>(services, options.startup, options.agentDir);
+            opener = durable->opener();
+        }
+        ServeApplication server(*line, dependencies, opener);
         if (const auto started = server.start(); !started) {
             std::cerr << "pi: " << started.error().message << "\n";
             return 1;

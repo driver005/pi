@@ -1,7 +1,7 @@
 load("//tools:module.bzl", "pi_interface")
 
 pi_interface(
-    name = "i_agent",
+    name = "i_conversation_agent",
     deps = [
         "//interfaces/types/agent_snapshot",
         "//interfaces/types/hook_registration",

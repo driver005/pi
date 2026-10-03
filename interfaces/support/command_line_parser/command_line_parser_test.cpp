@@ -109,6 +109,12 @@ TEST_F(CommandLineParserTest, ServeOptionsComeFromEnvironmentThenFlags) {
     EXPECT_FALSE(parse({"serve", "--server-dir"}).has_value());
 }
 
+TEST_F(CommandLineParserTest, ServeKeepsDurableSessionsUnlessSessionTreesAreAsked) {
+    EXPECT_FALSE(parse({"serve"})->sessionTree);
+    EXPECT_TRUE(parse({"serve", "--session-tree"})->sessionTree);
+    EXPECT_NE(m_parser.usage().find("--session-tree"), std::string::npos);
+}
+
 TEST_F(CommandLineParserTest, RpcLeavesTheServeOptionsUnset) {
     const auto line = parse({"rpc"});
     EXPECT_TRUE(line->serverDir.empty());

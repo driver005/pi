@@ -43,7 +43,7 @@ protected:
         m_fixture.open();
     }
 
-    std::shared_ptr<const IAgent> agent(bool withModel) {
+    std::shared_ptr<const IConversationAgent> agent(bool withModel) {
         auto snapshot = std::make_shared<AgentSnapshot>();
         if (withModel) {
             snapshot->model = Json::object({{"provider", "faux"}, {"modelId", "m"}});

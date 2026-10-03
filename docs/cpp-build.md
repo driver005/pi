@@ -43,7 +43,7 @@ pi serve [--server-dir DIR] [--server-id UUID] [--session-dir DIR] [--cwd DIR] [
 
 - Socket: `<server-dir>/<server-id>.sock` (mode 0600, directory 0700, same-user peers only). The server directory is `--server-dir`, `$PI_SERVER_DIR` or `~/.pi/server`. A stale socket file is replaced; a live one or a non-socket file is refused.
 - Identity: `--server-id`, `$PI_SERVER_ID`, or the UUIDv4 kept in `<server-dir>/default-server-id`.
-- Sessions: one directory per session under `--session-dir` (default `<agent-dir>/server-sessions`) with `meta.json` (`{createdAt, cwd}`, as in the TS server) and the session's JSONL tree. The TS server keeps `session.sqlite` there instead; the durable harness is not ported, so the two servers should not share a session directory.
+- Sessions: one directory per session under `--session-dir` (default `<agent-dir>/server-sessions`) with `meta.json` (`{createdAt, cwd}`, as in the TS server) and `session.sqlite`: a durable harness (`DurableSessionOpener`, `DurableServe` in the composition root) whose root conversation the services expose. pi's coding tools (`ToolBridge` over the `ITool`s of the conversation's directory) and system prompt (`PiPromptExtension`) are installed in a registry per session, the user's settings give the retry, compaction and queue policy, and tasks a stop interrupted resume when the session opens. Tools of plugins and MCP servers are not offered to durable sessions yet. `--session-tree` keeps sessions as JSONL session trees over the AgentSession runtime instead (the two layouts must not share a session directory).
 - Stop with SIGINT, SIGTERM or SIGHUP: clients are disconnected, running agents are aborted, the socket is removed.
 
 Services (TS shapes, `packages/coding-agent/src/experimental/services`):
@@ -54,9 +54,9 @@ Services (TS shapes, `packages/coding-agent/src/experimental/services`):
 | server | `pi.session-management` | `create({id?})`, `remove(id)`, `attach(id)`, `detach()`; id prefixes resolve |
 | session | `pi.agent-controller` | `prompt`, `steer`, `followUp`, `cancelQueued`, `abort`, `compact`, `waitForPrompt`; replies `{accepted, operationId \| entryId, error}` |
 | session | `pi.models` | state `{catalog, configuration, refresh}`, `select`, `selectThinking`, `cycleThinking`, `getThinkingLevels`, `refresh` |
-| session | `pi.transcript` | state `{messages, isStreaming}` (AgentSession messages in session-file JSON) |
+| session | `pi.transcript` | durable sessions: state `{conversation, entries, docs}`, the durable `ConversationView` of the TS service; with `--session-tree`: `{messages, isStreaming}` (AgentSession messages in session-file JSON) |
 
-`pi.transcript` differs from the TS service, which publishes the durable `ConversationView`; a TS presentation that renders that view does not work against it. `PresentationPlugins`, `SlashCommands`, `PresentationUI` and `SessionPlugins` are not provided. Sessions run in-process (one agent per session, shared by every attached client) rather than in a worker process each.
+With durable sessions `operationId` and `entryId` are submission ids (a compaction's `operationId` is its task id), so they survive a restart. `PresentationPlugins`, `SlashCommands`, `PresentationUI` and `SessionPlugins` are not provided. Sessions run in-process (one agent per session, shared by every attached client) rather than in a worker process each.
 
 Requests run on a 64-thread pool and agent runs on a separate 32-thread pool, so calls that wait (`waitForPrompt`, `abort`) cannot starve the runs they wait for.
 
@@ -118,4 +118,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the durable agent event stream and the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the durable agent event stream; plugin and MCP tools in durable sessions; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

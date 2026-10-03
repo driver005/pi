@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "serve_application",
     deps = [
+        "//interfaces/server/i_session_opener",
         "//interfaces/support/server_identity",
         "//interfaces/types/command_line",
         "//interfaces/types/result",
@@ -19,6 +20,7 @@ pi_module(
     test_deps = [
         "//app/coding_runtime_factory",
         "//app/coding_services",
+        "//app/durable_serve",
         "//interfaces/support/protocol_codec",
         "//interfaces/support/protocol_message_decoder",
         "//src/ai/faux_provider",

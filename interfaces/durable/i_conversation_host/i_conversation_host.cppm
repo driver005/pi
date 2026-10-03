@@ -5,7 +5,7 @@ module;
 export module pi.durable.i_conversation_host;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.durable.i_submission;
 export import pi.support.abort_signal;
 export import pi.support.transaction;
@@ -23,7 +23,7 @@ public:
 
     virtual std::int64_t now() = 0;
     /** The conversation's agent resolved against the current registry snapshot and settings. */
-    virtual Result<std::shared_ptr<const IAgent>> agent(std::int64_t conversationId) = 0;
+    virtual Result<std::shared_ptr<const IConversationAgent>> agent(std::int64_t conversationId) = 0;
     virtual Result<void> configure(std::int64_t conversationId, const Json& change) = 0;
     virtual Result<std::shared_ptr<ISubmission>> submit(std::int64_t conversationId, const SubmissionDraft& draft) = 0;
     /** Admits a manual compaction task and returns its id. */

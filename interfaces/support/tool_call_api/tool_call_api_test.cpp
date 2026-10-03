@@ -20,8 +20,8 @@ public:
     AbortSignal& signal() override {
         return m_signal;
     }
-    Result<std::shared_ptr<const IAgent>> agent() override {
-        return std::shared_ptr<const IAgent>();
+    Result<std::shared_ptr<const IConversationAgent>> agent() override {
+        return std::shared_ptr<const IConversationAgent>();
     }
     IModelRuntime* models() override {
         return nullptr;

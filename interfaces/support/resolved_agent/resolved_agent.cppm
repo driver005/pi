@@ -1,11 +1,11 @@
 export module pi.support.resolved_agent;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.types.extension;
 
 /** An agent resolved from stored state, a registry snapshot and the settings; fixed for one task phase. */
-export class ResolvedAgent : public IAgent {
+export class ResolvedAgent : public IConversationAgent {
 public:
     ResolvedAgent(std::shared_ptr<const AgentSnapshot> snapshot, std::vector<PromptSection> sections,
                   std::vector<std::shared_ptr<const Extension>> extensions)

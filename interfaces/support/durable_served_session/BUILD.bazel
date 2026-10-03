@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_served_session",
+    deps = [
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/server/i_routed_session_handle",
+        "//interfaces/support/durable_agent_controller_service",
+        "//interfaces/support/durable_models_service",
+        "//interfaces/support/durable_transcript_service",
+        "//interfaces/support/harness",
+        "//interfaces/support/provider_service_attachment",
+        "//interfaces/support/registry",
+        "//interfaces/support/remote_service_provider",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/durable/memory_storage",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+    ],
+)

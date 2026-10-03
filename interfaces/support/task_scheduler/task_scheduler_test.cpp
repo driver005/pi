@@ -5,7 +5,7 @@ import pi.durable.memory_storage;
 import pi.support.registry;
 import pi.support.task_scheduler;
 
-class EmptyAgent : public IAgent {
+class EmptyAgent : public IConversationAgent {
 public:
     std::shared_ptr<const AgentSnapshot> snapshot() const override {
         return std::make_shared<AgentSnapshot>();
@@ -38,8 +38,8 @@ protected:
             }
         });
         SchedulerCallbacks callbacks;
-        callbacks.agent = [](std::int64_t, const std::shared_ptr<const IRegistrySnapshot>&) -> Result<std::shared_ptr<const IAgent>> {
-            return std::shared_ptr<const IAgent>(std::make_shared<EmptyAgent>());
+        callbacks.agent = [](std::int64_t, const std::shared_ptr<const IRegistrySnapshot>&) -> Result<std::shared_ptr<const IConversationAgent>> {
+            return std::shared_ptr<const IConversationAgent>(std::make_shared<EmptyAgent>());
         };
         callbacks.settings = [] { return ResolvedSettings{}; };
         callbacks.env = [](std::int64_t) -> Result<std::shared_ptr<IExecutionEnv>> { return std::shared_ptr<IExecutionEnv>(); };

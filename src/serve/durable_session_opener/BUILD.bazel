@@ -1,0 +1,28 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "durable_session_opener",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/server/i_session_opener",
+        "//interfaces/support/builtin_tasks",
+        "//interfaces/support/directory_execution_env",
+        "//interfaces/support/durable_models_service",
+        "//interfaces/support/durable_served_session",
+        "//interfaces/support/pi_prompt_extension",
+        "//interfaces/support/registry",
+        "//interfaces/support/resource_set_cache",
+        "//interfaces/support/tool_bridge",
+        "//interfaces/support/tool_set_cache",
+        "//interfaces/types/harness_run_settings",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/durable/memory_storage",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/scripted_tool",
+    ],
+)

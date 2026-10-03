@@ -45,7 +45,7 @@ public:
         return m_invocation->signal;
     }
 
-    Result<std::shared_ptr<const IAgent>> agent() override {
+    Result<std::shared_ptr<const IConversationAgent>> agent() override {
         if (m_invocation->ended) {
             return std::unexpected(ended());
         }
@@ -166,5 +166,5 @@ private:
     std::shared_ptr<TaskInvocation> m_invocation;
     std::string m_taskName;
     std::function<std::shared_ptr<const IRegistrySnapshot>()> m_snapshot;
-    std::shared_ptr<const IAgent> m_agent;
+    std::shared_ptr<const IConversationAgent> m_agent;
 };

@@ -10,7 +10,7 @@ protected:
         m_fixture.setAgentFactory([this](std::int64_t) { return agent(); });
     }
 
-    std::shared_ptr<const IAgent> agent() {
+    std::shared_ptr<const IConversationAgent> agent() {
         auto snapshot = std::make_shared<AgentSnapshot>();
         const std::lock_guard<std::mutex> lock(m_mutex);
         snapshot->tools = m_tools;

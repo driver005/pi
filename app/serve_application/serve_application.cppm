@@ -3,6 +3,7 @@ export module pi.serve_application;
 import std;
 export import pi.types.command_line;
 export import pi.types.result;
+export import pi.server.i_session_opener;
 export import pi.types.serve_dependencies;
 import pi.base.posix_byte_connection;
 import pi.base.posix_unix_listener;
@@ -18,13 +19,15 @@ import pi.support.server_identity;
  * The headless protocol server: `pi serve`. Wires the coding services, a session catalog on disk, the
  * server-wide services, the session opener and a unix-socket listener into a Server. Requests run on
  * their own thread pool, separate from the one that runs agents, so waiting calls can never starve
- * the work they wait for.
+ * the work they wait for. Sessions open through `opener` when one is given (durable sessions), else as
+ * session trees over the AgentSession runtime.
  */
 export class ServeApplication {
 public:
-    ServeApplication(CommandLine line, const ServeDependencies& dependencies)
+    ServeApplication(CommandLine line, const ServeDependencies& dependencies, std::shared_ptr<ISessionOpener> opener = nullptr)
         : m_line(std::move(line)),
           m_deps(dependencies),
+          m_opener(std::move(opener)),
           m_requests(64),
           m_work(32) {}
 
@@ -49,8 +52,10 @@ public:
         m_catalog = std::make_unique<DirectorySessionCatalog>(*m_deps.files, *m_deps.clock, *m_deps.ids,
                                                               m_line.options.sessionDir.value_or(""), m_line.options.cwd);
         m_serverServices = std::make_unique<ServerServiceHost>(*m_catalog, m_serverId);
-        m_opener = std::make_unique<ServedSessionOpener>(*m_deps.sessions, *m_deps.runtimes, *m_deps.models, m_work,
-                                                         *m_deps.ids, m_line.options.agentDir);
+        if (!m_opener) {
+            m_opener = std::make_shared<ServedSessionOpener>(*m_deps.sessions, *m_deps.runtimes, *m_deps.models, m_work,
+                                                             *m_deps.ids, m_line.options.agentDir);
+        }
         m_host = std::make_unique<CodingServerHost>(*m_serverServices, *m_catalog, *m_opener);
         UnixListenerOptions listenerOptions;
         listenerOptions.path = socketPath();
@@ -91,13 +96,15 @@ private:
 
     CommandLine m_line;
     ServeDependencies m_deps;
-    ThreadPool m_requests;
-    ThreadPool m_work;
     std::string m_serverId;
     std::unique_ptr<DirectorySessionCatalog> m_catalog;
     std::unique_ptr<ServerServiceHost> m_serverServices;
-    std::unique_ptr<ServedSessionOpener> m_opener;
+    std::shared_ptr<ISessionOpener> m_opener;
     std::unique_ptr<CodingServerHost> m_host;
     std::unique_ptr<PosixUnixListener> m_listener;
     std::unique_ptr<Server> m_server;
+    // Declared last, so destroyed first: the pools drain what connections and sessions queued while the server and the
+    // session objects those tasks use are still alive.
+    ThreadPool m_requests;
+    ThreadPool m_work;
 };

@@ -11,11 +11,13 @@ import std;
 import pi.ai.faux_provider;
 import pi.coding_runtime_factory;
 import pi.coding_services;
+import pi.durable_serve;
 import pi.serve_application;
 import pi.support.protocol_codec;
 import pi.support.protocol_message_decoder;
 
-class ServeApplicationTest : public testing::Test {
+/** Every test runs for both session backends: durable (SQLite harness) sessions and session trees. */
+class ServeApplicationTest : public testing::TestWithParam<bool> {
 protected:
     static constexpr const char* kServerId = "00000000-0000-4000-8000-000000000001";
 
@@ -72,8 +74,18 @@ protected:
         return result;
     }
 
+    /** The opener of the durable backend; nothing for the session-tree one. */
+    std::shared_ptr<ISessionOpener> opener() {
+        if (!GetParam()) {
+            return nullptr;
+        }
+        const CommandLine base = line();
+        m_durable = std::make_unique<DurableServe>(*m_services, base.options.startup, base.options.agentDir);
+        return m_durable->opener();
+    }
+
     void startServer() {
-        m_app = std::make_unique<ServeApplication>(line(), dependencies());
+        m_app = std::make_unique<ServeApplication>(line(), dependencies(), opener());
         const auto started = m_app->start();
         ASSERT_TRUE(started) << started.error().message;
     }
@@ -147,10 +159,11 @@ protected:
     std::vector<Json> m_messages;
     std::unique_ptr<CodingServices> m_services;
     std::unique_ptr<CodingRuntimeFactory> m_factory;
+    std::unique_ptr<DurableServe> m_durable;
     std::unique_ptr<ServeApplication> m_app;
 };
 
-TEST_F(ServeApplicationTest, ListensOnTheServerSocketAndAnswersHello) {
+TEST_P(ServeApplicationTest, ListensOnTheServerSocketAndAnswersHello) {
     startServer();
     EXPECT_EQ(m_app->serverId(), kServerId);
     EXPECT_EQ(m_app->socketPath(), m_serverDir + "/" + kServerId + ".sock");
@@ -161,7 +174,7 @@ TEST_F(ServeApplicationTest, ListensOnTheServerSocketAndAnswersHello) {
     EXPECT_EQ(m_messages[0]["serverId"], kServerId);
 }
 
-TEST_F(ServeApplicationTest, CreatesAttachesAndPromptsASession) {
+TEST_P(ServeApplicationTest, CreatesAttachesAndPromptsASession) {
     startServer();
     auto* faux = m_services->models().faux();
     ASSERT_TRUE(faux != nullptr);
@@ -199,7 +212,7 @@ TEST_F(ServeApplicationTest, CreatesAttachesAndPromptsASession) {
     EXPECT_EQ(answer["result"]["text"], "pong");
 }
 
-TEST_F(ServeApplicationTest, SessionsPersistAcrossServerRestarts) {
+TEST_P(ServeApplicationTest, SessionsPersistAcrossServerRestarts) {
     startServer();
     ASSERT_TRUE(dial());
     send(Json{{"type", "hello"}, {"version", 8}});
@@ -224,25 +237,27 @@ TEST_F(ServeApplicationTest, SessionsPersistAcrossServerRestarts) {
     EXPECT_NE(dump.find("keep"), std::string::npos);
 }
 
-TEST_F(ServeApplicationTest, ADefaultServerIdentityIsCreatedAndKept) {
+TEST_P(ServeApplicationTest, ADefaultServerIdentityIsCreatedAndKept) {
     CommandLine withoutId = line();
     withoutId.serverId.reset();
     {
-        ServeApplication first(withoutId, dependencies());
+        ServeApplication first(withoutId, dependencies(), opener());
         ASSERT_TRUE(first.start());
         EXPECT_EQ(first.serverId().size(), 36u);
         const std::string id = first.serverId();
         first.stop();
-        ServeApplication second(withoutId, dependencies());
+        ServeApplication second(withoutId, dependencies(), opener());
         ASSERT_TRUE(second.start());
         EXPECT_EQ(second.serverId(), id);
     }
 }
 
-TEST_F(ServeApplicationTest, ASecondServerOnTheSameSocketIsRefused) {
+TEST_P(ServeApplicationTest, ASecondServerOnTheSameSocketIsRefused) {
     startServer();
-    ServeApplication second(line(), dependencies());
+    ServeApplication second(line(), dependencies(), opener());
     const auto started = second.start();
     ASSERT_FALSE(started);
     EXPECT_NE(started.error().message.find("already running"), std::string::npos);
 }
+
+INSTANTIATE_TEST_SUITE_P(Backends, ServeApplicationTest, testing::Bool(), [](const testing::TestParamInfo<bool>& info) { return info.param ? std::string("Durable") : std::string("SessionTree"); });

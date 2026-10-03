@@ -467,7 +467,7 @@ public:
         return m_callbacks.context(conversationId, at);
     }
 
-    Result<std::shared_ptr<const IAgent>> resolveAgent(TaskInvocation& invocation,
+    Result<std::shared_ptr<const IConversationAgent>> resolveAgent(TaskInvocation& invocation,
                                                        const std::shared_ptr<const IRegistrySnapshot>& snapshot) override {
         if (auto live = checkLive(invocation); !live) {
             return std::unexpected(live.error());

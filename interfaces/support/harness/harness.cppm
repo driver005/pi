@@ -276,7 +276,7 @@ public:
         return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
-    Result<std::shared_ptr<const IAgent>> agent(std::int64_t conversationId) override {
+    Result<std::shared_ptr<const IConversationAgent>> agent(std::int64_t conversationId) override {
         return resolveAgent(conversationId, nullptr);
     }
 
@@ -382,13 +382,13 @@ private:
     }
 
     /** Resolves a conversation's committed `pi.agent` against `snapshot`, or the current registry, and the current settings. */
-    Result<std::shared_ptr<const IAgent>> resolveAgent(std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>& snapshot) {
+    Result<std::shared_ptr<const IConversationAgent>> resolveAgent(std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>& snapshot) {
         const std::shared_ptr<const IRegistrySnapshot> registry = snapshot ? snapshot : m_options.registry->snapshot();
         auto state = m_session->snapshot(m_documents.agent(), ownerArgs(conversationId));
         if (!state) {
             return std::unexpected(state.error());
         }
-        return std::shared_ptr<const IAgent>(m_agents.resolve(*state, *registry, resolvedSettings(), [this](const Error& error) { report(error); }));
+        return std::shared_ptr<const IConversationAgent>(m_agents.resolve(*state, *registry, resolvedSettings(), [this](const Error& error) { report(error); }));
     }
 
     /** Builds a conversation's environment from its current `cwd`; null without an `env` option. */

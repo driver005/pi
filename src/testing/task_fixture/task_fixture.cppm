@@ -26,7 +26,7 @@ public:
     }
 
     /** The agent a conversation's tasks resolve; default: an agent with no tools. */
-    void setAgentFactory(std::function<std::shared_ptr<const IAgent>(std::int64_t)> factory) {
+    void setAgentFactory(std::function<std::shared_ptr<const IConversationAgent>(std::int64_t)> factory) {
         m_agentFactory = std::move(factory);
     }
 
@@ -55,9 +55,9 @@ public:
             }
         });
         SchedulerCallbacks callbacks;
-        callbacks.agent = [this](std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>&) -> Result<std::shared_ptr<const IAgent>> {
+        callbacks.agent = [this](std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>&) -> Result<std::shared_ptr<const IConversationAgent>> {
             return m_agentFactory ? m_agentFactory(conversationId)
-                                  : std::shared_ptr<const IAgent>(std::make_shared<ResolvedAgent>(std::make_shared<AgentSnapshot>(),
+                                  : std::shared_ptr<const IConversationAgent>(std::make_shared<ResolvedAgent>(std::make_shared<AgentSnapshot>(),
                                                                                                     std::vector<PromptSection>{},
                                                                                                     std::vector<std::shared_ptr<const Extension>>{}));
         };
@@ -266,7 +266,7 @@ private:
     Registry m_registry;
     std::unique_ptr<DurableSession> m_session;
     std::unique_ptr<TaskScheduler> m_scheduler;
-    std::function<std::shared_ptr<const IAgent>(std::int64_t)> m_agentFactory;
+    std::function<std::shared_ptr<const IConversationAgent>(std::int64_t)> m_agentFactory;
     std::function<Result<void>(Transaction&, const Json&, const Json&)> m_cleanup;
     std::function<Result<Json>(std::int64_t, const std::optional<std::int64_t>&)> m_context;
     IModelRuntime* m_models = nullptr;

@@ -83,6 +83,7 @@ public:
                "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
                "  --server-dir <dir>            serve: profile and socket directory (default: $PI_SERVER_DIR or ~/.pi/server)\n"
                "  --server-id <uuid>            serve: logical server id (default: $PI_SERVER_ID or the directory's default)\n"
+               "  --session-tree                serve: keep sessions as session trees instead of durable (SQLite) sessions\n"
                "                                serve keeps its sessions in --session-dir (default: <agent-dir>/server-sessions)\n"
                "  --help, -h                    Show this help\n";
     }
@@ -114,6 +115,8 @@ private:
             options.startup.trustProject = false;
         } else if (flag == "--faux") {
             options.faux = true;
+        } else if (flag == "--session-tree") {
+            line.sessionTree = true;
         } else {
             return std::unexpected(Error{"usage", "Unknown option " + flag});
         }

@@ -47,7 +47,7 @@ protected:
         m_fixture.open();
     }
 
-    std::shared_ptr<const IAgent> agent() {
+    std::shared_ptr<const IConversationAgent> agent() {
         auto snapshot = std::make_shared<AgentSnapshot>();
         std::vector<PromptSection> sections;
         auto extension = std::make_shared<Extension>();

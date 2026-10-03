@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "pi_prompt_extension",
+    deps = [
+        "//interfaces/support/resource_set_cache",
+        "//interfaces/support/system_prompt_builder",
+        "//interfaces/support/tool_set_cache",
+        "//interfaces/types/extension",
+    ],
+    test_deps = [
+        "//src/testing/scripted_tool",
+    ],
+)

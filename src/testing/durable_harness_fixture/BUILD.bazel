@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "durable_harness_fixture",
+    deps = [
+        "//interfaces/support/harness",
+        "//src/ai/faux_provider",
+        "//src/durable/memory_storage",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+    ],
+)

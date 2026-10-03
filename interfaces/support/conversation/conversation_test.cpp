@@ -8,8 +8,8 @@ public:
     std::int64_t now() override {
         return 55;
     }
-    Result<std::shared_ptr<const IAgent>> agent(std::int64_t) override {
-        return std::shared_ptr<const IAgent>();
+    Result<std::shared_ptr<const IConversationAgent>> agent(std::int64_t) override {
+        return std::shared_ptr<const IConversationAgent>();
     }
     Result<void> configure(std::int64_t id, const Json& change) override {
         m_calls.push_back("configure " + std::to_string(id) + " " + change.dump());

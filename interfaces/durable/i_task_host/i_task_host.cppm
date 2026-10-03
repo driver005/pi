@@ -5,7 +5,7 @@ module;
 export module pi.durable.i_task_host;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_registry_snapshot;
@@ -41,7 +41,7 @@ public:
                                               const std::optional<std::string>& kind) = 0;
     virtual Result<Json> context(TaskInvocation& invocation, std::int64_t conversationId,
                                  const std::optional<std::int64_t>& at) = 0;
-    virtual Result<std::shared_ptr<const IAgent>> resolveAgent(TaskInvocation& invocation,
+    virtual Result<std::shared_ptr<const IConversationAgent>> resolveAgent(TaskInvocation& invocation,
                                                                const std::shared_ptr<const IRegistrySnapshot>& snapshot) = 0;
     virtual ResolvedSettings settings() = 0;
     virtual IModelRuntime* models() = 0;

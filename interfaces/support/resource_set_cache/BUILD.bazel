@@ -1,0 +1,8 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "resource_set_cache",
+    deps = [
+        "//interfaces/types/loaded_resources",
+    ],
+)

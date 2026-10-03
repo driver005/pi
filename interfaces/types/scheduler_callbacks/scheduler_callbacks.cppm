@@ -5,7 +5,7 @@ module;
 export module pi.types.scheduler_callbacks;
 
 import std;
-export import pi.durable.i_agent;
+export import pi.durable.i_conversation_agent;
 export import pi.durable.i_conversation_handle;
 export import pi.durable.i_execution_env;
 export import pi.durable.i_registry_snapshot;
@@ -20,7 +20,7 @@ export import pi.types.task_invocation;
 /** What the task scheduler needs from the harness around it. */
 export struct SchedulerCallbacks {
     /** Resolves a conversation's agent against a snapshot; the runtime calls it at most once per phase. */
-    std::function<Result<std::shared_ptr<const IAgent>>(std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>&)> agent;
+    std::function<Result<std::shared_ptr<const IConversationAgent>>(std::int64_t conversationId, const std::shared_ptr<const IRegistrySnapshot>&)> agent;
     /** The settings, read at each access. */
     std::function<ResolvedSettings()> settings;
     /** The model catalog the built-in tasks call; may be absent (then they fail with no_model). */
