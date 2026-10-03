@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "storage_conformance",
+    deps = ["//interfaces/durable/i_storage"],
+)

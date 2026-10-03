@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_storage",
+    deps = [
+        "//interfaces/types/conversation_query",
+        "//interfaces/types/document_address",
+        "//interfaces/types/document_point",
+        "//interfaces/types/document_query",
+        "//interfaces/types/entry_lookup",
+        "//interfaces/types/entry_query",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/storage_page",
+        "//interfaces/types/stored_document",
+        "//interfaces/types/submission_query",
+        "//interfaces/types/task_query",
+    ],
+)
