@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "jsonl_recovery_state",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/jsonl_file",
+    ],
+)

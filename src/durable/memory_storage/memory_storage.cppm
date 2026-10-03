@@ -5,7 +5,7 @@ module;
 export module pi.durable.memory_storage;
 
 import std;
-export import pi.durable.i_storage;
+export import pi.durable.i_staged_storage;
 export import pi.types.document_action;
 import pi.support.delta_applier;
 
@@ -15,32 +15,28 @@ import pi.support.delta_applier;
  * Ordered containers stand in for the sorted id arrays of the TS original. Thread-safe. Port of
  * packages/durable/src/storage/memory.ts; error messages match it so the conformance suite carries over.
  */
-export class MemoryStorage : public IStorage {
+export class MemoryStorage : public IStagedStorage {
 public:
     Result<std::int64_t> commit(const std::vector<Json>& writes) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        auto prepared = prepareLocked(writes, std::nullopt);
+        if (!prepared) {
+            return std::unexpected(prepared.error());
+        }
+        return applyLocked(*prepared);
+    }
+
+    Result<PreparedCommit> prepareCommit(const std::vector<Json>& writes, const std::optional<std::int64_t>& seq) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return prepareLocked(writes, seq);
+    }
+
+    Result<std::int64_t> applyCommit(const PreparedCommit& commit) override {
         const std::lock_guard<std::mutex> lock(m_mutex);
         if (m_closed) {
             return std::unexpected(closedError());
         }
-        const std::int64_t seq = m_nextSeq;
-        std::vector<Json> detached = writes;
-        if (auto resolved = resolveDocumentCopies(detached); !resolved) {
-            return std::unexpected(resolved.error());
-        }
-        if (auto ids = checkGlobalIds(detached); !ids) {
-            return std::unexpected(ids.error());
-        }
-        auto actions = prepareDocumentActions(detached);
-        if (!actions) {
-            return std::unexpected(actions.error());
-        }
-        if (auto checked = checkDocumentActions(*actions); !checked) {
-            return std::unexpected(checked.error());
-        }
-        applyWrites(detached, seq);
-        applyDocumentActions(*actions, seq);
-        m_nextSeq = seq + 1;
-        return seq;
+        return applyLocked(commit);
     }
 
     Result<std::int64_t> mintId() override {
@@ -281,6 +277,40 @@ public:
 
 private:
     static constexpr std::int64_t kMaxSafeInteger = 9007199254740991LL;
+
+    Result<PreparedCommit> prepareLocked(const std::vector<Json>& writes, const std::optional<std::int64_t>& requested) {
+        if (m_closed) {
+            return std::unexpected(closedError());
+        }
+        PreparedCommit prepared;
+        prepared.seq = requested.value_or(m_nextSeq);
+        if (prepared.seq < m_nextSeq) {
+            return std::unexpected(failure("Commit sequence " + std::to_string(prepared.seq) + " does not strictly increase"));
+        }
+        prepared.writes = writes;
+        if (auto resolved = resolveDocumentCopies(prepared.writes); !resolved) {
+            return std::unexpected(resolved.error());
+        }
+        if (auto ids = checkGlobalIds(prepared.writes); !ids) {
+            return std::unexpected(ids.error());
+        }
+        auto actions = prepareDocumentActions(prepared.writes);
+        if (!actions) {
+            return std::unexpected(actions.error());
+        }
+        if (auto checked = checkDocumentActions(*actions); !checked) {
+            return std::unexpected(checked.error());
+        }
+        prepared.actions = std::move(*actions);
+        return prepared;
+    }
+
+    std::int64_t applyLocked(const PreparedCommit& prepared) {
+        applyWrites(prepared.writes, prepared.seq);
+        applyDocumentActions(prepared.actions, prepared.seq);
+        m_nextSeq = prepared.seq + 1;
+        return prepared.seq;
+    }
 
     Error failure(const std::string& message) const {
         return Error{"storage_error", message};

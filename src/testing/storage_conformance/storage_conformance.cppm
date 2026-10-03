@@ -15,7 +15,7 @@ export import pi.durable.i_storage;
  */
 export class StorageConformance {
 public:
-    using Factory = std::function<std::unique_ptr<IStorage>()>;
+    using Factory = std::function<std::shared_ptr<IStorage>()>;
 
     std::vector<std::string> run(const Factory& make) {
         m_failures.clear();
@@ -902,6 +902,6 @@ private:
     }
 
     std::string m_case;
-    std::unique_ptr<IStorage> m_storage;
+    std::shared_ptr<IStorage> m_storage;
     std::vector<std::string> m_failures;
 };

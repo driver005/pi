@@ -47,6 +47,9 @@ public:
 
     Result<void> appendFile(const std::string& path, const std::string& content) override {
         const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_failAppends) {
+            return std::unexpected(Error{"EIO", "EIO: i/o error, append '" + path + "'"});
+        }
         if (!m_directories.contains(parentOf(path))) {
             return std::unexpected(notFound(path));
         }
@@ -72,6 +75,24 @@ public:
             return std::unexpected(notFound(path));
         }
         m_mtimes.erase(path);
+        return {};
+    }
+
+    Result<void> truncateFile(const std::string& path, std::uint64_t size) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_files.find(path);
+        if (found == m_files.end()) {
+            return std::unexpected(notFound(path));
+        }
+        found->second.resize(static_cast<std::size_t>(size));
+        return {};
+    }
+
+    Result<void> flushFile(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_files.contains(path)) {
+            return std::unexpected(notFound(path));
+        }
         return {};
     }
 
@@ -171,6 +192,12 @@ public:
         return found == m_files.end() ? "" : found->second;
     }
 
+    /** Test helper: makes every append fail with EIO until switched off. */
+    void failAppends(bool fail) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_failAppends = fail;
+    }
+
     /** Test helper: advances the clock used for mtimes. */
     void setNowMs(std::int64_t nowMs) {
         const std::lock_guard<std::mutex> lock(m_mutex);
@@ -200,6 +227,7 @@ private:
     mutable std::mutex m_mutex;
     std::string m_home;
     std::int64_t m_nowMs = 1700000000000;
+    bool m_failAppends = false;
     std::map<std::string, std::string> m_files;
     std::map<std::string, std::int64_t> m_mtimes;
     std::set<std::string> m_directories{"/"};

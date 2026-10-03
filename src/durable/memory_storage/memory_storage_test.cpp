@@ -14,7 +14,7 @@ public:
 
 TEST(MemoryStorageTest, PassesTheStorageConformanceSuite) {
     StorageConformance suite;
-    const auto failures = suite.run([] { return std::unique_ptr<IStorage>(std::make_unique<MemoryStorage>()); });
+    const auto failures = suite.run([] { return std::shared_ptr<IStorage>(std::make_shared<MemoryStorage>()); });
     for (const std::string& failure : failures) {
         ADD_FAILURE() << failure;
     }
@@ -22,6 +22,6 @@ TEST(MemoryStorageTest, PassesTheStorageConformanceSuite) {
 
 TEST(MemoryStorageTest, TheConformanceSuiteNoticesABrokenBackend) {
     StorageConformance suite;
-    const auto failures = suite.run([] { return std::unique_ptr<IStorage>(std::make_unique<OffByOneStorage>()); });
+    const auto failures = suite.run([] { return std::shared_ptr<IStorage>(std::make_shared<OffByOneStorage>()); });
     EXPECT_FALSE(failures.empty());
 }

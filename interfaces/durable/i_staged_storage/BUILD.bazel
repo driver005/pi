@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_staged_storage",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/types/prepared_commit",
+    ],
+)

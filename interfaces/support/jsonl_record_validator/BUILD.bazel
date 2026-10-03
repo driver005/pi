@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "jsonl_record_validator",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

@@ -114,6 +114,27 @@ public:
         return {};
     }
 
+    Result<void> truncateFile(const std::string& path, std::uint64_t size) override {
+        if (::truncate(path.c_str(), static_cast<off_t>(size)) != 0) {
+            return std::unexpected(failure(errno, "truncate", path));
+        }
+        return {};
+    }
+
+    Result<void> flushFile(const std::string& path) override {
+        const int fd = ::open(path.c_str(), O_RDONLY);
+        if (fd < 0) {
+            return std::unexpected(failure(errno, "open", path));
+        }
+        const int rc = ::fsync(fd);
+        const int error = errno;
+        ::close(fd);
+        if (rc != 0) {
+            return std::unexpected(failure(error, "fsync", path));
+        }
+        return {};
+    }
+
     Result<void> removeTree(const std::string& path) override {
         std::error_code error;
         std::filesystem::remove_all(path, error);

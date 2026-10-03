@@ -3,7 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "memory_storage",
     deps = [
-        "//interfaces/durable/i_storage",
+        "//interfaces/durable/i_staged_storage",
         "//interfaces/support/delta_applier",
         "//interfaces/types/document_action",
     ],
