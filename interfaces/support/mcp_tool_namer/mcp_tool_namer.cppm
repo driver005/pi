@@ -13,49 +13,41 @@ export class McpToolNamer {
 public:
     static constexpr std::size_t kMaxNameLength = 64;
 
-    explicit McpToolNamer(const ICrypto& crypto);
+    explicit McpToolNamer(const ICrypto& crypto)
+        : m_crypto(crypto) {}
 
     /** `isTaken` reports names already used by a different MCP tool. */
-    std::string create(const std::string& server, const std::string& tool,
-                       const std::function<bool(const std::string&)>& isTaken = {}) const;
+    std::string create(const std::string& server, const std::string& tool, const std::function<bool(const std::string&)>& isTaken = {}) const {
+        const std::string name = sanitize("mcp__" + server + "__" + tool);
+        if (name.size() <= kMaxNameLength && !(isTaken && isTaken(name))) {
+            return name;
+        }
+        const std::string hash = hashSuffix(server, tool);
+        return name.substr(0, std::min(name.size(), kMaxNameLength - hash.size() - 1)) + "_" + hash;
+    }
 
 private:
-    std::string sanitize(const std::string& text) const;
-    std::string hashSuffix(const std::string& server, const std::string& tool) const;
+    std::string sanitize(const std::string& text) const {
+        std::string out = text;
+        for (char& c : out) {
+            if (std::isalnum(static_cast<unsigned char>(c)) == 0 && c != '_') {
+                c = '_';
+            }
+        }
+        return out;
+    }
+
+    std::string hashSuffix(const std::string& server, const std::string& tool) const {
+        const std::string digest = m_crypto.sha256(server + std::string(1, '\0') + tool);
+        static constexpr std::string_view digits = "0123456789abcdef";
+        std::string hex;
+        for (std::size_t i = 0; i < 4 && i < digest.size(); ++i) {
+            const auto byte = static_cast<unsigned char>(digest[i]);
+            hex.push_back(digits[byte >> 4]);
+            hex.push_back(digits[byte & 0x0F]);
+        }
+        return hex;
+    }
 
     const ICrypto& m_crypto;
 };
-
-McpToolNamer::McpToolNamer(const ICrypto& crypto) : m_crypto(crypto) {}
-
-std::string McpToolNamer::sanitize(const std::string& text) const {
-    std::string out = text;
-    for (char& c : out) {
-        if (std::isalnum(static_cast<unsigned char>(c)) == 0 && c != '_') {
-            c = '_';
-        }
-    }
-    return out;
-}
-
-std::string McpToolNamer::hashSuffix(const std::string& server, const std::string& tool) const {
-    const std::string digest = m_crypto.sha256(server + std::string(1, '\0') + tool);
-    static constexpr std::string_view digits = "0123456789abcdef";
-    std::string hex;
-    for (std::size_t i = 0; i < 4 && i < digest.size(); ++i) {
-        const auto byte = static_cast<unsigned char>(digest[i]);
-        hex.push_back(digits[byte >> 4]);
-        hex.push_back(digits[byte & 0x0F]);
-    }
-    return hex;
-}
-
-std::string McpToolNamer::create(const std::string& server, const std::string& tool,
-                                 const std::function<bool(const std::string&)>& isTaken) const {
-    const std::string name = sanitize("mcp__" + server + "__" + tool);
-    if (name.size() <= kMaxNameLength && !(isTaken && isTaken(name))) {
-        return name;
-    }
-    const std::string hash = hashSuffix(server, tool);
-    return name.substr(0, std::min(name.size(), kMaxNameLength - hash.size() - 1)) + "_" + hash;
-}

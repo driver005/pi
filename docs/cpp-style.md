@@ -54,9 +54,14 @@ snake_case of the single class. Declare modules with the macros in `tools/module
 - `pi_test_support`: test-only fake under `src/testing/`.
 
 Modules `export import` the modules whose types appear in their interface, so importing a module
-gives the same visibility its header used to. Third-party code (nlohmann/json, curl, BoringSSL,
-POSIX headers) is `#include`d in the global module fragment (`module;` ... `export module`).
-nlohmann/json must be included in every unit that uses `Json` members (template lookup).
+gives the same visibility its header used to. Third-party code (curl, BoringSSL, POSIX headers) is `#include`d in the global module fragment
+(`module;` ... `export module`). nlohmann/json is included only by `pi.types.json`; every other
+module imports it (each textual include is copied into every module's AST, and clang runs out of
+source locations in large units). Loop over `.items()` with `entry.key()` / `entry.value()`, not
+structured bindings.
+
+Member functions, constructors and destructors are defined inside the class body, never as
+`Class::name(...)` below it (rule `no-out-of-class-definition`).
 
 Production modules import only `interfaces/` modules, never other `src/` modules. Tests, `app/`
 and `src/testing/` may import concrete modules. Wiring happens in `app/` by constructor injection;

@@ -19,22 +19,66 @@ import pi.base.uuid7_generator;
 /** The operating-system backed services every part of the application shares. */
 export class PlatformServices {
 public:
-    explicit PlatformServices(std::size_t workers = 8);
+    explicit PlatformServices(std::size_t workers = 8)
+        : m_ids(m_clock),
+          m_executor(workers),
+          m_logger(m_clock, LogLevel::Info) {}
 
-    SystemClock& clock();
-    Uuid7Generator& ids();
-    SystemEnvironment& environment();
-    PosixFileSystem& files();
-    PosixFileLock& locks();
-    PosixProcessRunner& processes();
-    ChildProcessLauncher& children();
-    BoringCrypto& crypto();
-    Base64Codec& base64();
-    ThreadSleeper& sleeper();
-    CurlHttpClient& http();
-    ThreadPool& executor();
-    PosixDynamicLibraries& libraries();
-    StderrLogger& logger();
+    SystemClock& clock() {
+        return m_clock;
+    }
+
+    Uuid7Generator& ids() {
+        return m_ids;
+    }
+
+    SystemEnvironment& environment() {
+        return m_environment;
+    }
+
+    PosixFileSystem& files() {
+        return m_files;
+    }
+
+    PosixFileLock& locks() {
+        return m_locks;
+    }
+
+    PosixProcessRunner& processes() {
+        return m_processes;
+    }
+
+    ChildProcessLauncher& children() {
+        return m_children;
+    }
+
+    BoringCrypto& crypto() {
+        return m_crypto;
+    }
+
+    Base64Codec& base64() {
+        return m_base64;
+    }
+
+    ThreadSleeper& sleeper() {
+        return m_sleeper;
+    }
+
+    CurlHttpClient& http() {
+        return m_http;
+    }
+
+    ThreadPool& executor() {
+        return m_executor;
+    }
+
+    PosixDynamicLibraries& libraries() {
+        return m_libraries;
+    }
+
+    StderrLogger& logger() {
+        return m_logger;
+    }
 
 private:
     SystemClock m_clock;
@@ -52,62 +96,3 @@ private:
     PosixDynamicLibraries m_libraries;
     StderrLogger m_logger;
 };
-
-PlatformServices::PlatformServices(std::size_t workers)
-    : m_ids(m_clock), m_executor(workers), m_logger(m_clock, LogLevel::Info) {}
-
-SystemClock& PlatformServices::clock() {
-    return m_clock;
-}
-
-Uuid7Generator& PlatformServices::ids() {
-    return m_ids;
-}
-
-SystemEnvironment& PlatformServices::environment() {
-    return m_environment;
-}
-
-PosixFileSystem& PlatformServices::files() {
-    return m_files;
-}
-
-PosixFileLock& PlatformServices::locks() {
-    return m_locks;
-}
-
-PosixProcessRunner& PlatformServices::processes() {
-    return m_processes;
-}
-
-ChildProcessLauncher& PlatformServices::children() {
-    return m_children;
-}
-
-BoringCrypto& PlatformServices::crypto() {
-    return m_crypto;
-}
-
-Base64Codec& PlatformServices::base64() {
-    return m_base64;
-}
-
-ThreadSleeper& PlatformServices::sleeper() {
-    return m_sleeper;
-}
-
-CurlHttpClient& PlatformServices::http() {
-    return m_http;
-}
-
-ThreadPool& PlatformServices::executor() {
-    return m_executor;
-}
-
-PosixDynamicLibraries& PlatformServices::libraries() {
-    return m_libraries;
-}
-
-StderrLogger& PlatformServices::logger() {
-    return m_logger;
-}

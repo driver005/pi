@@ -12,12 +12,38 @@ import pi.support.remote_service_endpoint;
  */
 export class ProviderServiceAttachment : public IServiceAttachment {
 public:
-    ProviderServiceAttachment(std::shared_ptr<IServiceProvider> provider, std::function<void()> disposeProvider,
-                              std::function<void()> onRelease = {});
+    ProviderServiceAttachment(std::shared_ptr<IServiceProvider> provider, std::function<void()> disposeProvider, std::function<void()> onRelease = {})
+        : m_provider(std::move(provider)),
+          m_endpoint(*m_provider),
+          m_disposeProvider(std::move(disposeProvider)),
+          m_onRelease(std::move(onRelease)) {}
 
-    Result<std::optional<Json>> invokeService(const Json& call, const IServiceEndpoint::Publisher& publish,
-                                              const ServiceContext& context) override;
-    void release(const ServiceContext& context) override;
+    Result<std::optional<Json>> invokeService(const Json& call, const IServiceEndpoint::Publisher& publish, const ServiceContext& context) override {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_released) {
+                return std::unexpected(Error{"invalid_state", "Service attachment is released"});
+            }
+        }
+        return m_endpoint.invoke(call, publish, context);
+    }
+
+    void release(const ServiceContext&) override {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_released) {
+                return;
+            }
+            m_released = true;
+        }
+        m_endpoint.dispose();
+        if (m_disposeProvider) {
+            m_disposeProvider();
+        }
+        if (m_onRelease) {
+            m_onRelease();
+        }
+    }
 
 private:
     std::shared_ptr<IServiceProvider> m_provider;
@@ -27,40 +53,3 @@ private:
     std::mutex m_mutex;
     bool m_released = false;
 };
-
-ProviderServiceAttachment::ProviderServiceAttachment(std::shared_ptr<IServiceProvider> provider,
-                                                     std::function<void()> disposeProvider,
-                                                     std::function<void()> onRelease)
-    : m_provider(std::move(provider)),
-      m_endpoint(*m_provider),
-      m_disposeProvider(std::move(disposeProvider)),
-      m_onRelease(std::move(onRelease)) {}
-
-Result<std::optional<Json>> ProviderServiceAttachment::invokeService(const Json& call,
-                                                                     const IServiceEndpoint::Publisher& publish,
-                                                                     const ServiceContext& context) {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_released) {
-            return std::unexpected(Error{"invalid_state", "Service attachment is released"});
-        }
-    }
-    return m_endpoint.invoke(call, publish, context);
-}
-
-void ProviderServiceAttachment::release(const ServiceContext&) {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_released) {
-            return;
-        }
-        m_released = true;
-    }
-    m_endpoint.dispose();
-    if (m_disposeProvider) {
-        m_disposeProvider();
-    }
-    if (m_onRelease) {
-        m_onRelease();
-    }
-}

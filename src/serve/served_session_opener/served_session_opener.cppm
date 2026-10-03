@@ -16,14 +16,38 @@ import pi.support.served_session;
  */
 export class ServedSessionOpener : public ISessionOpener {
 public:
-    ServedSessionOpener(ISessionStore& store, ISessionRuntimeFactory& runtimes, IModelRuntime& models,
-                        IExecutor& executor, IIdGenerator& ids, std::string agentDir);
+    ServedSessionOpener(ISessionStore& store, ISessionRuntimeFactory& runtimes, IModelRuntime& models, IExecutor& executor, IIdGenerator& ids, std::string agentDir)
+        : m_store(store),
+          m_runtimes(runtimes),
+          m_models(models),
+          m_executor(executor),
+          m_ids(ids),
+          m_agentDir(std::move(agentDir)) {}
 
-    Result<std::shared_ptr<IRoutedSessionHandle>> open(const SessionRecord& record,
-                                                       const ServiceContext& context) override;
+    Result<std::shared_ptr<IRoutedSessionHandle>> open(const SessionRecord& record, const ServiceContext&) override {
+        auto tree = openTree(record);
+        if (!tree) {
+            return std::unexpected(tree.error());
+        }
+        SessionRuntimeRequest request;
+        request.cwd = record.cwd;
+        request.agentDir = m_agentDir;
+        request.sessionManager = std::move(*tree);
+        auto runtime = m_runtimes.create(std::move(request));
+        if (!runtime) {
+            return std::unexpected(runtime.error());
+        }
+        return std::shared_ptr<IRoutedSessionHandle>(
+            std::make_shared<ServedSession>(std::move(*runtime), m_models, m_executor, m_ids));
+    }
 
 private:
-    Result<std::unique_ptr<ISessionManager>> openTree(const SessionRecord& record);
+    Result<std::unique_ptr<ISessionManager>> openTree(const SessionRecord& record) {
+        if (m_store.findMostRecent(record.directory, record.cwd)) {
+            return m_store.continueRecent(record.cwd, record.directory);
+        }
+        return m_store.create(record.cwd, record.directory, record.id, std::nullopt);
+    }
 
     ISessionStore& m_store;
     ISessionRuntimeFactory& m_runtimes;
@@ -32,37 +56,3 @@ private:
     IIdGenerator& m_ids;
     std::string m_agentDir;
 };
-
-ServedSessionOpener::ServedSessionOpener(ISessionStore& store, ISessionRuntimeFactory& runtimes, IModelRuntime& models,
-                                         IExecutor& executor, IIdGenerator& ids, std::string agentDir)
-    : m_store(store),
-      m_runtimes(runtimes),
-      m_models(models),
-      m_executor(executor),
-      m_ids(ids),
-      m_agentDir(std::move(agentDir)) {}
-
-Result<std::unique_ptr<ISessionManager>> ServedSessionOpener::openTree(const SessionRecord& record) {
-    if (m_store.findMostRecent(record.directory, record.cwd)) {
-        return m_store.continueRecent(record.cwd, record.directory);
-    }
-    return m_store.create(record.cwd, record.directory, record.id, std::nullopt);
-}
-
-Result<std::shared_ptr<IRoutedSessionHandle>> ServedSessionOpener::open(const SessionRecord& record,
-                                                                        const ServiceContext&) {
-    auto tree = openTree(record);
-    if (!tree) {
-        return std::unexpected(tree.error());
-    }
-    SessionRuntimeRequest request;
-    request.cwd = record.cwd;
-    request.agentDir = m_agentDir;
-    request.sessionManager = std::move(*tree);
-    auto runtime = m_runtimes.create(std::move(request));
-    if (!runtime) {
-        return std::unexpected(runtime.error());
-    }
-    return std::shared_ptr<IRoutedSessionHandle>(
-        std::make_shared<ServedSession>(std::move(*runtime), m_models, m_executor, m_ids));
-}

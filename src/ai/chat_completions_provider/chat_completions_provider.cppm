@@ -26,24 +26,122 @@ export import pi.types.json;
  */
 export class ChatCompletionsProvider : public IProvider {
 public:
-    ChatCompletionsProvider(IHttpClient& http, ISleeper& sleeper, const IClock& clock,
-                            IExecutor& executor);
+    ChatCompletionsProvider(IHttpClient& http, ISleeper& sleeper, const IClock& clock, IExecutor& executor)
+        : m_http(http),
+          m_sleeper(sleeper),
+          m_clock(clock),
+          m_executor(executor) {}
 
-    std::string api() const override;
-    std::shared_ptr<AssistantMessageStream> stream(const Model& model,
-                                                   const TranscriptContext& context,
-                                                   const StreamOptions& options) override;
+    std::string api() const override {
+        return "openai-completions";
+    }
+
+    std::shared_ptr<AssistantMessageStream> stream(const Model& model, const TranscriptContext& context, const StreamOptions& options) override {
+        auto emitter = std::make_shared<AssistantStreamEmitter>(initialMessage(model));
+        auto stream = emitter->stream();
+        m_executor.submit([this, emitter, model, context, options]() {
+            run(emitter, model, context, options);
+        });
+        return stream;
+    }
 
 private:
-    void run(const std::shared_ptr<AssistantStreamEmitter>& emitter, const Model& model,
-             const TranscriptContext& context, const StreamOptions& options);
-    AssistantMessage initialMessage(const Model& model) const;
-    bool hasHeaderAuth(const Model& model, const StreamOptions& options) const;
-    HttpHeaders requestHeaders(const Model& model, const TranscriptContext& context,
-                               const StreamOptions& options, const std::string& apiKey) const;
-    HttpRequest buildRequest(const Model& model, const TranscriptContext& context,
-                             const StreamOptions& options, const std::string& apiKey) const;
-    std::string completionsUrl(const Model& model) const;
+    void run(const std::shared_ptr<AssistantStreamEmitter>& emitter, const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        std::string apiKey;
+        if (options.apiKey && !options.apiKey->empty()) {
+            apiKey = *options.apiKey;
+        } else if (hasHeaderAuth(model, options)) {
+            apiKey = "unused";
+        } else {
+            emitter->error(StopReason::Error, "No API key for provider: " + model.provider);
+            return;
+        }
+        RetryingHttpSender sender(m_http, m_sleeper, m_clock);
+        SseRequestRunner runner(sender);
+        ChatCompletionsStreamReader reader(*emitter, model, m_compat.resolve(model));
+        runner.run(
+            buildRequest(model, context, options, apiKey), model, options, *emitter,
+            [&reader](const SseEvent& event) { return reader.handle(event); },
+            [&reader]() { return reader.finish(); },
+            [this](const HttpResponse& response) { return m_formatter.formatOpenAi(response); });
+    }
+
+    AssistantMessage initialMessage(const Model& model) const {
+        AssistantMessage message;
+        message.api = model.api;
+        message.provider = model.provider;
+        message.model = model.id;
+        message.stopReason = StopReason::Pending;
+        message.timestamp = m_clock.nowMs();
+        return message;
+    }
+
+    bool hasHeaderAuth(const Model& model, const StreamOptions& options) const {
+        const HttpHeaders merged = m_headers.merge(m_headers.merge({}, model.headers), options.headers);
+        for (const std::string name : {"authorization", "cf-aig-authorization"}) {
+            const auto value = m_headers.find(merged, name);
+            if (value && value->find_first_not_of(" \t") != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    HttpHeaders requestHeaders(const Model& model, const TranscriptContext& context, const StreamOptions& options, const std::string& apiKey) const {
+        const ChatCompletionsCompat compat = m_compat.resolve(model);
+        HttpHeaders headers = {{"User-Agent", "pi"}};
+        headers = m_headers.merge(headers, model.headers);
+        if (model.provider == "github-copilot") {
+            for (const auto& entry : m_copilot.dynamicHeaders(context.messages)) {
+                m_headers.set(headers, entry.first, entry.second);
+            }
+        }
+        const bool cacheEnabled = options.cacheRetention.value_or("short") != "none";
+        if (options.sessionId && cacheEnabled && compat.sendSessionAffinityHeaders) {
+            if (compat.sessionAffinityFormat == "openrouter") {
+                m_headers.set(headers, "x-session-id", *options.sessionId);
+            } else {
+                if (compat.sessionAffinityFormat == "openai") {
+                    m_headers.set(headers, "session_id", *options.sessionId);
+                }
+                m_headers.set(headers, "x-client-request-id", *options.sessionId);
+                m_headers.set(headers, "x-session-affinity", *options.sessionId);
+            }
+        }
+        headers = m_headers.merge(headers, options.headers);
+        m_headers.set(headers, "content-type", "application/json");
+        m_headers.set(headers, "accept", "application/json");
+        if (!m_headers.find(headers, "authorization") || apiKey != "unused") {
+            m_headers.set(headers, "authorization", "Bearer " + apiKey);
+        }
+        return headers;
+    }
+
+    HttpRequest buildRequest(const Model& model, const TranscriptContext& context, const StreamOptions& options, const std::string& apiKey) const {
+        Json body = m_builder.build(model, context, options, m_clock.nowMs());
+        if (options.onPayload) {
+            if (auto replaced = options.onPayload(body, model)) {
+                body = std::move(*replaced);
+            }
+        }
+        HttpRequest request;
+        request.method = "POST";
+        request.url = completionsUrl(model);
+        request.headers = requestHeaders(model, context, options, apiKey);
+        request.body = m_writer.compact(body);
+        if (options.timeoutMs) {
+            request.idleTimeout = std::chrono::milliseconds(*options.timeoutMs);
+        }
+        return request;
+    }
+
+    std::string completionsUrl(const Model& model) const {
+        std::string base = model.baseUrl;
+        while (!base.empty() && base.back() == '/') {
+            base.pop_back();
+        }
+        return base + "/chat/completions";
+    }
 
     IHttpClient& m_http;
     ISleeper& m_sleeper;
@@ -56,126 +154,3 @@ private:
     JsonWriter m_writer;
     ProviderErrorFormatter m_formatter;
 };
-
-ChatCompletionsProvider::ChatCompletionsProvider(IHttpClient& http, ISleeper& sleeper,
-                                                 const IClock& clock, IExecutor& executor)
-    : m_http(http), m_sleeper(sleeper), m_clock(clock), m_executor(executor) {}
-
-std::string ChatCompletionsProvider::api() const {
-    return "openai-completions";
-}
-
-AssistantMessage ChatCompletionsProvider::initialMessage(const Model& model) const {
-    AssistantMessage message;
-    message.api = model.api;
-    message.provider = model.provider;
-    message.model = model.id;
-    message.stopReason = StopReason::Pending;
-    message.timestamp = m_clock.nowMs();
-    return message;
-}
-
-std::shared_ptr<AssistantMessageStream> ChatCompletionsProvider::stream(
-    const Model& model, const TranscriptContext& context, const StreamOptions& options) {
-    auto emitter = std::make_shared<AssistantStreamEmitter>(initialMessage(model));
-    auto stream = emitter->stream();
-    m_executor.submit([this, emitter, model, context, options]() {
-        run(emitter, model, context, options);
-    });
-    return stream;
-}
-
-bool ChatCompletionsProvider::hasHeaderAuth(const Model& model, const StreamOptions& options) const {
-    const HttpHeaders merged = m_headers.merge(m_headers.merge({}, model.headers), options.headers);
-    for (const std::string name : {"authorization", "cf-aig-authorization"}) {
-        const auto value = m_headers.find(merged, name);
-        if (value && value->find_first_not_of(" \t") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::string ChatCompletionsProvider::completionsUrl(const Model& model) const {
-    std::string base = model.baseUrl;
-    while (!base.empty() && base.back() == '/') {
-        base.pop_back();
-    }
-    return base + "/chat/completions";
-}
-
-HttpHeaders ChatCompletionsProvider::requestHeaders(const Model& model,
-                                                    const TranscriptContext& context,
-                                                    const StreamOptions& options,
-                                                    const std::string& apiKey) const {
-    const ChatCompletionsCompat compat = m_compat.resolve(model);
-    HttpHeaders headers = {{"User-Agent", "pi"}};
-    headers = m_headers.merge(headers, model.headers);
-    if (model.provider == "github-copilot") {
-        for (const auto& entry : m_copilot.dynamicHeaders(context.messages)) {
-            m_headers.set(headers, entry.first, entry.second);
-        }
-    }
-    const bool cacheEnabled = options.cacheRetention.value_or("short") != "none";
-    if (options.sessionId && cacheEnabled && compat.sendSessionAffinityHeaders) {
-        if (compat.sessionAffinityFormat == "openrouter") {
-            m_headers.set(headers, "x-session-id", *options.sessionId);
-        } else {
-            if (compat.sessionAffinityFormat == "openai") {
-                m_headers.set(headers, "session_id", *options.sessionId);
-            }
-            m_headers.set(headers, "x-client-request-id", *options.sessionId);
-            m_headers.set(headers, "x-session-affinity", *options.sessionId);
-        }
-    }
-    headers = m_headers.merge(headers, options.headers);
-    m_headers.set(headers, "content-type", "application/json");
-    m_headers.set(headers, "accept", "application/json");
-    if (!m_headers.find(headers, "authorization") || apiKey != "unused") {
-        m_headers.set(headers, "authorization", "Bearer " + apiKey);
-    }
-    return headers;
-}
-
-HttpRequest ChatCompletionsProvider::buildRequest(const Model& model,
-                                                  const TranscriptContext& context,
-                                                  const StreamOptions& options,
-                                                  const std::string& apiKey) const {
-    Json body = m_builder.build(model, context, options, m_clock.nowMs());
-    if (options.onPayload) {
-        if (auto replaced = options.onPayload(body, model)) {
-            body = std::move(*replaced);
-        }
-    }
-    HttpRequest request;
-    request.method = "POST";
-    request.url = completionsUrl(model);
-    request.headers = requestHeaders(model, context, options, apiKey);
-    request.body = m_writer.compact(body);
-    if (options.timeoutMs) {
-        request.idleTimeout = std::chrono::milliseconds(*options.timeoutMs);
-    }
-    return request;
-}
-
-void ChatCompletionsProvider::run(const std::shared_ptr<AssistantStreamEmitter>& emitter,
-                                  const Model& model, const TranscriptContext& context,
-                                  const StreamOptions& options) {
-    std::string apiKey;
-    if (options.apiKey && !options.apiKey->empty()) {
-        apiKey = *options.apiKey;
-    } else if (hasHeaderAuth(model, options)) {
-        apiKey = "unused";
-    } else {
-        emitter->error(StopReason::Error, "No API key for provider: " + model.provider);
-        return;
-    }
-    RetryingHttpSender sender(m_http, m_sleeper, m_clock);
-    SseRequestRunner runner(sender);
-    ChatCompletionsStreamReader reader(*emitter, model, m_compat.resolve(model));
-    runner.run(
-        buildRequest(model, context, options, apiKey), model, options, *emitter,
-        [&reader](const SseEvent& event) { return reader.handle(event); },
-        [&reader]() { return reader.finish(); },
-        [this](const HttpResponse& response) { return m_formatter.formatOpenAi(response); });
-}

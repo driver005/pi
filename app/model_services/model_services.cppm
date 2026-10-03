@@ -31,16 +31,97 @@ import pi.support.builtin_oauth_specs;
  */
 export class ModelServices {
 public:
-    ModelServices(PlatformServices& platform, const std::string& agentDir, const std::string& catalogDir, bool faux);
+    ModelServices(PlatformServices& platform, const std::string& agentDir, const std::string& catalogDir, bool faux)
+        : m_platform(platform),
+          m_configValues(platform.environment(), platform.processes()),
+          m_credentials(agentDir + "/auth.json", platform.files(), platform.locks(), m_configValues),
+          m_modelsStore(agentDir + "/models-cache.json", platform.files(), platform.locks()),
+          m_envKeys(platform.environment(), platform.files()),
+          m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(), platform.base64()),
+          m_flows(buildFlows()),
+          m_copilot(platform.http()),
+          m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
+        m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<ResponsesProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<AzureResponsesProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment()));
+        m_providers.registerProvider(std::make_shared<GoogleProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<GoogleVertexProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(), m_adc));
+        m_providers.registerProvider(std::make_shared<MistralProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<PiMessagesProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
+        m_providers.registerProvider(std::make_shared<CodexProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.base64()));
+        m_providers.registerProvider(std::make_shared<BedrockProvider>(
+            platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(),
+            platform.files(), platform.crypto(), platform.base64()));
+        if (faux) {
+            const auto replies = platform.environment().get("PI_FAUX_REPLIES");
+            registerFaux(replies.value_or("[]"));
+        }
+        m_runtime.reload();
+    }
 
-    ModelRuntime& models();
-    ConfigValueResolver& configValues();
-    FauxProvider* faux();
+    ModelRuntime& models() {
+        return m_runtime;
+    }
+
+    ConfigValueResolver& configValues() {
+        return m_configValues;
+    }
+
+    FauxProvider* faux() {
+        return m_faux.get();
+    }
 
 private:
-    std::vector<std::unique_ptr<OauthRefreshFlow>> buildFlows() const;
-    std::map<std::string, IOauthFlow*> flowMap();
-    void registerFaux(const std::string& replies);
+    std::vector<std::unique_ptr<OauthRefreshFlow>> buildFlows() const {
+        std::string kimiHost = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
+        if (kimiHost.empty()) {
+            kimiHost = m_platform.environment().get("KIMI_OAUTH_HOST").value_or("");
+        }
+        std::vector<std::unique_ptr<OauthRefreshFlow>> flows;
+        for (auto& spec : BuiltinOauthSpecs().all(kimiHost)) {
+            flows.push_back(std::make_unique<OauthRefreshFlow>(std::move(spec), m_platform.http(), m_platform.clock(),
+                                                               m_platform.base64()));
+        }
+        return flows;
+    }
+
+    std::map<std::string, IOauthFlow*> flowMap() {
+        std::map<std::string, IOauthFlow*> flows;
+        for (const auto& flow : m_flows) {
+            flows[flow->providerId()] = flow.get();
+        }
+        flows["github-copilot"] = &m_copilot;
+        return flows;
+    }
+
+    void registerFaux(const std::string& replies) {
+        m_faux = std::make_shared<FauxProvider>(m_platform.executor(), m_platform.clock(), "faux");
+        const Json parsed = Json::parse(replies, nullptr, false);
+        if (parsed.is_array()) {
+            for (const auto& reply : parsed) {
+                if (reply.is_string()) {
+                    m_faux->enqueue(m_faux->textResponse(reply.get<std::string>()));
+                }
+            }
+        }
+        m_providers.registerProvider(m_faux);
+        Json config = Json::object();
+        config["baseUrl"] = "http://localhost/faux";
+        config["api"] = "faux";
+        config["apiKey"] = "faux";
+        config["models"] = Json::array({Json{{"id", "faux-1"}, {"name", "Faux"}, {"contextWindow", 100000}, {"maxTokens", 8000}}});
+        m_runtime.registerProvider("faux", config);
+    }
 
     PlatformServices& m_platform;
     ConfigValueResolver m_configValues;
@@ -54,97 +135,3 @@ private:
     std::shared_ptr<FauxProvider> m_faux;
     ModelRuntime m_runtime;
 };
-
-ModelServices::ModelServices(PlatformServices& platform, const std::string& agentDir, const std::string& catalogDir,
-                             bool faux)
-    : m_platform(platform),
-      m_configValues(platform.environment(), platform.processes()),
-      m_credentials(agentDir + "/auth.json", platform.files(), platform.locks(), m_configValues),
-      m_modelsStore(agentDir + "/models-cache.json", platform.files(), platform.locks()),
-      m_envKeys(platform.environment(), platform.files()),
-      m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(),
-            platform.base64()),
-      m_flows(buildFlows()),
-      m_copilot(platform.http()),
-      m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore,
-                platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
-    m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<ResponsesProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<AzureResponsesProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment()));
-    m_providers.registerProvider(std::make_shared<GoogleProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<GoogleVertexProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(), m_adc));
-    m_providers.registerProvider(std::make_shared<MistralProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<PiMessagesProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
-    m_providers.registerProvider(std::make_shared<CodexProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.base64()));
-    m_providers.registerProvider(std::make_shared<BedrockProvider>(
-        platform.http(), platform.sleeper(), platform.clock(), platform.executor(), platform.environment(),
-        platform.files(), platform.crypto(), platform.base64()));
-    if (faux) {
-        const auto replies = platform.environment().get("PI_FAUX_REPLIES");
-        registerFaux(replies.value_or("[]"));
-    }
-    m_runtime.reload();
-}
-
-std::vector<std::unique_ptr<OauthRefreshFlow>> ModelServices::buildFlows() const {
-    std::string kimiHost = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
-    if (kimiHost.empty()) {
-        kimiHost = m_platform.environment().get("KIMI_OAUTH_HOST").value_or("");
-    }
-    std::vector<std::unique_ptr<OauthRefreshFlow>> flows;
-    for (auto& spec : BuiltinOauthSpecs().all(kimiHost)) {
-        flows.push_back(std::make_unique<OauthRefreshFlow>(std::move(spec), m_platform.http(), m_platform.clock(),
-                                                           m_platform.base64()));
-    }
-    return flows;
-}
-
-std::map<std::string, IOauthFlow*> ModelServices::flowMap() {
-    std::map<std::string, IOauthFlow*> flows;
-    for (const auto& flow : m_flows) {
-        flows[flow->providerId()] = flow.get();
-    }
-    flows["github-copilot"] = &m_copilot;
-    return flows;
-}
-
-void ModelServices::registerFaux(const std::string& replies) {
-    m_faux = std::make_shared<FauxProvider>(m_platform.executor(), m_platform.clock(), "faux");
-    const Json parsed = Json::parse(replies, nullptr, false);
-    if (parsed.is_array()) {
-        for (const auto& reply : parsed) {
-            if (reply.is_string()) {
-                m_faux->enqueue(m_faux->textResponse(reply.get<std::string>()));
-            }
-        }
-    }
-    m_providers.registerProvider(m_faux);
-    Json config = Json::object();
-    config["baseUrl"] = "http://localhost/faux";
-    config["api"] = "faux";
-    config["apiKey"] = "faux";
-    config["models"] = Json::array({Json{{"id", "faux-1"}, {"name", "Faux"}, {"contextWindow", 100000}, {"maxTokens", 8000}}});
-    m_runtime.registerProvider("faux", config);
-}
-
-ModelRuntime& ModelServices::models() {
-    return m_runtime;
-}
-
-ConfigValueResolver& ModelServices::configValues() {
-    return m_configValues;
-}
-
-FauxProvider* ModelServices::faux() {
-    return m_faux.get();
-}

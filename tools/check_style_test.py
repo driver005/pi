@@ -42,8 +42,13 @@ private:
     def testFreeFunctionRejected(self):
         self.assertIn("no-free-function", check("src/base/foo/foo.cppm", "int helper(int a) {\n    return a;\n}\n"))
 
-    def testMemberDefinitionAllowed(self):
-        source = "int Foo::get() const {\n    return m_v;\n}\nFoo::Foo(int v) : m_v{v} {\n}\n"
+    def testOutOfClassMemberDefinitionRejected(self):
+        source = "int Foo::get() const {\n    return m_v;\n}\nFoo::Foo(int v) {\n}\n"
+        self.assertEqual(check("src/base/foo/foo.cppm", source), ["no-out-of-class-definition"] * 2)
+        self.assertEqual(check("src/base/foo/foo.cppm", "Foo::~Foo() {\n}\n"), ["no-out-of-class-definition"])
+
+    def testInClassDefinitionAllowed(self):
+        source = "export class Foo {\npublic:\n    Foo(int v) : m_v{v} {}\n    int get() const {\n        return m_v;\n    }\nprivate:\n    int m_v;\n};\n"
         self.assertEqual(check("src/base/foo/foo.cppm", source), [])
 
     def testMainAllowed(self):

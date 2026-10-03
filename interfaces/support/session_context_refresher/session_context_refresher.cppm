@@ -10,18 +10,15 @@ export import pi.session.i_session_manager;
  */
 export class SessionContextRefresher {
 public:
-    SessionContextRefresher(IAgent& agent, ISessionManager& session);
+    SessionContextRefresher(IAgent& agent, ISessionManager& session)
+        : m_agent(agent),
+          m_session(session) {}
 
-    void refresh();
+    void refresh() {
+        m_agent.setMessages(m_session.buildSessionProjection().messages);
+    }
 
 private:
     IAgent& m_agent;
     ISessionManager& m_session;
 };
-
-SessionContextRefresher::SessionContextRefresher(IAgent& agent, ISessionManager& session)
-    : m_agent(agent), m_session(session) {}
-
-void SessionContextRefresher::refresh() {
-    m_agent.setMessages(m_session.buildSessionProjection().messages);
-}

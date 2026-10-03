@@ -19,18 +19,55 @@ import pi.support.transcript_service;
  */
 export class ServedSession : public IRoutedSessionHandle {
 public:
-    ServedSession(std::unique_ptr<ISessionRuntimeHandle> runtime, IModelRuntime& models, IExecutor& executor,
-                  IIdGenerator& ids);
-    ~ServedSession() override;
+    ServedSession(std::unique_ptr<ISessionRuntimeHandle> runtime, IModelRuntime& models, IExecutor& executor, IIdGenerator& ids)
+        : m_runtime(std::move(runtime)),
+          m_controller(std::make_shared<AgentControllerService>(m_runtime->session(), executor, ids)), m_models(std::make_shared<ModelsService>(m_runtime->session(),
+          models)), m_transcript(std::make_shared<TranscriptService>(m_runtime->session())), m_provider(std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{ {"pi.agent-controller", "singleton"},
+          {"pi.models", "singleton"},
+          {"pi.transcript", "singleton"}})) {
+        m_provider->provide("pi.agent-controller", m_controller);
+        m_provider->provide("pi.models", m_models);
+        m_provider->provide("pi.transcript", m_transcript);
+    }
+
+    ~ServedSession() override {
+        close(ServiceContext{std::make_shared<AbortSignal>()});
+    }
 
     ServedSession(const ServedSession&) = delete;
     ServedSession& operator=(const ServedSession&) = delete;
 
-    Result<std::unique_ptr<IServiceAttachment>> attachClient(const ServiceContext& context) override;
-    void onTermination(TerminationListener listener) override;
-    Result<void> close(const ServiceContext& context) override;
+    Result<std::unique_ptr<IServiceAttachment>> attachClient(const ServiceContext&) override {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) {
+                return std::unexpected(Error{"server_draining", "Session is closed"});
+            }
+        }
+        return std::unique_ptr<IServiceAttachment>(
+            std::make_unique<ProviderServiceAttachment>(m_provider, std::function<void()>()));
+    }
+    void onTermination(TerminationListener) override {}
 
-    ISessionRuntimeHandle& runtime();
+    Result<void> close(const ServiceContext&) override {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) {
+                return {};
+            }
+            m_closed = true;
+        }
+        m_provider->dispose();
+        IAgentSession& session = m_runtime->session();
+        session.clearQueue();
+        session.abort();
+        session.waitForIdle();
+        return {};
+    }
+
+    ISessionRuntimeHandle& runtime() {
+        return *m_runtime;
+    }
 
 private:
     std::unique_ptr<ISessionRuntimeHandle> m_runtime;
@@ -41,53 +78,3 @@ private:
     std::mutex m_mutex;
     bool m_closed = false;
 };
-
-ServedSession::ServedSession(std::unique_ptr<ISessionRuntimeHandle> runtime, IModelRuntime& models,
-                             IExecutor& executor, IIdGenerator& ids)
-    : m_runtime(std::move(runtime)),
-      m_controller(std::make_shared<AgentControllerService>(m_runtime->session(), executor, ids)),
-      m_models(std::make_shared<ModelsService>(m_runtime->session(), models)),
-      m_transcript(std::make_shared<TranscriptService>(m_runtime->session())),
-      m_provider(std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{
-          {"pi.agent-controller", "singleton"}, {"pi.models", "singleton"}, {"pi.transcript", "singleton"}})) {
-    m_provider->provide("pi.agent-controller", m_controller);
-    m_provider->provide("pi.models", m_models);
-    m_provider->provide("pi.transcript", m_transcript);
-}
-
-ServedSession::~ServedSession() {
-    close(ServiceContext{std::make_shared<AbortSignal>()});
-}
-
-ISessionRuntimeHandle& ServedSession::runtime() {
-    return *m_runtime;
-}
-
-Result<std::unique_ptr<IServiceAttachment>> ServedSession::attachClient(const ServiceContext&) {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_closed) {
-            return std::unexpected(Error{"server_draining", "Session is closed"});
-        }
-    }
-    return std::unique_ptr<IServiceAttachment>(
-        std::make_unique<ProviderServiceAttachment>(m_provider, std::function<void()>()));
-}
-
-void ServedSession::onTermination(TerminationListener) {}
-
-Result<void> ServedSession::close(const ServiceContext&) {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_closed) {
-            return {};
-        }
-        m_closed = true;
-    }
-    m_provider->dispose();
-    IAgentSession& session = m_runtime->session();
-    session.clearQueue();
-    session.abort();
-    session.waitForIdle();
-    return {};
-}

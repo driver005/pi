@@ -10,19 +10,16 @@ export import pi.types.session_entry;
  */
 export class MessageEntryLocator {
 public:
-    std::optional<std::string> find(const std::vector<SessionEntry>& branch, const AgentMessage& message) const;
+    std::optional<std::string> find(const std::vector<SessionEntry>& branch, const AgentMessage& message) const {
+        const Json wanted = m_codec.toJson(message);
+        for (auto it = branch.rbegin(); it != branch.rend(); ++it) {
+            if (it->type == "message" && it->body.contains("message") && it->body["message"] == wanted) {
+                return it->id;
+            }
+        }
+        return std::nullopt;
+    }
 
 private:
     AgentMessageCodec m_codec;
 };
-
-std::optional<std::string> MessageEntryLocator::find(const std::vector<SessionEntry>& branch,
-                                                     const AgentMessage& message) const {
-    const Json wanted = m_codec.toJson(message);
-    for (auto it = branch.rbegin(); it != branch.rend(); ++it) {
-        if (it->type == "message" && it->body.contains("message") && it->body["message"] == wanted) {
-            return it->id;
-        }
-    }
-    return std::nullopt;
-}

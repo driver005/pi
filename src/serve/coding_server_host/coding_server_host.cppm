@@ -11,39 +11,33 @@ export import pi.server.i_session_opener;
  */
 export class CodingServerHost : public IServerHost {
 public:
-    CodingServerHost(IServerServiceHost& services, ISessionCatalog& catalog, ISessionOpener& opener);
+    CodingServerHost(IServerServiceHost& services, ISessionCatalog& catalog, ISessionOpener& opener)
+        : m_services(services),
+          m_catalog(catalog),
+          m_opener(opener) {}
 
-    IServerServiceHost& serverServices() override;
-    Result<std::string> resolveSession(const std::string& sessionId, const ServiceContext& context) override;
-    Result<std::shared_ptr<IRoutedSessionHandle>> openSession(const std::string& sessionId,
-                                                              const ServiceContext& context) override;
+    IServerServiceHost& serverServices() override {
+        return m_services;
+    }
+
+    Result<std::string> resolveSession(const std::string& sessionId, const ServiceContext&) override {
+        auto record = m_catalog.resolve(sessionId);
+        if (!record) {
+            return std::unexpected(record.error());
+        }
+        return record->id;
+    }
+
+    Result<std::shared_ptr<IRoutedSessionHandle>> openSession(const std::string& sessionId, const ServiceContext& context) override {
+        auto record = m_catalog.resolve(sessionId);
+        if (!record) {
+            return std::unexpected(record.error());
+        }
+        return m_opener.open(*record, context);
+    }
 
 private:
     IServerServiceHost& m_services;
     ISessionCatalog& m_catalog;
     ISessionOpener& m_opener;
 };
-
-CodingServerHost::CodingServerHost(IServerServiceHost& services, ISessionCatalog& catalog, ISessionOpener& opener)
-    : m_services(services), m_catalog(catalog), m_opener(opener) {}
-
-IServerServiceHost& CodingServerHost::serverServices() {
-    return m_services;
-}
-
-Result<std::string> CodingServerHost::resolveSession(const std::string& sessionId, const ServiceContext&) {
-    auto record = m_catalog.resolve(sessionId);
-    if (!record) {
-        return std::unexpected(record.error());
-    }
-    return record->id;
-}
-
-Result<std::shared_ptr<IRoutedSessionHandle>> CodingServerHost::openSession(const std::string& sessionId,
-                                                                            const ServiceContext& context) {
-    auto record = m_catalog.resolve(sessionId);
-    if (!record) {
-        return std::unexpected(record.error());
-    }
-    return m_opener.open(*record, context);
-}

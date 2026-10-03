@@ -9,14 +9,11 @@ export import pi.types.json;
  */
 export class JsonWriter {
 public:
-    std::string compact(const Json& value) const;
-    std::string pretty(const Json& value, int indent = 2) const;
+    std::string compact(const Json& value) const {
+        return value.dump(-1, ' ', false, Json::error_handler_t::replace);
+    }
+
+    std::string pretty(const Json& value, int indent = 2) const {
+        return value.dump(indent, ' ', false, Json::error_handler_t::replace);
+    }
 };
-
-std::string JsonWriter::compact(const Json& value) const {
-    return value.dump(-1, ' ', false, Json::error_handler_t::replace);
-}
-
-std::string JsonWriter::pretty(const Json& value, int indent) const {
-    return value.dump(indent, ' ', false, Json::error_handler_t::replace);
-}

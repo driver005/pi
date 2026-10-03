@@ -15,36 +15,30 @@ import pi.support.session_management_service;
  */
 export class ServerServiceHost : public IServerServiceHost {
 public:
-    ServerServiceHost(ISessionCatalog& catalog, std::string serverId);
+    ServerServiceHost(ISessionCatalog& catalog, std::string serverId)
+        : m_catalog(catalog),
+          m_directory(std::make_shared<SessionDirectoryService>(catalog, std::move(serverId))) {}
 
-    Result<std::unique_ptr<IServiceAttachment>> attachClient(IServerPresentation& presentation,
-                                                             const ServiceContext& context) override;
+    Result<std::unique_ptr<IServiceAttachment>> attachClient(IServerPresentation& presentation, const ServiceContext&) override {
+        auto provider = std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{
+            {"pi.session-directory", "singleton"}, {"pi.session-management", "singleton"}});
+        if (auto provided = provider->provide("pi.session-directory", m_directory); !provided) {
+            return std::unexpected(provided.error());
+        }
+        auto management = std::make_shared<SessionManagementService>(presentation, m_catalog, *m_directory);
+        if (auto provided = provider->provide("pi.session-management", management); !provided) {
+            return std::unexpected(provided.error());
+        }
+        return std::unique_ptr<IServiceAttachment>(
+            std::make_unique<ProviderServiceAttachment>(provider, [provider] { provider->dispose(); }));
+    }
+
     /** Re-reads the catalog and publishes the new directory to every client. */
-    Result<void> refresh(const ServiceContext& context);
+    Result<void> refresh(const ServiceContext& context) {
+        return m_directory->refresh(context);
+    }
 
 private:
     ISessionCatalog& m_catalog;
     std::shared_ptr<SessionDirectoryService> m_directory;
 };
-
-ServerServiceHost::ServerServiceHost(ISessionCatalog& catalog, std::string serverId)
-    : m_catalog(catalog), m_directory(std::make_shared<SessionDirectoryService>(catalog, std::move(serverId))) {}
-
-Result<void> ServerServiceHost::refresh(const ServiceContext& context) {
-    return m_directory->refresh(context);
-}
-
-Result<std::unique_ptr<IServiceAttachment>> ServerServiceHost::attachClient(IServerPresentation& presentation,
-                                                                            const ServiceContext&) {
-    auto provider = std::make_shared<RemoteServiceProvider>(std::vector<ServiceDefinition>{
-        {"pi.session-directory", "singleton"}, {"pi.session-management", "singleton"}});
-    if (auto provided = provider->provide("pi.session-directory", m_directory); !provided) {
-        return std::unexpected(provided.error());
-    }
-    auto management = std::make_shared<SessionManagementService>(presentation, m_catalog, *m_directory);
-    if (auto provided = provider->provide("pi.session-management", management); !provided) {
-        return std::unexpected(provided.error());
-    }
-    return std::unique_ptr<IServiceAttachment>(
-        std::make_unique<ProviderServiceAttachment>(provider, [provider] { provider->dispose(); }));
-}

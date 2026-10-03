@@ -14,30 +14,25 @@ import std;
  */
 export class PosixSignalWaiter {
 public:
-    PosixSignalWaiter();
+    PosixSignalWaiter() {
+        sigemptyset(&m_signals);
+        sigaddset(&m_signals, SIGINT);
+        sigaddset(&m_signals, SIGTERM);
+        sigaddset(&m_signals, SIGHUP);
+    }
 
-    void block();
+    void block() {
+        pthread_sigmask(SIG_BLOCK, &m_signals, nullptr);
+    }
+
     /** Blocks until one of the signals arrives; returns its number. */
-    int wait();
+    int wait() {
+        int received = 0;
+        while (sigwait(&m_signals, &received) != 0) {
+        }
+        return received;
+    }
 
 private:
     sigset_t m_signals;
 };
-
-PosixSignalWaiter::PosixSignalWaiter() {
-    sigemptyset(&m_signals);
-    sigaddset(&m_signals, SIGINT);
-    sigaddset(&m_signals, SIGTERM);
-    sigaddset(&m_signals, SIGHUP);
-}
-
-void PosixSignalWaiter::block() {
-    pthread_sigmask(SIG_BLOCK, &m_signals, nullptr);
-}
-
-int PosixSignalWaiter::wait() {
-    int received = 0;
-    while (sigwait(&m_signals, &received) != 0) {
-    }
-    return received;
-}

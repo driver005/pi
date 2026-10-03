@@ -17,17 +17,68 @@ import pi.support.rpc_command_router;
  */
 export class RpcServer {
 public:
-    RpcServer(IAgentSessionRuntime& runtime, IModelRuntime& models, IByteInput& input, IByteOutput& output,
-              IExecutor& executor);
+    RpcServer(IAgentSessionRuntime& runtime, IModelRuntime& models, IByteInput& input, IByteOutput& output, IExecutor& executor)
+        : m_runtime(runtime),
+          m_input(input),
+          m_output(output),
+          m_executor(executor),
+          m_router(runtime, models, [this](const Json& json) { write(json); }) {}
 
     /** Serves until end of input; returns the process exit code. */
-    int run();
+    int run() {
+        m_router.attach();
+        JsonlLineReader reader;
+        while (const auto chunk = m_input.read()) {
+            for (const auto& line : reader.feed(*chunk)) {
+                dispatch(line);
+            }
+        }
+        if (const auto tail = reader.finish()) {
+            dispatch(*tail);
+        }
+        waitForCommands();
+        m_router.detach();
+        m_runtime.dispose();
+        m_output.flush();
+        return 0;
+    }
 
 private:
-    void write(const Json& json);
-    void dispatch(const std::string& line);
-    void startCommand(const Json& command);
-    void waitForCommands();
+    void write(const Json& json) {
+        m_output.write(m_writer.compact(json) + "\n");
+    }
+
+    void dispatch(const std::string& line) {
+        const Json parsed = Json::parse(line, nullptr, false);
+        if (parsed.is_discarded()) {
+            write(m_router.parseError("invalid JSON"));
+            return;
+        }
+        if (parsed.is_object() && parsed.value("type", "") == "extension_ui_response") {
+            return;
+        }
+        startCommand(parsed);
+    }
+
+    void startCommand(const Json& command) {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            ++m_inFlight;
+        }
+        m_executor.submit([this, command] {
+            m_router.handle(command);
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                --m_inFlight;
+            }
+            m_finished.notify_all();
+        });
+    }
+
+    void waitForCommands() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_finished.wait(lock, [this] { return m_inFlight == 0; });
+    }
 
     IAgentSessionRuntime& m_runtime;
     IByteInput& m_input;
@@ -40,65 +91,3 @@ private:
     std::condition_variable m_finished;
     int m_inFlight = 0;
 };
-
-RpcServer::RpcServer(IAgentSessionRuntime& runtime, IModelRuntime& models, IByteInput& input, IByteOutput& output,
-                     IExecutor& executor)
-    : m_runtime(runtime),
-      m_input(input),
-      m_output(output),
-      m_executor(executor),
-      m_router(runtime, models, [this](const Json& json) { write(json); }) {}
-
-void RpcServer::write(const Json& json) {
-    m_output.write(m_writer.compact(json) + "\n");
-}
-
-void RpcServer::startCommand(const Json& command) {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        ++m_inFlight;
-    }
-    m_executor.submit([this, command] {
-        m_router.handle(command);
-        {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            --m_inFlight;
-        }
-        m_finished.notify_all();
-    });
-}
-
-void RpcServer::waitForCommands() {
-    std::unique_lock<std::mutex> lock(m_mutex);
-    m_finished.wait(lock, [this] { return m_inFlight == 0; });
-}
-
-void RpcServer::dispatch(const std::string& line) {
-    const Json parsed = Json::parse(line, nullptr, false);
-    if (parsed.is_discarded()) {
-        write(m_router.parseError("invalid JSON"));
-        return;
-    }
-    if (parsed.is_object() && parsed.value("type", "") == "extension_ui_response") {
-        return;
-    }
-    startCommand(parsed);
-}
-
-int RpcServer::run() {
-    m_router.attach();
-    JsonlLineReader reader;
-    while (const auto chunk = m_input.read()) {
-        for (const auto& line : reader.feed(*chunk)) {
-            dispatch(line);
-        }
-    }
-    if (const auto tail = reader.finish()) {
-        dispatch(*tail);
-    }
-    waitForCommands();
-    m_router.detach();
-    m_runtime.dispose();
-    m_output.flush();
-    return 0;
-}

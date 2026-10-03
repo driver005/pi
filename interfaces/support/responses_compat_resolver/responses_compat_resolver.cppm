@@ -12,33 +12,29 @@ export import pi.types.responses_compat;
  */
 export class ResponsesCompatResolver {
 public:
-    ResponsesCompat resolve(const Model& model) const;
+    ResponsesCompat resolve(const Model& model) const {
+        ResponsesCompat compat;
+        if (model.provider == "openrouter" || model.baseUrl.find("openrouter.ai") != std::string::npos) {
+            compat.sessionAffinityFormat = "openrouter";
+        }
+        const Json& overrides = model.compat;
+        overrideBool(compat.supportsDeveloperRole, overrides, "supportsDeveloperRole");
+        overrideBool(compat.supportsMidConvoSystemMessages, overrides, "supportsMidConvoSystemMessages");
+        overrideBool(compat.supportsLongCacheRetention, overrides, "supportsLongCacheRetention");
+        overrideBool(compat.supportsStrictMode, overrides, "supportsStrictMode");
+        overrideBool(compat.supportsExplicitPromptCacheMode, overrides, "supportsExplicitPromptCacheMode");
+        overrideBool(compat.supportsMaxOutputTokens, overrides, "supportsMaxOutputTokens");
+        if (overrides.is_object() && overrides.contains("sessionAffinityFormat") &&
+            overrides["sessionAffinityFormat"].is_string()) {
+            compat.sessionAffinityFormat = overrides["sessionAffinityFormat"].get<std::string>();
+        }
+        return compat;
+    }
 
 private:
-    void overrideBool(bool& target, const Json& overrides, const std::string& key) const;
+    void overrideBool(bool& target, const Json& overrides, const std::string& key) const {
+        if (overrides.is_object() && overrides.contains(key) && overrides[key].is_boolean()) {
+            target = overrides[key].get<bool>();
+        }
+    }
 };
-
-void ResponsesCompatResolver::overrideBool(bool& target, const Json& overrides, const std::string& key) const {
-    if (overrides.is_object() && overrides.contains(key) && overrides[key].is_boolean()) {
-        target = overrides[key].get<bool>();
-    }
-}
-
-ResponsesCompat ResponsesCompatResolver::resolve(const Model& model) const {
-    ResponsesCompat compat;
-    if (model.provider == "openrouter" || model.baseUrl.find("openrouter.ai") != std::string::npos) {
-        compat.sessionAffinityFormat = "openrouter";
-    }
-    const Json& overrides = model.compat;
-    overrideBool(compat.supportsDeveloperRole, overrides, "supportsDeveloperRole");
-    overrideBool(compat.supportsMidConvoSystemMessages, overrides, "supportsMidConvoSystemMessages");
-    overrideBool(compat.supportsLongCacheRetention, overrides, "supportsLongCacheRetention");
-    overrideBool(compat.supportsStrictMode, overrides, "supportsStrictMode");
-    overrideBool(compat.supportsExplicitPromptCacheMode, overrides, "supportsExplicitPromptCacheMode");
-    overrideBool(compat.supportsMaxOutputTokens, overrides, "supportsMaxOutputTokens");
-    if (overrides.is_object() && overrides.contains("sessionAffinityFormat") &&
-        overrides["sessionAffinityFormat"].is_string()) {
-        compat.sessionAffinityFormat = overrides["sessionAffinityFormat"].get<std::string>();
-    }
-    return compat;
-}

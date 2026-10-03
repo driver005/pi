@@ -5,6 +5,7 @@ Rules enforced on .cppm/.cpp files under interfaces/, src/, app/, sdk/ and plugi
   no-static-function     no static member/free functions
   no-anonymous-namespace no `namespace {`
   no-free-function       functions are members of a class (main() and extern "C" excepted)
+  no-out-of-class-definition  member functions are defined inside the class body, never as `Class::name(...)`
   no-nested-type         no class/struct/union/enum declared inside a class or function
   one-class-per-module   at most one class/struct per header, one header per directory
   module-name            <name>.cppm is the snake_case of its class name (one .cppm per directory)
@@ -309,7 +310,11 @@ class FileChecker:
         if stack and stack[-1].kind == "class":
             return
         head = words[: words.index("(")] if "(" in words else words
-        if "::" in head or (head and head[-1] == "main"):
+        if head and head[-1] == "main":
+            return
+        name = head[:-1] if head[-1:] == ["~"] else head
+        if len(name) >= 2 and name[-2] == "::" or "::" in head[-3:] and "~" in head[-2:]:
+            self._add(line, "no-out-of-class-definition", "member function defined outside its class body")
             return
         self._add(line, "no-free-function", f"free function '{head[-1] if head else '?'}'")
 

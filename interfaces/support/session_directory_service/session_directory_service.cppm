@@ -13,22 +13,56 @@ export import pi.support.replicated_state;
  */
 export class SessionDirectoryService : public IRemoteService {
 public:
-    SessionDirectoryService(ISessionCatalog& catalog, std::string serverId);
+    SessionDirectoryService(ISessionCatalog& catalog, std::string serverId)
+        : m_catalog(catalog),
+          m_serverId(std::move(serverId)),
+          m_state(Json{{"revision", 1}, {"sessions", sessions().value_or(Json::array())}}) {}
 
     SessionDirectoryService(const SessionDirectoryService&) = delete;
     SessionDirectoryService& operator=(const SessionDirectoryService&) = delete;
 
     /** Re-reads the catalog; the state keeps its value when that fails. */
-    Result<void> refresh(const ServiceContext& context);
-    std::mutex& mutations();
-    /** The address of a session as services report it. */
-    Json summary(const SessionRecord& record) const;
+    Result<void> refresh(const ServiceContext& context) {
+        auto list = sessions();
+        if (!list) {
+            return std::unexpected(list.error());
+        }
+        const std::int64_t revision = ++m_revision;
+        return m_state.change(context, [&](Json& draft) {
+            draft["revision"] = revision;
+            draft["sessions"] = *list;
+        });
+    }
 
-    std::map<std::string, Method> methods() override;
-    std::map<std::string, IReplicatedState*> states() override;
+    std::mutex& mutations() {
+        return m_mutations;
+    }
+
+    /** The address of a session as services report it. */
+    Json summary(const SessionRecord& record) const {
+        return Json{{"serverId", m_serverId}, {"sessionId", record.id}, {"createdAt", record.createdAt}};
+    }
+
+    std::map<std::string, Method> methods() override {
+        return {};
+    }
+
+    std::map<std::string, IReplicatedState*> states() override {
+        return {{"state", &m_state}};
+    }
 
 private:
-    Result<Json> sessions() const;
+    Result<Json> sessions() const {
+        auto records = m_catalog.list();
+        if (!records) {
+            return std::unexpected(records.error());
+        }
+        Json list = Json::array();
+        for (const SessionRecord& record : *records) {
+            list.push_back(summary(record));
+        }
+        return list;
+    }
 
     ISessionCatalog& m_catalog;
     std::string m_serverId;
@@ -36,48 +70,3 @@ private:
     std::int64_t m_revision = 1;
     ReplicatedState m_state;
 };
-
-SessionDirectoryService::SessionDirectoryService(ISessionCatalog& catalog, std::string serverId)
-    : m_catalog(catalog),
-      m_serverId(std::move(serverId)),
-      m_state(Json{{"revision", 1}, {"sessions", sessions().value_or(Json::array())}}) {}
-
-Json SessionDirectoryService::summary(const SessionRecord& record) const {
-    return Json{{"serverId", m_serverId}, {"sessionId", record.id}, {"createdAt", record.createdAt}};
-}
-
-Result<Json> SessionDirectoryService::sessions() const {
-    auto records = m_catalog.list();
-    if (!records) {
-        return std::unexpected(records.error());
-    }
-    Json list = Json::array();
-    for (const SessionRecord& record : *records) {
-        list.push_back(summary(record));
-    }
-    return list;
-}
-
-Result<void> SessionDirectoryService::refresh(const ServiceContext& context) {
-    auto list = sessions();
-    if (!list) {
-        return std::unexpected(list.error());
-    }
-    const std::int64_t revision = ++m_revision;
-    return m_state.change(context, [&](Json& draft) {
-        draft["revision"] = revision;
-        draft["sessions"] = *list;
-    });
-}
-
-std::mutex& SessionDirectoryService::mutations() {
-    return m_mutations;
-}
-
-std::map<std::string, IRemoteService::Method> SessionDirectoryService::methods() {
-    return {};
-}
-
-std::map<std::string, IReplicatedState*> SessionDirectoryService::states() {
-    return {{"state", &m_state}};
-}

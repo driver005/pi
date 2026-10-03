@@ -14,51 +14,44 @@ export import pi.support.replicated_state;
  */
 export class TranscriptService : public IRemoteService {
 public:
-    explicit TranscriptService(IAgentSession& session);
-    ~TranscriptService() override;
+    explicit TranscriptService(IAgentSession& session)
+        : m_session(session),
+          m_state(view()) {
+        m_listener = m_session.subscribe([this](const AgentSessionEvent& event) {
+            if (event.type == SessionEventType::Agent || event.type == SessionEventType::AgentEnd ||
+                event.type == SessionEventType::AgentSettled || event.type == SessionEventType::EntryAppended ||
+                event.type == SessionEventType::CompactionEnd) {
+                refresh();
+            }
+        });
+    }
+
+    ~TranscriptService() override {
+        m_session.unsubscribe(m_listener);
+    }
 
     TranscriptService(const TranscriptService&) = delete;
     TranscriptService& operator=(const TranscriptService&) = delete;
 
-    std::map<std::string, Method> methods() override;
-    std::map<std::string, IReplicatedState*> states() override;
+    std::map<std::string, Method> methods() override {
+        return {};
+    }
+
+    std::map<std::string, IReplicatedState*> states() override {
+        return {{"state", &m_state}};
+    }
 
 private:
-    Json view() const;
-    void refresh();
+    Json view() const {
+        return Json{{"messages", m_codec.listToJson(m_session.messages())}, {"isStreaming", m_session.isStreaming()}};
+    }
+
+    void refresh() {
+        m_state.change(ServiceContext{std::make_shared<AbortSignal>()}, [this](Json& draft) { draft = view(); });
+    }
 
     IAgentSession& m_session;
     AgentMessageCodec m_codec;
     ReplicatedState m_state;
     IAgentSession::ListenerId m_listener = 0;
 };
-
-TranscriptService::TranscriptService(IAgentSession& session) : m_session(session), m_state(view()) {
-    m_listener = m_session.subscribe([this](const AgentSessionEvent& event) {
-        if (event.type == SessionEventType::Agent || event.type == SessionEventType::AgentEnd ||
-            event.type == SessionEventType::AgentSettled || event.type == SessionEventType::EntryAppended ||
-            event.type == SessionEventType::CompactionEnd) {
-            refresh();
-        }
-    });
-}
-
-TranscriptService::~TranscriptService() {
-    m_session.unsubscribe(m_listener);
-}
-
-Json TranscriptService::view() const {
-    return Json{{"messages", m_codec.listToJson(m_session.messages())}, {"isStreaming", m_session.isStreaming()}};
-}
-
-void TranscriptService::refresh() {
-    m_state.change(ServiceContext{std::make_shared<AbortSignal>()}, [this](Json& draft) { draft = view(); });
-}
-
-std::map<std::string, IRemoteService::Method> TranscriptService::methods() {
-    return {};
-}
-
-std::map<std::string, IReplicatedState*> TranscriptService::states() {
-    return {{"state", &m_state}};
-}

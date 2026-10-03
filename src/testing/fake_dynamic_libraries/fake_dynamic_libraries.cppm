@@ -7,13 +7,52 @@ export import pi.platform.i_dynamic_libraries;
 export class FakeDynamicLibraries : public IDynamicLibraries {
 public:
     /** Makes `path` loadable with these symbols. */
-    void provide(const std::string& path, std::map<std::string, void*> symbols);
-    std::vector<std::string> opened() const;
-    int closed() const;
+    void provide(const std::string& path, std::map<std::string, void*> symbols) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_available[path] = std::move(symbols);
+    }
 
-    Result<std::uint64_t> open(const std::string& path) override;
-    Result<void*> symbol(std::uint64_t library, const std::string& name) override;
-    void close(std::uint64_t library) override;
+    std::vector<std::string> opened() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_opened;
+    }
+
+    int closed() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_closed;
+    }
+
+    Result<std::uint64_t> open(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_available.contains(path)) {
+            return std::unexpected(Error{"dlopen", path + ": cannot open shared object file"});
+        }
+        const std::uint64_t id = m_nextId++;
+        m_open[id] = path;
+        m_opened.push_back(path);
+        return id;
+    }
+
+    Result<void*> symbol(std::uint64_t library, const std::string& name) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto path = m_open.find(library);
+        if (path == m_open.end()) {
+            return std::unexpected(Error{"dlsym", "library is not open"});
+        }
+        const auto& symbols = m_available[path->second];
+        const auto found = symbols.find(name);
+        if (found == symbols.end()) {
+            return std::unexpected(Error{"dlsym", "missing symbol " + name});
+        }
+        return found->second;
+    }
+
+    void close(std::uint64_t library) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_open.erase(library) > 0) {
+            ++m_closed;
+        }
+    }
 
 private:
     mutable std::mutex m_mutex;
@@ -23,50 +62,3 @@ private:
     std::uint64_t m_nextId = 1;
     int m_closed = 0;
 };
-
-void FakeDynamicLibraries::provide(const std::string& path, std::map<std::string, void*> symbols) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    m_available[path] = std::move(symbols);
-}
-
-std::vector<std::string> FakeDynamicLibraries::opened() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    return m_opened;
-}
-
-int FakeDynamicLibraries::closed() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    return m_closed;
-}
-
-Result<std::uint64_t> FakeDynamicLibraries::open(const std::string& path) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_available.contains(path)) {
-        return std::unexpected(Error{"dlopen", path + ": cannot open shared object file"});
-    }
-    const std::uint64_t id = m_nextId++;
-    m_open[id] = path;
-    m_opened.push_back(path);
-    return id;
-}
-
-Result<void*> FakeDynamicLibraries::symbol(std::uint64_t library, const std::string& name) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    const auto path = m_open.find(library);
-    if (path == m_open.end()) {
-        return std::unexpected(Error{"dlsym", "library is not open"});
-    }
-    const auto& symbols = m_available[path->second];
-    const auto found = symbols.find(name);
-    if (found == symbols.end()) {
-        return std::unexpected(Error{"dlsym", "missing symbol " + name});
-    }
-    return found->second;
-}
-
-void FakeDynamicLibraries::close(std::uint64_t library) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_open.erase(library) > 0) {
-        ++m_closed;
-    }
-}

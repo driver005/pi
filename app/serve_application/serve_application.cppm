@@ -22,22 +22,72 @@ import pi.support.server_identity;
  */
 export class ServeApplication {
 public:
-    ServeApplication(CommandLine line, const ServeDependencies& dependencies);
-    ~ServeApplication();
+    ServeApplication(CommandLine line, const ServeDependencies& dependencies)
+        : m_line(std::move(line)),
+          m_deps(dependencies),
+          m_requests(64),
+          m_work(32) {}
+
+    ~ServeApplication() {
+        stop();
+    }
 
     ServeApplication(const ServeApplication&) = delete;
     ServeApplication& operator=(const ServeApplication&) = delete;
 
     /** Resolves the identity, prepares the directories and starts listening. */
-    Result<void> start();
-    /** Disconnects every client, closes every session and stops listening. Idempotent. */
-    void stop();
+    Result<void> start() {
+        ServerIdentity identity(*m_deps.files, *m_deps.crypto);
+        auto resolved = identity.resolve(m_line.serverDir, m_line.serverId);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        m_serverId = *resolved;
+        if (auto made = m_deps.files->createPrivateDirectories(m_line.serverDir); !made) {
+            return std::unexpected(made.error());
+        }
+        m_catalog = std::make_unique<DirectorySessionCatalog>(*m_deps.files, *m_deps.clock, *m_deps.ids,
+                                                              m_line.options.sessionDir.value_or(""), m_line.options.cwd);
+        m_serverServices = std::make_unique<ServerServiceHost>(*m_catalog, m_serverId);
+        m_opener = std::make_unique<ServedSessionOpener>(*m_deps.sessions, *m_deps.runtimes, *m_deps.models, m_work,
+                                                         *m_deps.ids, m_line.options.agentDir);
+        m_host = std::make_unique<CodingServerHost>(*m_serverServices, *m_catalog, *m_opener);
+        UnixListenerOptions listenerOptions;
+        listenerOptions.path = socketPath();
+        listenerOptions.onError = [this](const Error& error) { report(error); };
+        listenerOptions.connect = [](int fd, std::uint64_t limit, std::int64_t grace) {
+            return std::shared_ptr<ISocketConnection>(std::make_shared<PosixByteConnection>(fd, limit, grace));
+        };
+        m_listener = std::make_unique<PosixUnixListener>(listenerOptions);
+        ServerOptions serverOptions;
+        serverOptions.serverId = m_serverId;
+        serverOptions.onError = [this](const Error& error) { report(error); };
+        m_server = std::make_unique<Server>(*m_host, m_requests, *m_deps.ids,
+                                            std::vector<IServerListener*>{m_listener.get()}, serverOptions);
+        return m_server->start();
+    }
 
-    const std::string& serverId() const;
-    std::string socketPath() const;
+    /** Disconnects every client, closes every session and stops listening. Idempotent. */
+    void stop() {
+        if (m_server) {
+            if (auto closed = m_server->close(); !closed) {
+                report(closed.error());
+            }
+        }
+    }
+
+    const std::string& serverId() const {
+        return m_serverId;
+    }
+
+    std::string socketPath() const {
+        return m_line.serverDir + "/" + m_serverId + ".sock";
+    }
 
 private:
-    void report(const Error& error);
+    void report(const Error& error) {
+        m_deps.logger->log(LogLevel::Warn, "server: " + error.code + ": " + error.message);
+    }
 
     CommandLine m_line;
     ServeDependencies m_deps;
@@ -51,61 +101,3 @@ private:
     std::unique_ptr<PosixUnixListener> m_listener;
     std::unique_ptr<Server> m_server;
 };
-
-ServeApplication::ServeApplication(CommandLine line, const ServeDependencies& dependencies)
-    : m_line(std::move(line)), m_deps(dependencies), m_requests(64), m_work(32) {}
-
-ServeApplication::~ServeApplication() {
-    stop();
-}
-
-const std::string& ServeApplication::serverId() const {
-    return m_serverId;
-}
-
-std::string ServeApplication::socketPath() const {
-    return m_line.serverDir + "/" + m_serverId + ".sock";
-}
-
-void ServeApplication::report(const Error& error) {
-    m_deps.logger->log(LogLevel::Warn, "server: " + error.code + ": " + error.message);
-}
-
-Result<void> ServeApplication::start() {
-    ServerIdentity identity(*m_deps.files, *m_deps.crypto);
-    auto resolved = identity.resolve(m_line.serverDir, m_line.serverId);
-    if (!resolved) {
-        return std::unexpected(resolved.error());
-    }
-    m_serverId = *resolved;
-    if (auto made = m_deps.files->createPrivateDirectories(m_line.serverDir); !made) {
-        return std::unexpected(made.error());
-    }
-    m_catalog = std::make_unique<DirectorySessionCatalog>(*m_deps.files, *m_deps.clock, *m_deps.ids,
-                                                          m_line.options.sessionDir.value_or(""), m_line.options.cwd);
-    m_serverServices = std::make_unique<ServerServiceHost>(*m_catalog, m_serverId);
-    m_opener = std::make_unique<ServedSessionOpener>(*m_deps.sessions, *m_deps.runtimes, *m_deps.models, m_work,
-                                                     *m_deps.ids, m_line.options.agentDir);
-    m_host = std::make_unique<CodingServerHost>(*m_serverServices, *m_catalog, *m_opener);
-    UnixListenerOptions listenerOptions;
-    listenerOptions.path = socketPath();
-    listenerOptions.onError = [this](const Error& error) { report(error); };
-    listenerOptions.connect = [](int fd, std::uint64_t limit, std::int64_t grace) {
-        return std::shared_ptr<ISocketConnection>(std::make_shared<PosixByteConnection>(fd, limit, grace));
-    };
-    m_listener = std::make_unique<PosixUnixListener>(listenerOptions);
-    ServerOptions serverOptions;
-    serverOptions.serverId = m_serverId;
-    serverOptions.onError = [this](const Error& error) { report(error); };
-    m_server = std::make_unique<Server>(*m_host, m_requests, *m_deps.ids,
-                                        std::vector<IServerListener*>{m_listener.get()}, serverOptions);
-    return m_server->start();
-}
-
-void ServeApplication::stop() {
-    if (m_server) {
-        if (auto closed = m_server->close(); !closed) {
-            report(closed.error());
-        }
-    }
-}

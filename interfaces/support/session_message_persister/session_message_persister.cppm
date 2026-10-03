@@ -11,28 +11,25 @@ export import pi.types.agent_message;
  */
 export class SessionMessagePersister {
 public:
-    explicit SessionMessagePersister(ISessionManager& session);
+    explicit SessionMessagePersister(ISessionManager& session)
+        : m_session(session) {}
 
     /** The new entry's id, or nullopt when the message kind is stored elsewhere. */
-    std::optional<std::string> persist(const AgentMessage& message);
+    std::optional<std::string> persist(const AgentMessage& message) {
+        if (const auto* custom = std::get_if<CustomMessage>(&message)) {
+            if (custom->role != "custom") {
+                return std::nullopt;
+            }
+            const Json& data = custom->data;
+            const auto id = m_session.appendCustomMessageEntry(
+                data.value("customType", ""), data.contains("content") ? data["content"] : Json::array(),
+                data.value("display", true), data.contains("details") ? data["details"] : Json());
+            return id ? std::optional<std::string>(*id) : std::nullopt;
+        }
+        const auto id = m_session.appendMessage(message);
+        return id ? std::optional<std::string>(*id) : std::nullopt;
+    }
 
 private:
     ISessionManager& m_session;
 };
-
-SessionMessagePersister::SessionMessagePersister(ISessionManager& session) : m_session(session) {}
-
-std::optional<std::string> SessionMessagePersister::persist(const AgentMessage& message) {
-    if (const auto* custom = std::get_if<CustomMessage>(&message)) {
-        if (custom->role != "custom") {
-            return std::nullopt;
-        }
-        const Json& data = custom->data;
-        const auto id = m_session.appendCustomMessageEntry(
-            data.value("customType", ""), data.contains("content") ? data["content"] : Json::array(),
-            data.value("display", true), data.contains("details") ? data["details"] : Json());
-        return id ? std::optional<std::string>(*id) : std::nullopt;
-    }
-    const auto id = m_session.appendMessage(message);
-    return id ? std::optional<std::string>(*id) : std::nullopt;
-}

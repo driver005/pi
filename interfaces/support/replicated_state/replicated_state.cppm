@@ -22,21 +22,116 @@ export class ReplicatedState : public IReplicatedState {
 public:
     using Mutator = std::function<void(Json& draft)>;
 
-    explicit ReplicatedState(Json initial);
+    explicit ReplicatedState(Json initial)
+        : m_value(std::move(initial)) {}
 
-    ReplicatedStateSnapshot snapshot() const override;
-    std::uint64_t subscribe(Listener listener) override;
-    void unsubscribe(std::uint64_t id) override;
+    ReplicatedStateSnapshot snapshot() const override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        ReplicatedStateSnapshot out;
+        out.value = m_value;
+        out.sequence = m_sequence;
+        return out;
+    }
 
-    Json value() const;
+    std::uint64_t subscribe(Listener listener) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const std::uint64_t id = m_nextListener++;
+        m_listeners.emplace(id, std::move(listener));
+        return id;
+    }
+
+    void unsubscribe(std::uint64_t id) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_listeners.erase(id);
+    }
+
+    Json value() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_value;
+    }
+
     /** Fails when called from inside a change callback of the same thread. */
-    Result<void> change(const ServiceContext& context, const Mutator& mutate);
-    Result<void> replace(const ServiceContext& context, Json value);
+    Result<void> change(const ServiceContext& context, const Mutator& mutate) {
+        if (m_mutating.load() == std::this_thread::get_id()) {
+            return std::unexpected(Error{"state", "Replicated state cannot be changed reentrantly from a change callback"});
+        }
+        {
+            const std::lock_guard<std::mutex> change(m_changeMutex);
+            const Json current = value();
+            Json next = current;
+            m_mutating.store(std::this_thread::get_id());
+            mutate(next);
+            m_mutating.store(std::thread::id{});
+            Json ops = m_differ.diff(current, next);
+            if (ops.empty()) {
+                return {};
+            }
+            commit(std::move(next), std::move(ops), context);
+        }
+        startDelivery();
+        return {};
+    }
+
+    Result<void> replace(const ServiceContext& context, Json next) {
+        if (m_mutating.load() == std::this_thread::get_id()) {
+            return std::unexpected(Error{"state", "Replicated state cannot be replaced from a change callback"});
+        }
+        {
+            const std::lock_guard<std::mutex> change(m_changeMutex);
+            if (value() == next) {
+                return {};
+            }
+            Json ops = Json::array({Json::array({"r", next})});
+            commit(std::move(next), std::move(ops), context);
+        }
+        startDelivery();
+        return {};
+    }
 
 private:
-    void commit(Json next, Json ops, const ServiceContext& context);
-    void startDelivery();
-    void deliver();
+    void commit(Json next, Json ops, const ServiceContext& context) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_value = std::move(next);
+        ++m_sequence;
+        ReplicatedStatePublication publication;
+        publication.ops = std::move(ops);
+        publication.sequence = m_sequence;
+        publication.context = context;
+        m_queue.push_back(std::move(publication));
+    }
+
+    void startDelivery() {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_delivering) {
+                return;
+            }
+            m_delivering = true;
+        }
+        deliver();
+    }
+
+    void deliver() {
+        while (true) {
+            ReplicatedStatePublication publication;
+            std::vector<Listener> listeners;
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                if (m_queue.empty()) {
+                    m_delivering = false;
+                    return;
+                }
+                publication = std::move(m_queue.front());
+                m_queue.pop_front();
+                for (const auto& entry : m_listeners) {
+                    listeners.push_back(entry.second);
+                }
+            }
+            for (const Listener& listener : listeners) {
+                listener(publication.ops, publication.sequence, publication.context);
+            }
+        }
+    }
 
     DeltaDiffer m_differ;
     /** Serializes change(): read, mutate, diff and commit. */
@@ -50,111 +145,3 @@ private:
     std::deque<ReplicatedStatePublication> m_queue;
     bool m_delivering = false;
 };
-
-ReplicatedState::ReplicatedState(Json initial) : m_value(std::move(initial)) {}
-
-ReplicatedStateSnapshot ReplicatedState::snapshot() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    ReplicatedStateSnapshot out;
-    out.value = m_value;
-    out.sequence = m_sequence;
-    return out;
-}
-
-Json ReplicatedState::value() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    return m_value;
-}
-
-std::uint64_t ReplicatedState::subscribe(Listener listener) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    const std::uint64_t id = m_nextListener++;
-    m_listeners.emplace(id, std::move(listener));
-    return id;
-}
-
-void ReplicatedState::unsubscribe(std::uint64_t id) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    m_listeners.erase(id);
-}
-
-void ReplicatedState::deliver() {
-    while (true) {
-        ReplicatedStatePublication publication;
-        std::vector<Listener> listeners;
-        {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_queue.empty()) {
-                m_delivering = false;
-                return;
-            }
-            publication = std::move(m_queue.front());
-            m_queue.pop_front();
-            for (const auto& entry : m_listeners) {
-                listeners.push_back(entry.second);
-            }
-        }
-        for (const Listener& listener : listeners) {
-            listener(publication.ops, publication.sequence, publication.context);
-        }
-    }
-}
-
-void ReplicatedState::commit(Json next, Json ops, const ServiceContext& context) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    m_value = std::move(next);
-    ++m_sequence;
-    ReplicatedStatePublication publication;
-    publication.ops = std::move(ops);
-    publication.sequence = m_sequence;
-    publication.context = context;
-    m_queue.push_back(std::move(publication));
-}
-
-void ReplicatedState::startDelivery() {
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_delivering) {
-            return;
-        }
-        m_delivering = true;
-    }
-    deliver();
-}
-
-Result<void> ReplicatedState::change(const ServiceContext& context, const Mutator& mutate) {
-    if (m_mutating.load() == std::this_thread::get_id()) {
-        return std::unexpected(Error{"state", "Replicated state cannot be changed reentrantly from a change callback"});
-    }
-    {
-        const std::lock_guard<std::mutex> change(m_changeMutex);
-        const Json current = value();
-        Json next = current;
-        m_mutating.store(std::this_thread::get_id());
-        mutate(next);
-        m_mutating.store(std::thread::id{});
-        Json ops = m_differ.diff(current, next);
-        if (ops.empty()) {
-            return {};
-        }
-        commit(std::move(next), std::move(ops), context);
-    }
-    startDelivery();
-    return {};
-}
-
-Result<void> ReplicatedState::replace(const ServiceContext& context, Json next) {
-    if (m_mutating.load() == std::this_thread::get_id()) {
-        return std::unexpected(Error{"state", "Replicated state cannot be replaced from a change callback"});
-    }
-    {
-        const std::lock_guard<std::mutex> change(m_changeMutex);
-        if (value() == next) {
-            return {};
-        }
-        Json ops = Json::array({Json::array({"r", next})});
-        commit(std::move(next), std::move(ops), context);
-    }
-    startDelivery();
-    return {};
-}

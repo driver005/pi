@@ -10,94 +10,81 @@ export import pi.types.queued_input;
  */
 export class PendingInputTracker {
 public:
-    explicit PendingInputTracker(ISessionEventSink& sink);
+    explicit PendingInputTracker(ISessionEventSink& sink)
+        : m_sink(sink) {}
 
-    void queueSteering(const std::string& text);
-    void queueFollowUp(const std::string& text);
+    void queueSteering(const std::string& text) {
+        QueuedInput copy;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_state.steering.push_back(text);
+            copy = m_state;
+        }
+        emitUpdate(copy);
+    }
+
+    void queueFollowUp(const std::string& text) {
+        QueuedInput copy;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_state.followUp.push_back(text);
+            copy = m_state;
+        }
+        emitUpdate(copy);
+    }
 
     /** A user message started: forget its text (steering queue first, then follow-up). */
-    void delivered(const std::string& text);
+    void delivered(const std::string& text) {
+        if (text.empty()) {
+            return;
+        }
+        QueuedInput copy;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto steering = std::ranges::find(m_state.steering, text);
+            if (steering != m_state.steering.end()) {
+                m_state.steering.erase(steering);
+            } else if (const auto followUp = std::ranges::find(m_state.followUp, text); followUp != m_state.followUp.end()) {
+                m_state.followUp.erase(followUp);
+            } else {
+                return;
+            }
+            copy = m_state;
+        }
+        emitUpdate(copy);
+    }
 
     /** Forgets everything and returns what was waiting. */
-    QueuedInput clear();
+    QueuedInput clear() {
+        QueuedInput previous;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            previous = std::exchange(m_state, QueuedInput{});
+        }
+        emitUpdate(QueuedInput{});
+        return previous;
+    }
 
-    QueuedInput snapshot() const;
-    std::size_t count() const;
+    QueuedInput snapshot() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_state;
+    }
+
+    std::size_t count() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_state.steering.size() + m_state.followUp.size();
+    }
 
 private:
-    void emitUpdate(const QueuedInput& state);
+    void emitUpdate(const QueuedInput& state) {
+        AgentSessionEvent event;
+        event.type = SessionEventType::QueueUpdate;
+        event.steering = state.steering;
+        event.followUp = state.followUp;
+        m_sink.emit(event);
+    }
 
     ISessionEventSink& m_sink;
     mutable std::mutex m_mutex;
     QueuedInput m_state;
 };
-
-PendingInputTracker::PendingInputTracker(ISessionEventSink& sink) : m_sink(sink) {}
-
-void PendingInputTracker::emitUpdate(const QueuedInput& state) {
-    AgentSessionEvent event;
-    event.type = SessionEventType::QueueUpdate;
-    event.steering = state.steering;
-    event.followUp = state.followUp;
-    m_sink.emit(event);
-}
-
-void PendingInputTracker::queueSteering(const std::string& text) {
-    QueuedInput copy;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        m_state.steering.push_back(text);
-        copy = m_state;
-    }
-    emitUpdate(copy);
-}
-
-void PendingInputTracker::queueFollowUp(const std::string& text) {
-    QueuedInput copy;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        m_state.followUp.push_back(text);
-        copy = m_state;
-    }
-    emitUpdate(copy);
-}
-
-void PendingInputTracker::delivered(const std::string& text) {
-    if (text.empty()) {
-        return;
-    }
-    QueuedInput copy;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        const auto steering = std::ranges::find(m_state.steering, text);
-        if (steering != m_state.steering.end()) {
-            m_state.steering.erase(steering);
-        } else if (const auto followUp = std::ranges::find(m_state.followUp, text); followUp != m_state.followUp.end()) {
-            m_state.followUp.erase(followUp);
-        } else {
-            return;
-        }
-        copy = m_state;
-    }
-    emitUpdate(copy);
-}
-
-QueuedInput PendingInputTracker::clear() {
-    QueuedInput previous;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        previous = std::exchange(m_state, QueuedInput{});
-    }
-    emitUpdate(QueuedInput{});
-    return previous;
-}
-
-QueuedInput PendingInputTracker::snapshot() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    return m_state;
-}
-
-std::size_t PendingInputTracker::count() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    return m_state.steering.size() + m_state.followUp.size();
-}

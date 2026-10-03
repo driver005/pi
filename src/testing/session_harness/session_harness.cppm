@@ -22,21 +22,62 @@ import pi.testing.sequential_id_generator;
  */
 export class SessionHarness {
 public:
-    explicit SessionHarness(std::string cwd = "/work");
+    explicit SessionHarness(std::string cwd = "/work") {
+        SessionManagerOptions options;
+        options.cwd = std::move(cwd);
+        options.persist = false;
+        m_session = std::make_unique<SessionManager>(options, m_files, m_clock, m_ids);
+        m_session->open();
+    }
 
-    FauxProvider& provider();
-    FixedClock& clock();
-    FakeFileSystem& files();
-    RecordingSleeper& sleeper();
-    SequentialIdGenerator& ids();
-    ISessionManager& session();
-    IAgentFactory& agents();
+    FauxProvider& provider() {
+        return m_provider;
+    }
+
+    FixedClock& clock() {
+        return m_clock;
+    }
+
+    FakeFileSystem& files() {
+        return m_files;
+    }
+
+    RecordingSleeper& sleeper() {
+        return m_sleeper;
+    }
+
+    SequentialIdGenerator& ids() {
+        return m_ids;
+    }
+
+    ISessionManager& session() {
+        return *m_session;
+    }
+
+    IAgentFactory& agents() {
+        return m_agents;
+    }
 
     /** Agent options with the faux model and a stream function bound to the provider. */
-    AgentOptions agentOptions();
+    AgentOptions agentOptions() {
+        AgentOptions options;
+        options.model.id = "faux-1";
+        options.model.api = "faux";
+        options.model.provider = "faux";
+        options.model.contextWindow = 100000;
+        options.model.maxTokens = 8000;
+        options.systemPrompt = "You are helpful";
+        options.streamFn = [this](const Model& model, const TranscriptContext& context,
+                                  const StreamOptions& streamOptions) {
+            return m_provider.stream(model, context, streamOptions);
+        };
+        return options;
+    }
 
     /** A real agent over the faux provider. */
-    std::unique_ptr<IAgent> makeAgent();
+    std::unique_ptr<IAgent> makeAgent() {
+        return m_agents.create(agentOptions());
+    }
 
 private:
     InlineExecutor m_executor;
@@ -50,58 +91,3 @@ private:
     AgentFactory m_agents{m_loop, m_clock};
     std::unique_ptr<SessionManager> m_session;
 };
-
-SessionHarness::SessionHarness(std::string cwd) {
-    SessionManagerOptions options;
-    options.cwd = std::move(cwd);
-    options.persist = false;
-    m_session = std::make_unique<SessionManager>(options, m_files, m_clock, m_ids);
-    m_session->open();
-}
-
-FauxProvider& SessionHarness::provider() {
-    return m_provider;
-}
-
-FixedClock& SessionHarness::clock() {
-    return m_clock;
-}
-
-FakeFileSystem& SessionHarness::files() {
-    return m_files;
-}
-
-RecordingSleeper& SessionHarness::sleeper() {
-    return m_sleeper;
-}
-
-SequentialIdGenerator& SessionHarness::ids() {
-    return m_ids;
-}
-
-ISessionManager& SessionHarness::session() {
-    return *m_session;
-}
-
-IAgentFactory& SessionHarness::agents() {
-    return m_agents;
-}
-
-AgentOptions SessionHarness::agentOptions() {
-    AgentOptions options;
-    options.model.id = "faux-1";
-    options.model.api = "faux";
-    options.model.provider = "faux";
-    options.model.contextWindow = 100000;
-    options.model.maxTokens = 8000;
-    options.systemPrompt = "You are helpful";
-    options.streamFn = [this](const Model& model, const TranscriptContext& context,
-                              const StreamOptions& streamOptions) {
-        return m_provider.stream(model, context, streamOptions);
-    };
-    return options;
-}
-
-std::unique_ptr<IAgent> SessionHarness::makeAgent() {
-    return m_agents.create(agentOptions());
-}

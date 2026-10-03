@@ -14,16 +14,62 @@ export import pi.support.retry_policy;
  */
 export class RetryingHttpSender {
 public:
-    RetryingHttpSender(IHttpClient& http, ISleeper& sleeper, const IClock& clock);
+    RetryingHttpSender(IHttpClient& http, ISleeper& sleeper, const IClock& clock)
+        : m_http(http),
+          m_sleeper(sleeper),
+          m_clock(clock) {}
 
-    Result<HttpResponse> send(const HttpRequest& request, int maxRetries,
-                              std::optional<std::int64_t> maxRetryDelayMs);
+    Result<HttpResponse> send(const HttpRequest& request, int maxRetries, std::optional<std::int64_t> maxRetryDelayMs) {
+        for (int attempt = 0;; ++attempt) {
+            auto result = m_http.send(request);
+            const bool aborted = request.signal && request.signal->aborted();
+            if (aborted) {
+                return std::unexpected(abortError());
+            }
+            const bool retriesLeft = attempt < maxRetries;
+            if (result.has_value()) {
+                const bool failed = result->status < 200 || result->status >= 300;
+                if (!failed || !retriesLeft || !m_policy.isRetryableStatus(*result)) {
+                    return result;
+                }
+                auto waited = backOff(request, *result, attempt, maxRetryDelayMs);
+                if (!waited) {
+                    return std::unexpected(waited.error());
+                }
+                if (!*waited) {
+                    return std::unexpected(abortError());
+                }
+                continue;
+            }
+            if (!retriesLeft || !m_policy.isRetryableTransportError(result.error())) {
+                return result;
+            }
+            const auto wait = std::chrono::milliseconds(m_policy.backoffMs(attempt, jitter()));
+            if (!m_sleeper.sleep(wait, request.signal)) {
+                return std::unexpected(abortError());
+            }
+        }
+    }
 
 private:
-    Result<bool> backOff(const HttpRequest& request, const HttpResponse& response, int retryIndex,
-                         std::optional<std::int64_t> maxRetryDelayMs);
-    double jitter();
-    Error abortError() const;
+    Result<bool> backOff(const HttpRequest& request, const HttpResponse& response, int retryIndex, std::optional<std::int64_t> maxRetryDelayMs) {
+        const std::string message = m_formatter.formatHttp(response);
+        auto delay = m_policy.delayMs(response, retryIndex, maxRetryDelayMs, m_clock.nowMs(), jitter(),
+                                      message);
+        if (!delay) {
+            return std::unexpected(delay.error());
+        }
+        const auto wait = std::chrono::milliseconds(std::max<std::int64_t>(0, *delay));
+        return m_sleeper.sleep(wait, request.signal);
+    }
+
+    double jitter() {
+        return std::uniform_real_distribution<double>(0.0, 1.0)(m_random);
+    }
+
+    Error abortError() const {
+        return Error{"aborted", "Request aborted"};
+    }
 
     IHttpClient& m_http;
     ISleeper& m_sleeper;
@@ -32,60 +78,3 @@ private:
     ProviderErrorFormatter m_formatter;
     std::mt19937 m_random{std::random_device{}()};
 };
-
-RetryingHttpSender::RetryingHttpSender(IHttpClient& http, ISleeper& sleeper, const IClock& clock)
-    : m_http(http), m_sleeper(sleeper), m_clock(clock) {}
-
-double RetryingHttpSender::jitter() {
-    return std::uniform_real_distribution<double>(0.0, 1.0)(m_random);
-}
-
-Error RetryingHttpSender::abortError() const {
-    return Error{"aborted", "Request aborted"};
-}
-
-Result<bool> RetryingHttpSender::backOff(const HttpRequest& request, const HttpResponse& response,
-                                         int retryIndex,
-                                         std::optional<std::int64_t> maxRetryDelayMs) {
-    const std::string message = m_formatter.formatHttp(response);
-    auto delay = m_policy.delayMs(response, retryIndex, maxRetryDelayMs, m_clock.nowMs(), jitter(),
-                                  message);
-    if (!delay) {
-        return std::unexpected(delay.error());
-    }
-    const auto wait = std::chrono::milliseconds(std::max<std::int64_t>(0, *delay));
-    return m_sleeper.sleep(wait, request.signal);
-}
-
-Result<HttpResponse> RetryingHttpSender::send(const HttpRequest& request, int maxRetries,
-                                              std::optional<std::int64_t> maxRetryDelayMs) {
-    for (int attempt = 0;; ++attempt) {
-        auto result = m_http.send(request);
-        const bool aborted = request.signal && request.signal->aborted();
-        if (aborted) {
-            return std::unexpected(abortError());
-        }
-        const bool retriesLeft = attempt < maxRetries;
-        if (result.has_value()) {
-            const bool failed = result->status < 200 || result->status >= 300;
-            if (!failed || !retriesLeft || !m_policy.isRetryableStatus(*result)) {
-                return result;
-            }
-            auto waited = backOff(request, *result, attempt, maxRetryDelayMs);
-            if (!waited) {
-                return std::unexpected(waited.error());
-            }
-            if (!*waited) {
-                return std::unexpected(abortError());
-            }
-            continue;
-        }
-        if (!retriesLeft || !m_policy.isRetryableTransportError(result.error())) {
-            return result;
-        }
-        const auto wait = std::chrono::milliseconds(m_policy.backoffMs(attempt, jitter()));
-        if (!m_sleeper.sleep(wait, request.signal)) {
-            return std::unexpected(abortError());
-        }
-    }
-}

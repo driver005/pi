@@ -13,15 +13,33 @@ import pi.testing.test_session_handle;
 /** ISessionRuntimeFactory building TestSessionHandle sessions; counts the requests it served. */
 export class SessionRuntimeFactory : public ISessionRuntimeFactory {
 public:
-    SessionRuntimeFactory(IAgentFactory& agents, FauxProvider& provider, IFileSystem& files, const IClock& clock,
-                          IIdGenerator& ids, ISleeper& sleeper);
+    SessionRuntimeFactory(IAgentFactory& agents, FauxProvider& provider, IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
+        : m_agents(agents),
+          m_provider(provider),
+          m_files(files),
+          m_clock(clock),
+          m_ids(ids),
+          m_sleeper(sleeper) {}
 
-    Result<std::unique_ptr<ISessionRuntimeHandle>> create(SessionRuntimeRequest request) override;
+    Result<std::unique_ptr<ISessionRuntimeHandle>> create(SessionRuntimeRequest request) override {
+        if (m_failure) {
+            const std::string message = *std::exchange(m_failure, std::nullopt);
+            return std::unexpected(Error{"create_failed", message});
+        }
+        m_reasons.push_back(request.startReason);
+        return std::unique_ptr<ISessionRuntimeHandle>(std::make_unique<TestSessionHandle>(
+            std::move(request), m_agents, m_provider, m_files, m_clock, m_ids, m_sleeper));
+    }
 
     /** Start reasons of every created session, in order. */
-    std::vector<std::string> reasons() const;
+    std::vector<std::string> reasons() const {
+        return m_reasons;
+    }
+
     /** Makes the next create() fail with this message. */
-    void failNext(const std::string& message);
+    void failNext(const std::string& message) {
+        m_failure = message;
+    }
 
 private:
     IAgentFactory& m_agents;
@@ -33,25 +51,3 @@ private:
     std::vector<std::string> m_reasons;
     std::optional<std::string> m_failure;
 };
-
-SessionRuntimeFactory::SessionRuntimeFactory(IAgentFactory& agents, FauxProvider& provider, IFileSystem& files,
-                                             const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
-    : m_agents(agents), m_provider(provider), m_files(files), m_clock(clock), m_ids(ids), m_sleeper(sleeper) {}
-
-std::vector<std::string> SessionRuntimeFactory::reasons() const {
-    return m_reasons;
-}
-
-void SessionRuntimeFactory::failNext(const std::string& message) {
-    m_failure = message;
-}
-
-Result<std::unique_ptr<ISessionRuntimeHandle>> SessionRuntimeFactory::create(SessionRuntimeRequest request) {
-    if (m_failure) {
-        const std::string message = *std::exchange(m_failure, std::nullopt);
-        return std::unexpected(Error{"create_failed", message});
-    }
-    m_reasons.push_back(request.startReason);
-    return std::unique_ptr<ISessionRuntimeHandle>(std::make_unique<TestSessionHandle>(
-        std::move(request), m_agents, m_provider, m_files, m_clock, m_ids, m_sleeper));
-}

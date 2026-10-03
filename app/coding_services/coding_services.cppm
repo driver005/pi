@@ -18,13 +18,36 @@ import pi.support.project_trust_resolver;
  */
 export class CodingServices {
 public:
-    CodingServices(const std::string& agentDir, const std::string& catalogDir, bool faux);
+    CodingServices(const std::string& agentDir, const std::string& catalogDir, bool faux)
+        : m_platform(),
+          m_models(m_platform, agentDir, catalogDir, faux),
+          m_loop(m_toolCalls, m_platform.executor(), m_platform.clock()),
+          m_agents(m_loop, m_platform.clock()),
+          m_managers(m_platform.files(), m_platform.clock(), m_platform.ids()),
+          m_sessions(agentDir, m_platform.files(), m_platform.clock(), m_platform.ids(), m_managers),
+          m_trustStore(agentDir, m_platform.files(), m_platform.locks()),
+          m_trustProbe(m_platform.files()),
+          m_trust(m_trustStore, m_trustProbe) {}
 
-    PlatformServices& platform();
-    ModelServices& models();
-    IAgentFactory& agents();
-    ISessionStore& sessions();
-    ProjectTrustResolver& trust();
+    PlatformServices& platform() {
+        return m_platform;
+    }
+
+    ModelServices& models() {
+        return m_models;
+    }
+
+    IAgentFactory& agents() {
+        return m_agents;
+    }
+
+    ISessionStore& sessions() {
+        return m_sessions;
+    }
+
+    ProjectTrustResolver& trust() {
+        return m_trust;
+    }
 
 private:
     PlatformServices m_platform;
@@ -38,34 +61,3 @@ private:
     ProjectTrustProbe m_trustProbe;
     ProjectTrustResolver m_trust;
 };
-
-CodingServices::CodingServices(const std::string& agentDir, const std::string& catalogDir, bool faux)
-    : m_platform(),
-      m_models(m_platform, agentDir, catalogDir, faux),
-      m_loop(m_toolCalls, m_platform.executor(), m_platform.clock()),
-      m_agents(m_loop, m_platform.clock()),
-      m_managers(m_platform.files(), m_platform.clock(), m_platform.ids()),
-      m_sessions(agentDir, m_platform.files(), m_platform.clock(), m_platform.ids(), m_managers),
-      m_trustStore(agentDir, m_platform.files(), m_platform.locks()),
-      m_trustProbe(m_platform.files()),
-      m_trust(m_trustStore, m_trustProbe) {}
-
-PlatformServices& CodingServices::platform() {
-    return m_platform;
-}
-
-ModelServices& CodingServices::models() {
-    return m_models;
-}
-
-IAgentFactory& CodingServices::agents() {
-    return m_agents;
-}
-
-ISessionStore& CodingServices::sessions() {
-    return m_sessions;
-}
-
-ProjectTrustResolver& CodingServices::trust() {
-    return m_trust;
-}

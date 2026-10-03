@@ -20,25 +20,187 @@ import pi.mcp.mcp_tool_adapter;
  */
 export class McpServerManager : public IMcpServerManager {
 public:
-    McpServerManager(IToolRegistry& registry, IMcpConnector& connector, ISleeper& sleeper,
-                     const McpToolNamer& namer, McpResultConverter& converter, std::string clientVersion);
-    ~McpServerManager() override;
+    McpServerManager(IToolRegistry& registry, IMcpConnector& connector, ISleeper& sleeper, const McpToolNamer& namer, McpResultConverter& converter, std::string clientVersion)
+        : m_registry(registry),
+          m_connector(connector),
+          m_sleeper(sleeper),
+          m_namer(namer),
+          m_converter(converter),
+          m_clientVersion(std::move(clientVersion)) {}
 
-    void setToolsListener(ToolsListener listener) override;
-    void start(const std::vector<McpServerConfig>& servers, const std::string& cwd,
-               std::chrono::milliseconds startupWait) override;
-    std::vector<McpServerStatus> status() const override;
-    void close() override;
+    ~McpServerManager() override {
+        close();
+    }
+
+    void setToolsListener(ToolsListener listener) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_toolsListener = std::move(listener);
+    }
+
+    void start(const std::vector<McpServerConfig>& servers, const std::string& cwd, std::chrono::milliseconds startupWait) override {
+        std::vector<McpServerConnection*> started;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) {
+                return;
+            }
+            for (const McpServerConfig& config : servers) {
+                if (!config.enabled || !hasVisibleTools(config)) {
+                    McpServerStatus inactive;
+                    inactive.name = config.name;
+                    inactive.state = McpServerState::Disabled;
+                    inactive.error = config.enabled ? "all tools are hidden" : "disabled";
+                    m_inactive.push_back(inactive);
+                    continue;
+                }
+                auto connection = std::make_unique<McpServerConnection>(config, cwd, m_clientVersion,
+                                                                        m_connector, m_sleeper);
+                connection->setToolsListener([this](McpServerConnection& changed) { registerTools(changed); });
+                started.push_back(connection.get());
+                m_connections.push_back(std::move(connection));
+            }
+            m_unsettled += started.size();
+        }
+        for (McpServerConnection* connection : started) {
+            connectInBackground(*connection);
+        }
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_settled.wait_for(lock, startupWait, [this]() { return m_unsettled == 0; });
+    }
+
+    std::vector<McpServerStatus> status() const override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        std::vector<McpServerStatus> out = m_inactive;
+        for (const auto& connection : m_connections) {
+            out.push_back(statusOf(*connection));
+        }
+        return out;
+    }
+
+    void close() override {
+        std::vector<std::thread> workers;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) {
+                return;
+            }
+            m_closed = true;
+            workers = std::move(m_workers);
+            m_workers.clear();
+        }
+        for (const auto& connection : m_connections) {
+            connection->close();
+        }
+        for (std::thread& worker : workers) {
+            worker.join();
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& connection : m_connections) {
+            removeTools(connection->config().name);
+        }
+    }
 
 private:
-    bool hasVisibleTools(const McpServerConfig& config) const;
-    void connectInBackground(McpServerConnection& connection);
-    void registerTools(McpServerConnection& connection);
-    std::vector<std::string> syncTools(McpServerConnection& connection, const std::vector<McpTool>& tools);
-    std::string assignName(const std::string& server, const std::string& tool,
-                           const std::vector<std::string>& plain, std::set<std::string>& current);
-    void removeTools(const std::string& server);
-    McpServerStatus statusOf(const McpServerConnection& connection) const;
+    bool hasVisibleTools(const McpServerConfig& config) const {
+        if (config.exposure != McpExposure::Hidden) {
+            return true;
+        }
+        return std::any_of(config.toolExposure.begin(), config.toolExposure.end(),
+                           [](const auto& entry) { return entry.second != McpExposure::Hidden; });
+    }
+
+    void connectInBackground(McpServerConnection& connection) {
+        std::thread worker([this, &connection]() {
+            connection.connect();
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                --m_unsettled;
+            }
+            m_settled.notify_all();
+        });
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_workers.push_back(std::move(worker));
+    }
+
+    void registerTools(McpServerConnection& connection) {
+        const std::vector<McpTool> tools = connection.tools();
+        std::vector<std::string> added;
+        ToolsListener listener;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_closed) {
+                return;
+            }
+            added = syncTools(connection, tools);
+            listener = m_toolsListener;
+        }
+        if (listener && !added.empty()) {
+            listener(added);
+        }
+    }
+
+    std::vector<std::string> syncTools(McpServerConnection& connection, const std::vector<McpTool>& tools) {
+        const McpServerConfig& config = connection.config();
+        std::set<std::string> unique;
+        std::vector<std::string> plain;
+        for (const McpTool& tool : tools) {
+            if (unique.insert(tool.name).second) {
+                plain.push_back(m_namer.create(config.name, tool.name));
+            }
+        }
+        std::set<std::string> current;
+        for (const McpTool& tool : tools) {
+            const std::string name = assignName(config.name, tool.name, plain, current);
+            if (m_validator.toolExposure(config, tool.name) == McpExposure::Hidden) {
+                current.erase(name);
+                continue;
+            }
+            m_registry.add(std::make_shared<McpToolAdapter>(config.name, tool, name, connection, m_converter,
+                                                            connection.timeoutMs()));
+        }
+        std::vector<std::string> added;
+        for (const std::string& name : m_registered[config.name]) {
+            if (!current.contains(name)) {
+                m_registry.remove(name);
+            }
+        }
+        for (const std::string& name : current) {
+            if (!m_registered[config.name].contains(name)) {
+                added.push_back(name);
+            }
+        }
+        m_registered[config.name] = std::move(current);
+        return added;
+    }
+
+    std::string assignName(const std::string& server, const std::string& tool, const std::vector<std::string>& plain, std::set<std::string>& current) {
+        const std::string owner = server + std::string(1, '\0') + tool;
+        const std::string name = m_namer.create(server, tool, [&](const std::string& candidate) {
+            const auto existing = m_owners.find(candidate);
+            return (existing != m_owners.end() && existing->second != owner) || current.contains(candidate) ||
+                   std::count(plain.begin(), plain.end(), candidate) > 1;
+        });
+        m_owners[name] = owner;
+        current.insert(name);
+        return name;
+    }
+
+    void removeTools(const std::string& server) {
+        for (const std::string& name : m_registered[server]) {
+            m_registry.remove(name);
+        }
+        m_registered[server].clear();
+    }
+
+    McpServerStatus statusOf(const McpServerConnection& connection) const {
+        McpServerStatus status;
+        status.name = connection.config().name;
+        status.state = connection.state();
+        status.error = connection.error();
+        const auto found = m_registered.find(status.name);
+        status.toolCount = found == m_registered.end() ? 0 : found->second.size();
+        return status;
+    }
 
     IToolRegistry& m_registry;
     IMcpConnector& m_connector;
@@ -61,191 +223,6 @@ private:
     ToolsListener m_toolsListener;
 };
 
-McpServerManager::McpServerManager(IToolRegistry& registry, IMcpConnector& connector,
-                                   ISleeper& sleeper, const McpToolNamer& namer,
-                                   McpResultConverter& converter, std::string clientVersion)
-    : m_registry(registry),
-      m_connector(connector),
-      m_sleeper(sleeper),
-      m_namer(namer),
-      m_converter(converter),
-      m_clientVersion(std::move(clientVersion)) {}
-
-McpServerManager::~McpServerManager() {
-    close();
-}
-
-bool McpServerManager::hasVisibleTools(const McpServerConfig& config) const {
-    if (config.exposure != McpExposure::Hidden) {
-        return true;
-    }
-    return std::any_of(config.toolExposure.begin(), config.toolExposure.end(),
-                       [](const auto& entry) { return entry.second != McpExposure::Hidden; });
-}
-
-void McpServerManager::start(const std::vector<McpServerConfig>& servers, const std::string& cwd,
-                             std::chrono::milliseconds startupWait) {
-    std::vector<McpServerConnection*> started;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_closed) {
-            return;
-        }
-        for (const McpServerConfig& config : servers) {
-            if (!config.enabled || !hasVisibleTools(config)) {
-                McpServerStatus inactive;
-                inactive.name = config.name;
-                inactive.state = McpServerState::Disabled;
-                inactive.error = config.enabled ? "all tools are hidden" : "disabled";
-                m_inactive.push_back(inactive);
-                continue;
-            }
-            auto connection = std::make_unique<McpServerConnection>(config, cwd, m_clientVersion,
-                                                                    m_connector, m_sleeper);
-            connection->setToolsListener([this](McpServerConnection& changed) { registerTools(changed); });
-            started.push_back(connection.get());
-            m_connections.push_back(std::move(connection));
-        }
-        m_unsettled += started.size();
-    }
-    for (McpServerConnection* connection : started) {
-        connectInBackground(*connection);
-    }
-    std::unique_lock<std::mutex> lock(m_mutex);
-    m_settled.wait_for(lock, startupWait, [this]() { return m_unsettled == 0; });
-}
-
-void McpServerManager::connectInBackground(McpServerConnection& connection) {
-    std::thread worker([this, &connection]() {
-        connection.connect();
-        {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            --m_unsettled;
-        }
-        m_settled.notify_all();
-    });
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    m_workers.push_back(std::move(worker));
-}
-
 /** Like Codex, all tools whose names sanitize alike get the hash suffix, so the plain name does not depend on list order. */
-std::string McpServerManager::assignName(const std::string& server, const std::string& tool,
-                                         const std::vector<std::string>& plain,
-                                         std::set<std::string>& current) {
-    const std::string owner = server + std::string(1, '\0') + tool;
-    const std::string name = m_namer.create(server, tool, [&](const std::string& candidate) {
-        const auto existing = m_owners.find(candidate);
-        return (existing != m_owners.end() && existing->second != owner) || current.contains(candidate) ||
-               std::count(plain.begin(), plain.end(), candidate) > 1;
-    });
-    m_owners[name] = owner;
-    current.insert(name);
-    return name;
-}
-
-void McpServerManager::setToolsListener(ToolsListener listener) {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    m_toolsListener = std::move(listener);
-}
-
-void McpServerManager::registerTools(McpServerConnection& connection) {
-    const std::vector<McpTool> tools = connection.tools();
-    std::vector<std::string> added;
-    ToolsListener listener;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_closed) {
-            return;
-        }
-        added = syncTools(connection, tools);
-        listener = m_toolsListener;
-    }
-    if (listener && !added.empty()) {
-        listener(added);
-    }
-}
 
 /** Registers the tools, withdraws the ones the server dropped, and returns the new names. */
-std::vector<std::string> McpServerManager::syncTools(McpServerConnection& connection,
-                                                     const std::vector<McpTool>& tools) {
-    const McpServerConfig& config = connection.config();
-    std::set<std::string> unique;
-    std::vector<std::string> plain;
-    for (const McpTool& tool : tools) {
-        if (unique.insert(tool.name).second) {
-            plain.push_back(m_namer.create(config.name, tool.name));
-        }
-    }
-    std::set<std::string> current;
-    for (const McpTool& tool : tools) {
-        const std::string name = assignName(config.name, tool.name, plain, current);
-        if (m_validator.toolExposure(config, tool.name) == McpExposure::Hidden) {
-            current.erase(name);
-            continue;
-        }
-        m_registry.add(std::make_shared<McpToolAdapter>(config.name, tool, name, connection, m_converter,
-                                                        connection.timeoutMs()));
-    }
-    std::vector<std::string> added;
-    for (const std::string& name : m_registered[config.name]) {
-        if (!current.contains(name)) {
-            m_registry.remove(name);
-        }
-    }
-    for (const std::string& name : current) {
-        if (!m_registered[config.name].contains(name)) {
-            added.push_back(name);
-        }
-    }
-    m_registered[config.name] = std::move(current);
-    return added;
-}
-
-void McpServerManager::removeTools(const std::string& server) {
-    for (const std::string& name : m_registered[server]) {
-        m_registry.remove(name);
-    }
-    m_registered[server].clear();
-}
-
-McpServerStatus McpServerManager::statusOf(const McpServerConnection& connection) const {
-    McpServerStatus status;
-    status.name = connection.config().name;
-    status.state = connection.state();
-    status.error = connection.error();
-    const auto found = m_registered.find(status.name);
-    status.toolCount = found == m_registered.end() ? 0 : found->second.size();
-    return status;
-}
-
-std::vector<McpServerStatus> McpServerManager::status() const {
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    std::vector<McpServerStatus> out = m_inactive;
-    for (const auto& connection : m_connections) {
-        out.push_back(statusOf(*connection));
-    }
-    return out;
-}
-
-void McpServerManager::close() {
-    std::vector<std::thread> workers;
-    {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_closed) {
-            return;
-        }
-        m_closed = true;
-        workers = std::move(m_workers);
-        m_workers.clear();
-    }
-    for (const auto& connection : m_connections) {
-        connection->close();
-    }
-    for (std::thread& worker : workers) {
-        worker.join();
-    }
-    const std::lock_guard<std::mutex> lock(m_mutex);
-    for (const auto& connection : m_connections) {
-        removeTools(connection->config().name);
-    }
-}

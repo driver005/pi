@@ -12,44 +12,40 @@ export import pi.support.path_resolver;
  */
 export class ProjectTrustProbe {
 public:
-    explicit ProjectTrustProbe(IFileSystem& files);
+    explicit ProjectTrustProbe(IFileSystem& files)
+        : m_files(files),
+          m_paths(files.homeDirectory()) {}
 
-    bool requiresTrust(const std::string& cwd);
+    bool requiresTrust(const std::string& cwd) {
+        const std::string home = m_files.realPath(m_files.homeDirectory());
+        const std::string userSkills = home + "/.agents/skills";
+        std::string current = trustPath(cwd);
+        for (const char* entry : {"settings.json", "mcp.json", "extensions", "plugins", "skills", "prompts", "themes",
+                                  "SYSTEM.md", "APPEND_SYSTEM.md"}) {
+            if (m_files.exists(current + "/.pi/" + entry)) {
+                return true;
+            }
+        }
+        while (true) {
+            const std::string skills = (current == "/" ? "" : current) + "/.agents/skills";
+            if (skills != userSkills && m_files.exists(skills)) {
+                return true;
+            }
+            const auto slash = current.find_last_of('/');
+            const std::string parent = slash == std::string::npos || slash == 0 ? "/" : current.substr(0, slash);
+            if (parent == current) {
+                return false;
+            }
+            current = parent;
+        }
+    }
 
     /** Candidate directory used as the trust key: resolved and canonical. */
-    std::string trustPath(const std::string& cwd);
+    std::string trustPath(const std::string& cwd) {
+        return m_files.realPath(m_paths.resolveToCwd(cwd, "/"));
+    }
 
 private:
     IFileSystem& m_files;
     PathResolver m_paths;
 };
-
-ProjectTrustProbe::ProjectTrustProbe(IFileSystem& files) : m_files(files), m_paths(files.homeDirectory()) {}
-
-std::string ProjectTrustProbe::trustPath(const std::string& cwd) {
-    return m_files.realPath(m_paths.resolveToCwd(cwd, "/"));
-}
-
-bool ProjectTrustProbe::requiresTrust(const std::string& cwd) {
-    const std::string home = m_files.realPath(m_files.homeDirectory());
-    const std::string userSkills = home + "/.agents/skills";
-    std::string current = trustPath(cwd);
-    for (const char* entry : {"settings.json", "mcp.json", "extensions", "plugins", "skills", "prompts", "themes",
-                              "SYSTEM.md", "APPEND_SYSTEM.md"}) {
-        if (m_files.exists(current + "/.pi/" + entry)) {
-            return true;
-        }
-    }
-    while (true) {
-        const std::string skills = (current == "/" ? "" : current) + "/.agents/skills";
-        if (skills != userSkills && m_files.exists(skills)) {
-            return true;
-        }
-        const auto slash = current.find_last_of('/');
-        const std::string parent = slash == std::string::npos || slash == 0 ? "/" : current.substr(0, slash);
-        if (parent == current) {
-            return false;
-        }
-        current = parent;
-    }
-}

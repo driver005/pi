@@ -21,18 +21,56 @@ import pi.tools.tool_registry;
 /** A real AgentSession over a faux provider, with fake settings and resources, for runtime tests. */
 export class TestSessionHandle : public ISessionRuntimeHandle {
 public:
-    TestSessionHandle(SessionRuntimeRequest request, IAgentFactory& agents, FauxProvider& provider,
-                      IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper);
+    TestSessionHandle(SessionRuntimeRequest request, IAgentFactory& agents, FauxProvider& provider, IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
+        : m_cwd(request.cwd),
+          m_agentDir(request.agentDir),
+          m_manager(std::move(request.sessionManager)),
+          m_bash(m_runner, files, m_crypto, m_environment) {
+        m_models.addModel(fauxModel());
+        m_models.setAuthenticated("faux", true);
+        m_models.setStreamHandler([&provider](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+            return provider.stream(model, context, options);
+        });
+        AgentSessionConfig config{agents, *m_manager, m_settings, m_models, m_resources, m_tools, m_bash, files,
+                                  clock,  ids,        sleeper,    fauxModel(), ThinkingLevel::Off, m_cwd,
+                                  std::nullopt, std::nullopt, {}, {}};
+        m_session = std::make_unique<AgentSession>(config);
+    }
 
-    IAgentSession& session() override;
-    ISessionManager& sessionManager() override;
-    std::string cwd() const override;
-    std::string agentDir() const override;
-    std::vector<RuntimeDiagnostic> diagnostics() const override;
-    std::unique_ptr<ISessionManager> releaseSessionManager() override;
+    IAgentSession& session() override {
+        return *m_session;
+    }
+
+    ISessionManager& sessionManager() override {
+        return *m_manager;
+    }
+
+    std::string cwd() const override {
+        return m_cwd;
+    }
+
+    std::string agentDir() const override {
+        return m_agentDir;
+    }
+
+    std::vector<RuntimeDiagnostic> diagnostics() const override {
+        return {};
+    }
+
+    std::unique_ptr<ISessionManager> releaseSessionManager() override {
+        return std::move(m_manager);
+    }
 
 private:
-    Model fauxModel() const;
+    Model fauxModel() const {
+        Model model;
+        model.id = "faux-1";
+        model.provider = "faux";
+        model.api = "faux";
+        model.contextWindow = 100000;
+        model.maxTokens = 8000;
+        return model;
+    }
 
     std::string m_cwd;
     std::string m_agentDir;
@@ -47,54 +85,3 @@ private:
     BashCommandExecutor m_bash;
     std::unique_ptr<AgentSession> m_session;
 };
-
-Model TestSessionHandle::fauxModel() const {
-    Model model;
-    model.id = "faux-1";
-    model.provider = "faux";
-    model.api = "faux";
-    model.contextWindow = 100000;
-    model.maxTokens = 8000;
-    return model;
-}
-
-TestSessionHandle::TestSessionHandle(SessionRuntimeRequest request, IAgentFactory& agents, FauxProvider& provider,
-                                     IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
-    : m_cwd(request.cwd),
-      m_agentDir(request.agentDir),
-      m_manager(std::move(request.sessionManager)),
-      m_bash(m_runner, files, m_crypto, m_environment) {
-    m_models.addModel(fauxModel());
-    m_models.setAuthenticated("faux", true);
-    m_models.setStreamHandler([&provider](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
-        return provider.stream(model, context, options);
-    });
-    AgentSessionConfig config{agents, *m_manager, m_settings, m_models, m_resources, m_tools, m_bash, files,
-                              clock,  ids,        sleeper,    fauxModel(), ThinkingLevel::Off, m_cwd,
-                              std::nullopt, std::nullopt, {}, {}};
-    m_session = std::make_unique<AgentSession>(config);
-}
-
-IAgentSession& TestSessionHandle::session() {
-    return *m_session;
-}
-
-ISessionManager& TestSessionHandle::sessionManager() {
-    return *m_manager;
-}
-
-std::string TestSessionHandle::cwd() const {
-    return m_cwd;
-}
-
-std::string TestSessionHandle::agentDir() const {
-    return m_agentDir;
-}
-
-std::vector<RuntimeDiagnostic> TestSessionHandle::diagnostics() const {
-    return {};
-}
-
-std::unique_ptr<ISessionManager> TestSessionHandle::releaseSessionManager() {
-    return std::move(m_manager);
-}
