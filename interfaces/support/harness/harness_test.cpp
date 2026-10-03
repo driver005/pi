@@ -4,7 +4,9 @@ import std;
 import pi.ai.faux_provider;
 import pi.durable.jsonl_storage;
 import pi.durable.memory_storage;
+import pi.support.delta_applier;
 import pi.support.harness;
+import pi.support.json_equality;
 import pi.testing.fake_file_system;
 import pi.testing.fake_model_runtime;
 import pi.testing.fixed_clock;
@@ -428,4 +430,135 @@ TEST_F(HarnessTest, OpenRequiresTheBuiltInTasksAndClosedHarnessesRefuseWork) {
     EXPECT_FALSE(m_harness->conversation(1).has_value());
     EXPECT_FALSE((*root)->submit(input("late")).has_value());
     EXPECT_FALSE(m_harness->resume().has_value());
+}
+
+/** Records every publication of an observed state so the stream can be replayed over its first snapshot. */
+class StateRecorder {
+public:
+    explicit StateRecorder(const std::shared_ptr<IReplicatedState>& state) : m_state(state), m_initial(state->snapshot()) {
+        m_subscription = state->subscribe([this](const Json& ops, std::int64_t sequence, const ServiceContext&) {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_ops.push_back(ops);
+            m_sequences.push_back(sequence);
+        });
+    }
+
+    ~StateRecorder() {
+        m_state->unsubscribe(m_subscription);
+    }
+
+    /** The first snapshot with every recorded publication applied. */
+    Json replayed() {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        Json value = m_initial.value;
+        for (const Json& ops : m_ops) {
+            auto applied = DeltaApplier().apply(value, ops);
+            EXPECT_TRUE(applied.has_value());
+            if (applied) {
+                value = *applied;
+            }
+        }
+        return value;
+    }
+
+    std::vector<std::int64_t> sequences() {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_sequences;
+    }
+
+private:
+    std::shared_ptr<IReplicatedState> m_state;
+    ReplicatedStateSnapshot m_initial;
+    std::uint64_t m_subscription = 0;
+    std::mutex m_mutex;
+    std::vector<Json> m_ops;
+    std::vector<std::int64_t> m_sequences;
+};
+
+TEST_F(HarnessTest, ConversationViewFollowsCommittedEntriesAndDocuments) {
+    openMemory();
+    m_faux.enqueue(m_faux.textResponse("hello there"));
+    auto root = rootWithModel();
+    auto view = m_harness->viewState(root->id());
+    ASSERT_TRUE(view.has_value()) << view.error().message;
+    StateRecorder recorder(*view);
+    const Json initial = (*view)->snapshot().value;
+    EXPECT_EQ(initial.at("entries").size(), 0u);
+    EXPECT_EQ(initial.at("conversation").at("id"), root->id());
+    for (const char* kind : {"pi.agent", "pi.live", "pi.inbox", "pi.usage"}) {
+        EXPECT_TRUE(initial.at("docs").contains(kind)) << kind;
+    }
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value() && (*submission)->wait().has_value());
+    ASSERT_TRUE(root->waitForIdle().has_value());
+    ASSERT_TRUE(eventually([&] { return (*view)->snapshot().value.at("entries").size() == 2u; }));
+    ASSERT_TRUE(eventually([&] { return (*view)->snapshot().value.at("docs").at("pi.usage").at("models").contains("faux/m"); }));
+    // Sequences count from 1 without gaps, and replaying the stream rebuilds the observed value.
+    const std::vector<std::int64_t> sequences = recorder.sequences();
+    for (std::size_t index = 0; index < sequences.size(); ++index) {
+        EXPECT_EQ(sequences[index], static_cast<std::int64_t>(index) + 1);
+    }
+    // The state is updated before its listeners run, so wait for the recorder to reach the observed sequence.
+    ASSERT_TRUE(eventually([&] { return static_cast<std::int64_t>(recorder.sequences().size()) == (*view)->snapshot().sequence; }));
+    EXPECT_TRUE(JsonEquality().equal(recorder.replayed(), (*view)->snapshot().value));
+}
+
+TEST_F(HarnessTest, ConversationViewBuiltLateEqualsTheOneMaintainedFromTheStart) {
+    openMemory();
+    m_faux.enqueue(m_faux.textResponse("one"));
+    auto root = rootWithModel();
+    auto early = m_harness->viewState(root->id());
+    ASSERT_TRUE(early.has_value());
+    auto first = root->submit(input("hi"));
+    ASSERT_TRUE(first.has_value() && (*first)->wait().has_value());
+    ASSERT_TRUE(root->waitForIdle().has_value());
+    ASSERT_TRUE(root->reset(std::string("summary")).has_value());
+    ASSERT_TRUE(eventually([&] {
+        const Json entries = (*early)->snapshot().value.at("entries");
+        return !entries.empty() && entries[0].contains("head");
+    }));
+    // A second observer of the same conversation shares the mount.
+    auto shared = m_harness->viewState(root->id());
+    ASSERT_TRUE(shared.has_value());
+    EXPECT_EQ(shared->get(), early->get());
+    // A fresh mount (the early one released) is derived from storage and matches the maintained value.
+    const Json maintained = (*early)->snapshot().value;
+    early->reset();
+    shared->reset();
+    auto fresh = m_harness->viewState(root->id());
+    ASSERT_TRUE(fresh.has_value());
+    EXPECT_TRUE(JsonEquality().equal(maintained, (*fresh)->snapshot().value));
+    auto missing = m_harness->viewState(424242);
+    EXPECT_FALSE(missing.has_value());
+}
+
+TEST_F(HarnessTest, TaskGraphShowsLiveTasksAndDropsTerminalOnes) {
+    openMemory();
+    m_faux.enqueue(m_faux.textResponse("hello"));
+    auto root = rootWithModel();
+    auto graph = m_harness->taskGraph();
+    ASSERT_TRUE(graph.has_value()) << graph.error().message;
+    StateRecorder recorder(*graph);
+    EXPECT_EQ((*graph)->snapshot().value.at("tasks").size(), 0u);
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value() && (*submission)->wait().has_value());
+    ASSERT_TRUE(root->waitForIdle().has_value());
+    ASSERT_TRUE(eventually([&] { return (*graph)->snapshot().value.at("tasks").empty(); }));
+    // The generation task appeared in the stream while it was live.
+    EXPECT_FALSE(recorder.sequences().empty());
+    ASSERT_TRUE(eventually([&] { return static_cast<std::int64_t>(recorder.sequences().size()) == (*graph)->snapshot().sequence; }));
+    const Json value = (*graph)->snapshot().value;
+    EXPECT_TRUE(JsonEquality().equal(recorder.replayed(), value));
+    auto fresh = m_harness->taskGraph();
+    ASSERT_TRUE(fresh.has_value());
+    EXPECT_EQ((*fresh)->snapshot().value.at("tasks").size(), 0u);
+}
+
+TEST_F(HarnessTest, ClosedHarnessesRefuseViews) {
+    openMemory();
+    auto root = m_harness->root();
+    ASSERT_TRUE(root.has_value());
+    ASSERT_TRUE(m_harness->close().has_value());
+    EXPECT_FALSE(m_harness->viewState(1).has_value());
+    EXPECT_FALSE(m_harness->taskGraph().has_value());
 }

@@ -83,9 +83,10 @@ All of it lives in `interfaces/support` (logic classes that may hold threads and
 - `TaskScheduler` with `Registry` (task kinds, builtin documents, migrations): one worker thread for reconcile/drain, one thread per invocation, ownership overlays, waiters, orphaning, `abort*`, `waitFor*`, `inspect`. Tasks left `running` by a crash return to `pending` when the scheduler opens.
 - Built-in tasks `pi.generation`, `pi.tool`, `pi.compaction` (`GenerationTaskDefinition`, `ToolTaskDefinition`, `CompactionTaskDefinition`, registered by `BuiltinTasks`), with retry policy, output bounding, usage ledger, hooks/wraps and extension registration.
 - `Harness` (`interfaces/support/harness`): `open`, `root`, `conversation(id)`, `createConversation` (forks), `getTask`, `submission`, `abortSubmission/abortTask`, `waitForTask/waitForIdle`, `usage`, `inspect`, `resume`. Conversations expose prompt/steer/follow-up submissions, the inbox boundary, compaction and `BoundConversation` handles.
+- Observation: `Harness::viewState(conversationId)` returns an `IReplicatedState` of `{conversation, entries, docs}` (the active transcript entries and the `pi.agent`/`pi.live`/`pi.inbox`/`pi.usage` documents) and `Harness::taskGraph()` one of `{tasks: {id: node}}` for every live task (`ConversationViews`, `TaskGraphView`). A mount is built on the session line by its first holder, advances from the ordered commit publications (so it only shows committed state) and is dropped when the last holder releases it; its published ops are the diff of each commit, so replaying them over the first snapshot rebuilds the value.
 - Tests run over `MemoryStorage` and over `JsonlStorage` on a fake file system (restart recovery), with `TaskFixture` (`src/testing/task_fixture`), the faux provider and a fixed clock; the scheduler, tasks, harness and submissions pass under `--config=tsan` and 20x stress runs.
 
-Differences from TS: a deferred provider response (the TS `poll` phase) is not supported and becomes a `model_error`; the observation layer (`ConversationView`, task graph view, agent event stream, committed-state sources/watches) is not ported, so `pi serve` still uses the JSONL session store and its own `Transcript` shape.
+Differences from TS: a deferred provider response (the TS `poll` phase) is not supported and becomes a `model_error`; the agent event stream and the exact-frame committed-state watches are not ported, and `pi serve` still uses the JSONL session store and its own `Transcript` shape rather than publishing the durable `ConversationView` through the `Transcript` service.
 
 ## MCP servers
 
@@ -113,4 +114,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; SQLite storage; the durable observation layer (conversation views, task graph, event stream) and with it the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; SQLite storage; the durable agent event stream and the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

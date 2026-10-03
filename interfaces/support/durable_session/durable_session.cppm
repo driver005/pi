@@ -79,24 +79,22 @@ public:
         if (auto usable = assertUsable(); !usable) {
             return std::unexpected(usable.error());
         }
-        auto resolved = m_resolver.resolve(definition, args);
-        if (!resolved) {
-            return std::unexpected(resolved.error());
-        }
-        auto loaded = load(definition, resolved->id, resolved->address);
+        auto loaded = loadChecked(definition, args);
         if (!loaded) {
             return std::unexpected(loaded.error());
         }
         if (!*loaded) {
             return std::optional<Json>();
         }
-        if (auto scoped = m_resolver.checkScope(definition, (*loaded)->record); !scoped) {
-            return std::unexpected(scoped.error());
-        }
-        if (auto versioned = m_resolver.checkVersion(definition, (*loaded)->record, (*loaded)->storedVersion); !versioned) {
-            return std::unexpected(versioned.error());
-        }
         return std::optional<Json>((*loaded)->value);
+    }
+
+    /**
+     * The committed incarnation of a document (record, stored version and value), null when it does not exist. Only
+     * for code that already runs on the line: inside readOnLine or a line listener.
+     */
+    Result<std::shared_ptr<LoadedDocument>> loadOnLine(const DocDefinition& definition, const DocAddressArgs& args) {
+        return loadChecked(definition, args);
     }
 
     /** The value of a conversation document as of one visible entry's commit. */
@@ -269,6 +267,27 @@ public:
     }
 
 private:
+    Result<std::shared_ptr<LoadedDocument>> loadChecked(const DocDefinition& definition, const DocAddressArgs& args) {
+        auto resolved = m_resolver.resolve(definition, args);
+        if (!resolved) {
+            return std::unexpected(resolved.error());
+        }
+        auto loaded = load(definition, resolved->id, resolved->address);
+        if (!loaded) {
+            return std::unexpected(loaded.error());
+        }
+        if (!*loaded) {
+            return std::shared_ptr<LoadedDocument>();
+        }
+        if (auto scoped = m_resolver.checkScope(definition, (*loaded)->record); !scoped) {
+            return std::unexpected(scoped.error());
+        }
+        if (auto versioned = m_resolver.checkVersion(definition, (*loaded)->record, (*loaded)->storedVersion); !versioned) {
+            return std::unexpected(versioned.error());
+        }
+        return loaded;
+    }
+
     Result<std::int64_t> runCommit(const std::function<Result<void>(Transaction&)>& change, TransactionScope scope) {
         Transaction tx(*this, scope, m_conversationCreated);
         if (auto changed = change(tx); !changed) {

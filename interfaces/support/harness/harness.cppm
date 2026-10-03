@@ -15,11 +15,13 @@ export import pi.support.builtin_tasks;
 export import pi.support.compaction_planner;
 export import pi.support.context_reader;
 export import pi.support.conversation;
+export import pi.support.conversation_views;
 export import pi.support.durable_session;
 export import pi.support.inbox_boundary;
 export import pi.support.outcome_settlement;
 export import pi.support.settings_resolver;
 export import pi.support.submissions;
+export import pi.support.task_graph_view;
 export import pi.support.task_scheduler;
 export import pi.support.usage_ledger;
 export import pi.types.conversation_target;
@@ -45,6 +47,8 @@ public:
                     m_scheduler->join();
                 }
             });
+        m_views = std::make_unique<ConversationViews>(*m_session);
+        m_graph = std::make_unique<TaskGraphView>(*m_session);
         m_scheduler = std::make_unique<TaskScheduler>(*m_session, *m_options.registry, callbacks());
         m_submissions = std::make_unique<Submissions>(
             *m_session, [this] { return now(); }, [this] { return resolvedSettings(); }, [this] { m_scheduler->resume(); });
@@ -131,6 +135,22 @@ public:
 
     Result<std::shared_ptr<Conversation>> createConversation(const ConversationCreateOptions& options = {}) {
         return create(ConversationTarget{"independent", 0, 0}, options);
+    }
+
+    /** Observable `{conversation, entries, docs}` of a conversation, as committed (see ConversationViews). */
+    Result<std::shared_ptr<IReplicatedState>> viewState(std::int64_t conversationId) {
+        if (auto open = assertOpen(); !open) {
+            return std::unexpected(open.error());
+        }
+        return m_views->state(conversationId);
+    }
+
+    /** Observable `{tasks}` graph of every live task, as committed (see TaskGraphView). */
+    Result<std::shared_ptr<IReplicatedState>> taskGraph() {
+        if (auto open = assertOpen(); !open) {
+            return std::unexpected(open.error());
+        }
+        return m_graph->state();
     }
 
     // ─── Tasks ──────────────────────────────────────────────────────────────
@@ -516,6 +536,8 @@ private:
     std::atomic<bool> m_closed{false};
     // Destroyed in reverse order: submissions and the scheduler unsubscribe from the session first.
     std::unique_ptr<DurableSession> m_session;
+    std::unique_ptr<ConversationViews> m_views;
+    std::unique_ptr<TaskGraphView> m_graph;
     std::unique_ptr<TaskScheduler> m_scheduler;
     std::unique_ptr<Submissions> m_submissions;
 };
