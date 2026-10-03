@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bound_conversation",
+    deps = [
+        "//interfaces/durable/i_conversation_handle",
+        "//interfaces/durable/i_conversation_host",
+        "//interfaces/support/abort_link",
+        "//interfaces/support/bound_submission",
+        "//interfaces/types/task_invocation",
+    ],
+)

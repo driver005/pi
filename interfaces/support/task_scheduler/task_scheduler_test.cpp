@@ -55,7 +55,7 @@ protected:
             return {};
         };
         callbacks.withdrawInputs = [](Transaction&, std::int64_t) -> Result<void> { return {}; };
-        callbacks.conversation = [](std::int64_t, TaskInvocation&) -> Result<std::shared_ptr<IConversationHandle>> {
+        callbacks.conversation = [](std::int64_t, const std::shared_ptr<TaskInvocation>&) -> Result<std::shared_ptr<IConversationHandle>> {
             return std::shared_ptr<IConversationHandle>();
         };
         callbacks.context = [](std::int64_t, const std::optional<std::int64_t>&) -> Result<Json> { return Json::object(); };

@@ -134,7 +134,7 @@ public:
     }
 
     Result<std::shared_ptr<IConversationHandle>> conversation(std::int64_t id) override {
-        return m_host.conversation(*m_invocation, id);
+        return m_host.conversation(m_invocation, id);
     }
 
     Result<std::optional<Json>> entry(std::int64_t id, const std::optional<std::string>& kind = std::nullopt) override {

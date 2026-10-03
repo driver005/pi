@@ -76,7 +76,7 @@ public:
             return m_cleanup ? m_cleanup(tx, record, outcome) : Result<void>();
         };
         callbacks.withdrawInputs = [](Transaction&, std::int64_t) -> Result<void> { return {}; };
-        callbacks.conversation = [](std::int64_t, TaskInvocation&) -> Result<std::shared_ptr<IConversationHandle>> {
+        callbacks.conversation = [](std::int64_t, const std::shared_ptr<TaskInvocation>&) -> Result<std::shared_ptr<IConversationHandle>> {
             return std::shared_ptr<IConversationHandle>();
         };
         callbacks.context = [this](std::int64_t conversationId, const std::optional<std::int64_t>& at) -> Result<Json> {

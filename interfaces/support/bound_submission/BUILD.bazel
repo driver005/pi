@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bound_submission",
+    deps = [
+        "//interfaces/durable/i_submission",
+        "//interfaces/support/abort_link",
+        "//interfaces/types/task_invocation",
+    ],
+)

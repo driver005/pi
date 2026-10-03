@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "outcome_settlement",
+    deps = [
+        "//interfaces/support/assistant_entries",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/compaction_planner",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/run_starter",
+        "//interfaces/support/tool_task_definition",
+        "//interfaces/support/transaction",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

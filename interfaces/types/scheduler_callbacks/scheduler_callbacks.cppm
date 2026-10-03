@@ -35,7 +35,7 @@ export struct SchedulerCallbacks {
     /** Withdraws a conversation's queued inputs, for conversation abort and abort cascades. */
     std::function<Result<void>(Transaction&, std::int64_t conversationId)> withdrawInputs;
     /** An invocation-bound handle of an existing conversation; null when absent. */
-    std::function<Result<std::shared_ptr<IConversationHandle>>(std::int64_t id, TaskInvocation& binding)> conversation;
+    std::function<Result<std::shared_ptr<IConversationHandle>>(std::int64_t id, const std::shared_ptr<TaskInvocation>& binding)> conversation;
     /** The committed raw active transcript and model context of a conversation, optionally cut off at an entry. */
     std::function<Result<Json>(std::int64_t conversationId, const std::optional<std::int64_t>& at)> context;
 };

@@ -36,7 +36,7 @@ public:
     virtual Result<std::optional<Json>> getTask(TaskInvocation& invocation, std::int64_t id) = 0;
     virtual Result<Json> waitForTask(TaskInvocation& invocation, std::int64_t id, const AbortSignal* cancel) = 0;
     virtual Result<std::vector<Json>> outcomes(TaskInvocation& invocation, const std::vector<std::int64_t>& ids) = 0;
-    virtual Result<std::shared_ptr<IConversationHandle>> conversation(TaskInvocation& invocation, std::int64_t id) = 0;
+    virtual Result<std::shared_ptr<IConversationHandle>> conversation(const std::shared_ptr<TaskInvocation>& invocation, std::int64_t id) = 0;
     virtual Result<std::optional<Json>> entry(TaskInvocation& invocation, std::int64_t id,
                                               const std::optional<std::string>& kind) = 0;
     virtual Result<Json> context(TaskInvocation& invocation, std::int64_t conversationId,

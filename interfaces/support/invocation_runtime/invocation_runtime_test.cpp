@@ -59,7 +59,7 @@ public:
     Result<std::vector<Json>> outcomes(TaskInvocation&, const std::vector<std::int64_t>&) override {
         return std::vector<Json>();
     }
-    Result<std::shared_ptr<IConversationHandle>> conversation(TaskInvocation&, std::int64_t) override {
+    Result<std::shared_ptr<IConversationHandle>> conversation(const std::shared_ptr<TaskInvocation>&, std::int64_t) override {
         return std::shared_ptr<IConversationHandle>();
     }
     Result<std::optional<Json>> entry(TaskInvocation&, std::int64_t, const std::optional<std::string>&) override {

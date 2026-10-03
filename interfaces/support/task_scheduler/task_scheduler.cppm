@@ -430,8 +430,8 @@ public:
         return outcomes;
     }
 
-    Result<std::shared_ptr<IConversationHandle>> conversation(TaskInvocation& invocation, std::int64_t id) override {
-        if (auto live = checkLive(invocation); !live) {
+    Result<std::shared_ptr<IConversationHandle>> conversation(const std::shared_ptr<TaskInvocation>& invocation, std::int64_t id) override {
+        if (auto live = checkLive(*invocation); !live) {
             return std::unexpected(live.error());
         }
         return m_callbacks.conversation(id, invocation);
