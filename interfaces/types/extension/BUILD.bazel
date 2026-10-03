@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "extension",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/types/hook_registration",
+        "//interfaces/types/prompt_section",
+        "//interfaces/types/tool_registration",
+        "//interfaces/types/wrap",
+    ],
+)

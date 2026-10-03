@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_tool_execution_api",
+    deps = [
+        "//interfaces/durable/i_execution_env",
+        "//interfaces/durable/i_hook_api",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/transaction",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/task_options",
+        "//interfaces/types/tool_diagnostic",
+    ],
+)

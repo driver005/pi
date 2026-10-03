@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_registry_snapshot",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/types/extension",
+    ],
+)

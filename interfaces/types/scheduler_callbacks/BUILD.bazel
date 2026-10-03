@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "scheduler_callbacks",
+    deps = [
+        "//interfaces/durable/i_agent",
+        "//interfaces/durable/i_conversation_handle",
+        "//interfaces/durable/i_execution_env",
+        "//interfaces/durable/i_registry_snapshot",
+        "//interfaces/support/transaction",
+        "//interfaces/types/error",
+        "//interfaces/types/json",
+        "//interfaces/types/resolved_settings",
+        "//interfaces/types/result",
+        "//interfaces/types/task_invocation",
+    ],
+)

@@ -36,7 +36,7 @@ public:
     }
 
     /** Registers a listener; runs it immediately if already aborted. Returns a removal id. */
-    std::uint64_t onAbort(Listener listener) {
+    std::uint64_t onAbort(Listener listener) const {
         {
             const std::lock_guard<std::mutex> lock(m_mutex);
             if (!m_aborted) {
@@ -49,7 +49,7 @@ public:
         return 0;
     }
 
-    void removeListener(std::uint64_t id) {
+    void removeListener(std::uint64_t id) const {
         const std::lock_guard<std::mutex> lock(m_mutex);
         m_listeners.erase(id);
     }
@@ -57,6 +57,6 @@ public:
 private:
     mutable std::mutex m_mutex;
     bool m_aborted = false;
-    std::uint64_t m_nextId = 1;
-    std::map<std::uint64_t, Listener> m_listeners;
+    mutable std::uint64_t m_nextId = 1;
+    mutable std::map<std::uint64_t, Listener> m_listeners;
 };

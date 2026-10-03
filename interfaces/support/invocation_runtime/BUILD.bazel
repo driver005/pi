@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "invocation_runtime",
+    deps = [
+        "//interfaces/durable/i_task_host",
+        "//interfaces/durable/i_task_runtime",
+        "//interfaces/types/task_invocation",
+    ],
+)

@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "registry",
+    deps = [
+        "//interfaces/durable/i_registry_reader",
+        "//interfaces/support/registry_state",
+        "//interfaces/types/result",
+    ],
+)

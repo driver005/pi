@@ -252,3 +252,21 @@ TEST_F(DurableSessionTest, CloseSealsAdmissionAndRunsHooksOnce) {
     EXPECT_EQ(after.error().code, "session_closed");
     EXPECT_FALSE(m_storage->mintId().has_value());
 }
+
+TEST_F(DurableSessionTest, LineListenersRunOnTheLineBeforeCommitReturnsAndInOrder) {
+    DurableSession session(m_storage);
+    std::vector<std::int64_t> online;
+    std::vector<std::int64_t> later;
+    auto handle = session.subscribeCommitsOnLine([&](const Json& publication) { online.push_back(publication.at("seq").get<std::int64_t>()); });
+    ASSERT_TRUE(handle.has_value());
+    ASSERT_TRUE(session.subscribeCommits([&](const Json& publication) { later.push_back(publication.at("seq").get<std::int64_t>()); }).has_value());
+    const std::int64_t conversationId = newConversation(session);
+    ASSERT_TRUE(increment(session, conversationId, counter()).has_value());
+    // Line listeners saw both commits by the time commit returned.
+    EXPECT_EQ(online.size(), 2u);
+    EXPECT_EQ(later, online);
+    session.unsubscribeCommitsOnLine(*handle);
+    ASSERT_TRUE(increment(session, conversationId, counter()).has_value());
+    EXPECT_EQ(online.size(), 2u);
+    EXPECT_EQ(later.size(), 3u);
+}

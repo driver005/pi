@@ -21,9 +21,11 @@ export import pi.types.transaction_scope;
  * one at a time), the loaded-document cache, and ordered publication of committed changes. Only
  * committed state is observable. Port of packages/durable/src/session/session.ts.
  *
- * A commit callback and its hooks run on the line and must not call back into the session; commit
- * listeners run after the line is released, in commit order, on whichever thread finishes a commit
- * (a listener may itself commit). A storage failure other than a clean rejection poisons the
+ * A commit callback and its hooks run on the line and must not call back into the session. Line
+ * listeners (subscribeCommitsOnLine) run synchronously on the line right after adoption, so state
+ * they mirror is exactly the committed state for code running on the line; they must not call back
+ * into the session either. Commit listeners run after the line is released, in commit order, on
+ * whichever thread finishes a commit (a listener may itself commit). A storage failure other than a clean rejection poisons the
  * session, because memory may no longer match what was stored.
  *
  * Publications are `{seq, changes: [...]}` where a change is a table write (`conversation`, `entry`,
@@ -128,6 +130,22 @@ public:
         return historical(definition, address, point);
     }
 
+    /** Registers a listener called synchronously on the mutation line after each commit is adopted. */
+    Result<std::int64_t> subscribeCommitsOnLine(CommitListener listener) {
+        std::lock_guard guard(m_listenerMutex);
+        if (auto usable = assertUsable(); !usable) {
+            return std::unexpected(usable.error());
+        }
+        const std::int64_t id = ++m_nextListener;
+        m_lineListeners[id] = std::move(listener);
+        return id;
+    }
+
+    void unsubscribeCommitsOnLine(std::int64_t id) {
+        std::lock_guard guard(m_listenerMutex);
+        m_lineListeners.erase(id);
+    }
+
     /** Registers a listener for committed publications; returns its handle. */
     Result<std::int64_t> subscribeCommits(CommitListener listener) {
         std::lock_guard guard(m_listenerMutex);
@@ -186,6 +204,7 @@ public:
         {
             std::lock_guard guard(m_listenerMutex);
             m_commitListeners.clear();
+            m_lineListeners.clear();
         }
         m_documents.clear();
         return m_storage->close();
@@ -287,8 +306,19 @@ private:
         for (const Json& document : documents) {
             changes.push_back(document);
         }
+        Json publication = Json::object({{"seq", seq}, {"changes", changes}});
+        std::vector<CommitListener> onLine;
+        {
+            std::lock_guard guard(m_listenerMutex);
+            for (const auto& item : m_lineListeners) {
+                onLine.push_back(item.second);
+            }
+        }
+        for (const CommitListener& listener : onLine) {
+            listener(publication);
+        }
         std::lock_guard guard(m_queueMutex);
-        m_queue.push_back(Json::object({{"seq", seq}, {"changes", changes}}));
+        m_queue.push_back(std::move(publication));
     }
 
     /** Delivers queued publications in order; a nested call (from a listener) leaves them to the outer loop. */
@@ -372,6 +402,7 @@ private:
     std::mutex m_listenerMutex;
     std::int64_t m_nextListener = 0;
     std::map<std::int64_t, CommitListener> m_commitListeners;
+    std::map<std::int64_t, CommitListener> m_lineListeners;
     std::map<std::int64_t, std::function<void()>> m_closeListeners;
     std::mutex m_queueMutex;
     std::deque<Json> m_queue;

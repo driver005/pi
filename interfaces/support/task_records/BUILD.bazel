@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "task_records",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/types/json",
+        "//interfaces/types/ownership_ref",
+        "//interfaces/types/task_node",
+    ],
+)

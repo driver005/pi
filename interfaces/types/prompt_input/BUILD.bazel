@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "prompt_input",
+    deps = [
+        "//interfaces/types/agent_snapshot",
+        "//interfaces/types/json",
+    ],
+)

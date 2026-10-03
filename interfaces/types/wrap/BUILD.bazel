@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "wrap",
+    deps = [
+        "//interfaces/types/prompt_section",
+        "//interfaces/types/tool_registration",
+    ],
+)

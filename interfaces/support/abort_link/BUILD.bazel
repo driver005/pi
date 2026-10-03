@@ -1,0 +1,8 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "abort_link",
+    deps = [
+        "//interfaces/support/abort_signal",
+    ],
+)
