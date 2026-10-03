@@ -18,6 +18,27 @@ std::string g_lastLog;
 std::string g_lastReply;
 int g_shutdowns = 0;
 std::string g_providerConfig;
+std::string g_serverConfig;
+
+class RecordingRegistrar : public IMcpServerRegistrar {
+public:
+    Result<void> registerServer(const std::string& owner, const std::string& name, const Json& config) override {
+        if (m_refuse) {
+            return std::unexpected(Error{"mcp_server_conflict", "already registered"});
+        }
+        m_servers[name] = {owner, config};
+        return {};
+    }
+    void unregisterServer(const std::string& owner, const std::string& name) override {
+        const auto found = m_servers.find(name);
+        if (found != m_servers.end() && found->second.first == owner) {
+            m_servers.erase(found);
+        }
+    }
+
+    std::map<std::string, std::pair<std::string, Json>> m_servers;
+    bool m_refuse = false;
+};
 
 class RecordingLogger : public ILogger {
 public:
@@ -41,7 +62,7 @@ protected:
               result.output = "ran";
               return result;
           }),
-          m_host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models) {
+          m_host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models, &m_servers) {
         g_host = nullptr;
         g_lastLog.clear();
         g_lastReply.clear();
@@ -99,6 +120,7 @@ protected:
     std::function<void(const ProcessRequest&)> m_onRun;
     ScriptedProcessRunner m_runner;
     FakeModelRuntime m_models;
+    RecordingRegistrar m_servers;
     PluginHost m_host;
 };
 
@@ -344,4 +366,60 @@ TEST_F(PluginHostTest, WithoutAModelRegistryProvidersCannotBeRegistered) {
     libraries.provide("/plugins/p.so", {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)}, {"pi_plugin_init", reinterpret_cast<void*>(init)}});
     EXPECT_TRUE(host.load({"/plugins/p.so"}).empty());
     EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
+}
+
+class PluginHostMcpTest : public PluginHostTest {
+protected:
+    void provideMcpPlugin(const std::string& path) {
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            const std::string name = "jira";
+            g_lastReply = take(host->register_mcp_server(host->host, view(name), view(g_serverConfig)));
+            return 0;
+        };
+        PiPluginShutdownFn shutdown = []() { ++g_shutdowns; };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)},
+                                   {"pi_plugin_init", reinterpret_cast<void*>(init)},
+                                   {"pi_plugin_shutdown", reinterpret_cast<void*>(shutdown)}});
+    }
+};
+
+TEST_F(PluginHostMcpTest, APluginRegistersAnMcpServerThatEndsWithThePlugin) {
+    g_serverConfig = R"({"url":"https://mcp.example.com/jira"})";
+    provideMcpPlugin("/plugins/mcp.so");
+    EXPECT_TRUE(m_host.load({"/plugins/mcp.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    ASSERT_EQ(m_servers.m_servers.size(), 1u);
+    EXPECT_EQ(m_servers.m_servers.at("jira").first, "/plugins/mcp.so");
+    EXPECT_EQ(m_servers.m_servers.at("jira").second["url"], "https://mcp.example.com/jira");
+    m_host.shutdown();
+    EXPECT_TRUE(m_servers.m_servers.empty());
+}
+
+TEST_F(PluginHostMcpTest, TheRegistrarsRefusalIsReportedAndNothingIsTracked) {
+    m_servers.m_refuse = true;
+    g_serverConfig = R"({"url":"https://mcp.example.com/jira"})";
+    provideMcpPlugin("/plugins/mcp.so");
+    EXPECT_TRUE(m_host.load({"/plugins/mcp.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["error"], "already registered");
+}
+
+TEST_F(PluginHostMcpTest, ConfigsThatAreNotObjectsAreRefused) {
+    g_serverConfig = "7";
+    provideMcpPlugin("/plugins/mcp.so");
+    EXPECT_TRUE(m_host.load({"/plugins/mcp.so"}).empty());
+    EXPECT_TRUE(Json::parse(g_lastReply).contains("error"));
+    EXPECT_TRUE(m_servers.m_servers.empty());
+}
+
+TEST_F(PluginHostMcpTest, APluginUnregistersItsOwnServerOnly) {
+    g_serverConfig = R"({"url":"https://mcp.example.com/jira"})";
+    provideMcpPlugin("/plugins/mcp.so");
+    ASSERT_TRUE(m_host.load({"/plugins/mcp.so"}).empty());
+    const std::string other = "other";
+    EXPECT_TRUE(Json::parse(take(g_host->unregister_mcp_server(g_host->host, view(other)))).contains("error"));
+    const std::string mine = "jira";
+    EXPECT_EQ(Json::parse(take(g_host->unregister_mcp_server(g_host->host, view(mine))))["ok"], true);
+    EXPECT_TRUE(m_servers.m_servers.empty());
 }

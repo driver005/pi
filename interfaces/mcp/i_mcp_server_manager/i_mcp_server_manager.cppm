@@ -27,6 +27,12 @@ public:
      */
     virtual void start(const std::vector<McpServerConfig>& servers, const std::string& cwd,
                        std::chrono::milliseconds startupWait) = 0;
+    /**
+     * Connects more servers later (the same as start with no wait); servers whose name is already managed are ignored.
+     */
+    virtual void addServers(const std::vector<McpServerConfig>& servers, const std::string& cwd) = 0;
+    /** Disconnects one server and unregisters its tools; unknown names are ignored. */
+    virtual void stopServer(const std::string& name) = 0;
     virtual std::vector<McpServerStatus> status() const = 0;
     /** Disconnects every server and unregisters its tools. Idempotent. */
     virtual void close() = 0;

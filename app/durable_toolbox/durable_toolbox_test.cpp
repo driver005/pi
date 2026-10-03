@@ -175,3 +175,44 @@ TEST_F(DurableToolboxTest, PluginsCanRegisterModelProvidersThatEndWithTheToolbox
     }
     EXPECT_FALSE(models.find("hello-proxy", "hello-1").has_value());
 }
+
+TEST_F(DurableToolboxTest, PluginsCanRegisterMcpServersThatGoAwayWithTheToolbox) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};
+    const auto toolbox = open(startup);
+    EXPECT_EQ(names(*toolbox), std::vector<std::string>{"mcp__hello_mcp__echo"});
+    EXPECT_TRUE(toolbox->diagnostics().empty());
+}
+
+TEST_F(DurableToolboxTest, ReloadingPluginsReconnectsTheirMcpServers) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};
+    const auto toolbox = open(startup);
+    std::atomic<int> changes{0};
+    toolbox->onChange([&changes] { ++changes; });
+    ASSERT_TRUE(toolbox->reload().has_value());
+    EXPECT_GE(changes.load(), 1);
+    // The server of the old plugin generation was withdrawn and the new one connects in the background.
+    for (int i = 0; i < 500 && names(*toolbox) != std::vector<std::string>{"mcp__hello_mcp__echo"}; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(names(*toolbox), std::vector<std::string>{"mcp__hello_mcp__echo"});
+}
+
+TEST_F(DurableToolboxTest, AConfiguredServerOfTheSameNameWinsOverAPluginsRegistration) {
+    std::filesystem::create_directories(m_dir + "/agent");
+    const Json config{{"mcpServers", Json{{"hello-mcp", Json{{"command", "/bin/true"}, {"enabled", false}}}}}};
+    std::ofstream(m_dir + "/agent/mcp.json") << config.dump();
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};
+    const auto toolbox = open(startup);
+    EXPECT_TRUE(names(*toolbox).empty());
+}
+
+TEST_F(DurableToolboxTest, PluginMcpServersAreIgnoredWhenMcpIsOff) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};
+    startup.noMcp = true;
+    const auto toolbox = open(startup);
+    EXPECT_TRUE(names(*toolbox).empty());
+}

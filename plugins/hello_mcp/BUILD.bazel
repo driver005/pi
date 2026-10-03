@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_mcp.so; load it with `pi serve --plugin bazel-bin/plugins/hello_mcp/libhello_mcp.so`.
+cc_binary(
+    name = "hello_mcp",
+    srcs = ["hello_mcp.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

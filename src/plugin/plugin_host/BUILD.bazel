@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "plugin_host",
     deps = [
+        "//interfaces/mcp/i_mcp_server_registrar",
         "//interfaces/platform/i_dynamic_libraries",
         "//interfaces/platform/i_logger",
         "//interfaces/platform/i_process_runner",

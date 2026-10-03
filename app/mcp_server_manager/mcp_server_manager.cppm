@@ -74,6 +74,41 @@ public:
         m_settled.wait_for(lock, startupWait, [this]() { return m_unsettled == 0; });
     }
 
+    void addServers(const std::vector<McpServerConfig>& servers, const std::string& cwd) override {
+        std::vector<McpServerConfig> fresh;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            for (const McpServerConfig& config : servers) {
+                const bool known = std::any_of(m_connections.begin(), m_connections.end(), [&](const auto& connection) { return connection->config().name == config.name; }) ||
+                                   std::any_of(m_inactive.begin(), m_inactive.end(), [&](const McpServerStatus& status) { return status.name == config.name; });
+                if (!known) {
+                    fresh.push_back(config);
+                }
+            }
+        }
+        start(fresh, cwd, std::chrono::milliseconds(0));
+    }
+
+    void stopServer(const std::string& name) override {
+        std::shared_ptr<McpServerConnection> stopped;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            std::erase_if(m_inactive, [&](const McpServerStatus& status) { return status.name == name; });
+            const auto found = std::find_if(m_connections.begin(), m_connections.end(), [&](const auto& connection) { return connection->config().name == name; });
+            if (found == m_connections.end()) {
+                return;
+            }
+            stopped = *found;
+            m_connections.erase(found);
+            // Workers and listeners may still hold the connection: it lives until the manager does.
+            m_retired.push_back(stopped);
+            removeTools(name);
+            m_registered.erase(name);
+            syncResourceTools();
+        }
+        stopped->close();
+    }
+
     std::vector<McpServerStatus> status() const override {
         const std::lock_guard<std::mutex> lock(m_mutex);
         std::vector<McpServerStatus> out = m_inactive;
@@ -269,6 +304,7 @@ private:
     std::size_t m_unsettled = 0;
     bool m_closed = false;
     std::vector<std::shared_ptr<McpServerConnection>> m_connections;
+    std::vector<std::shared_ptr<McpServerConnection>> m_retired;
     std::shared_ptr<McpResourceCatalog> m_catalog;
     bool m_resourceToolsRegistered = false;
     std::vector<McpServerStatus> m_inactive;

@@ -21,4 +21,5 @@ export struct LoadedPlugin {
     std::vector<std::string> tools;
     std::vector<std::uint64_t> subscriptions;
     std::vector<std::string> providers;
+    std::vector<std::string> mcpServers;
 };

@@ -104,6 +104,18 @@ typedef struct PiHostApi {
 
     /* Removes a provider this plugin registered. Returns {"ok":true} or {"error":"..."}. */
     PiOwnedString (*unregister_provider)(void* host, PiString name);
+
+    /*
+     * Registers an MCP server for the session, with the config of an `mcpServers` entry of mcp.json (stdio: command, args,
+     * env, cwd; HTTP: url, headers, oauth; enabled, exposure, toolExposure, timeout). It connects next to the configured
+     * servers and is withdrawn when the plugin unloads. A server of the same name in mcp.json takes precedence; a name
+     * another plugin registered is refused. Registering a name again replaces the plugin's earlier registration.
+     * Returns {"ok":true} or {"error":"..."}. Check `struct_size` covers `unregister_mcp_server` before calling.
+     */
+    PiOwnedString (*register_mcp_server)(void* host, PiString name, PiString config_json);
+
+    /* Removes an MCP server this plugin registered and closes its connection. Returns {"ok":true} or {"error":"..."}. */
+    PiOwnedString (*unregister_mcp_server)(void* host, PiString name);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

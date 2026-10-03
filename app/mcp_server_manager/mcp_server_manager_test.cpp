@@ -265,3 +265,52 @@ TEST_F(McpServerManagerResourcesTest, ClosingWithdrawsTheResourceTools) {
     m_manager.close();
     EXPECT_TRUE(toolNames().empty());
 }
+
+TEST_F(McpServerManagerTest, ServersAddedLaterConnectAndRegisterTheirTools) {
+    m_connector.enqueue(serving({"search"}));
+    start({server("docs")});
+    m_connector.enqueue(serving({"fetch"}));
+    m_manager.addServers({server("web")}, "/work");
+    ASSERT_TRUE(waitUntil([&]() { return toolNames().size() == 2; }));
+    EXPECT_EQ(toolNames(), (std::set<std::string>{"mcp__docs__search", "mcp__web__fetch"}));
+}
+
+TEST_F(McpServerManagerTest, AddingAKnownServerChangesNothing) {
+    m_connector.enqueue(serving({"search"}));
+    start({server("docs")});
+    m_manager.addServers({server("docs")}, "/work");
+    EXPECT_EQ(m_connector.attempts(), 1);
+    EXPECT_EQ(m_manager.status().size(), 1u);
+}
+
+TEST_F(McpServerManagerTest, AStoppedServerLosesItsToolsAndItsConnection) {
+    // Both servers connect at once, so they offer the same tool name.
+    m_connector.enqueue(serving({"search"}));
+    m_connector.enqueue(serving({"search"}));
+    start({server("docs"), server("web")});
+    ASSERT_EQ(toolNames().size(), 2u);
+    m_manager.stopServer("docs");
+    EXPECT_EQ(toolNames(), (std::set<std::string>{"mcp__web__search"}));
+    EXPECT_EQ(m_manager.status().size(), 1u);
+    EXPECT_EQ(m_manager.status()[0].name, "web");
+    m_manager.stopServer("unknown");
+    EXPECT_EQ(toolNames().size(), 1u);
+}
+
+TEST_F(McpServerManagerTest, AStoppedServerCanBeAddedAgain) {
+    m_connector.enqueue(serving({"search"}));
+    start({server("docs")});
+    m_manager.stopServer("docs");
+    m_connector.enqueue(serving({"search"}));
+    m_manager.addServers({server("docs")}, "/work");
+    ASSERT_TRUE(waitUntil([&]() { return toolNames().size() == 1; }));
+    EXPECT_EQ(toolNames(), (std::set<std::string>{"mcp__docs__search"}));
+}
+
+TEST_F(McpServerManagerResourcesTest, StoppingTheLastResourceServerWithdrawsTheResourceTools) {
+    m_connector.enqueue(withResources("file:///a"));
+    start({server("docs")});
+    ASSERT_TRUE(toolNames().contains("read_mcp_resource"));
+    m_manager.stopServer("docs");
+    EXPECT_TRUE(toolNames().empty());
+}

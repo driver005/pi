@@ -163,7 +163,33 @@ public:
                            false);
     }
 
+    /**
+     * Registers an MCP server for the session (see PiHostApi.register_mcp_server). Returns an empty string on success,
+     * else the host's error message.
+     */
+    std::string registerMcpServer(const std::string& name, const Json& config) const {
+        if (!hasMcpApi()) {
+            return "the host does not support register_mcp_server";
+        }
+        const std::string text = config.dump();
+        return Json::parse(detail::take(m_api->register_mcp_server(m_api->host, PiString{name.data(), name.size()}, PiString{text.data(), text.size()})), nullptr, false)
+            .value("error", "");
+    }
+
+    /** Removes an MCP server this plugin registered. Returns an empty string on success. */
+    std::string unregisterMcpServer(const std::string& name) const {
+        if (!hasMcpApi()) {
+            return "the host does not support unregister_mcp_server";
+        }
+        return Json::parse(detail::take(m_api->unregister_mcp_server(m_api->host, PiString{name.data(), name.size()})), nullptr, false).value("error", "");
+    }
+
 private:
+    bool hasMcpApi() const {
+        return m_api->struct_size >= offsetof(PiHostApi, unregister_mcp_server) + sizeof(void*) && m_api->register_mcp_server != nullptr &&
+               m_api->unregister_mcp_server != nullptr;
+    }
+
     bool hasProviderApi() const {
         return m_api->struct_size >= offsetof(PiHostApi, unregister_provider) + sizeof(void*) && m_api->register_provider != nullptr &&
                m_api->unregister_provider != nullptr;

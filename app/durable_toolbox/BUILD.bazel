@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "durable_toolbox",
     deps = [
+        "//interfaces/mcp/i_mcp_server_registrar",
         "//interfaces/plugin/i_hook_bus",
         "//interfaces/support/mcp_oauth_providers",
         "//app/coding_services",
@@ -24,6 +25,7 @@ pi_module(
         "//src/ai/faux_provider",
     ],
     data = [
+        "//plugins/hello_mcp",
         "//plugins/hello_provider",
         "//plugins/hello_tool",
     ],

@@ -12,6 +12,7 @@ export import pi.platform.i_dynamic_libraries;
 export import pi.platform.i_logger;
 export import pi.platform.i_process_runner;
 export import pi.plugin.i_hook_bus;
+export import pi.mcp.i_mcp_server_registrar;
 export import pi.plugin.i_plugin_host;
 export import pi.provider.i_model_runtime;
 export import pi.support.plugin_tool_factory;
@@ -26,15 +27,16 @@ export import pi.types.plugin_context;
  */
 export class PluginHost : public IPluginHost {
 public:
-    /** `models` (optional) is where plugins register providers; without it register_provider fails. */
-    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context, IModelRuntime* models = nullptr)
+    /** `models` (optional) is where plugins register providers and `mcp` where they register MCP servers; without them those calls fail. */
+    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context, IModelRuntime* models = nullptr, IMcpServerRegistrar* mcp = nullptr)
         : m_libraries(libraries),
           m_tools(tools),
           m_hooks(hooks),
           m_processes(processes),
           m_logger(logger),
           m_context(std::move(context)),
-          m_models(models) {}
+          m_models(models),
+          m_mcp(mcp) {}
 
     ~PluginHost() override {
         shutdown();
@@ -151,6 +153,14 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->unregisterProvider(*plugin, std::string(name.data, name.size));
         };
+        api.register_mcp_server = [](void* host, PiString name, PiString config) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerMcpServer(*plugin, std::string(name.data, name.size), std::string(config.data, config.size));
+        };
+        api.unregister_mcp_server = [](void* host, PiString name) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->unregisterMcpServer(*plugin, std::string(name.data, name.size));
+        };
     }
 
     void unload(LoadedPlugin& plugin) {
@@ -168,9 +178,15 @@ private:
                 m_models->unregisterProvider(name);
             }
         }
+        if (m_mcp != nullptr) {
+            for (const std::string& name : plugin.mcpServers) {
+                m_mcp->unregisterServer(plugin.path, name);
+            }
+        }
         plugin.tools.clear();
         plugin.subscriptions.clear();
         plugin.providers.clear();
+        plugin.mcpServers.clear();
         m_libraries.close(plugin.library);
     }
 
@@ -212,6 +228,37 @@ private:
         }
         plugin.providers.erase(found);
         m_models->unregisterProvider(name);
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString registerMcpServer(LoadedPlugin& plugin, const std::string& name, const std::string& configText) {
+        if (m_mcp == nullptr) {
+            return owned(Json{{"error", "this host does not connect MCP servers"}});
+        }
+        const Json config = Json::parse(configText, nullptr, false);
+        if (name.empty() || !config.is_object()) {
+            return owned(Json{{"error", "register_mcp_server needs a server name and a JSON object"}});
+        }
+        if (auto registered = m_mcp->registerServer(plugin.path, name, config); !registered) {
+            return owned(Json{{"error", registered.error().message}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (std::ranges::find(plugin.mcpServers, name) == plugin.mcpServers.end()) {
+            plugin.mcpServers.push_back(name);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString unregisterMcpServer(LoadedPlugin& plugin, const std::string& name) {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto found = std::ranges::find(plugin.mcpServers, name);
+            if (m_mcp == nullptr || found == plugin.mcpServers.end()) {
+                return owned(Json{{"error", "MCP server \"" + name + "\" was not registered by this plugin"}});
+            }
+            plugin.mcpServers.erase(found);
+        }
+        m_mcp->unregisterServer(plugin.path, name);
         return owned(Json{{"ok", true}});
     }
 
@@ -337,6 +384,7 @@ private:
     PluginContext m_context;
     PluginToolFactory m_factory;
     IModelRuntime* m_models;
+    IMcpServerRegistrar* m_mcp;
     mutable std::mutex m_mutex;
     std::vector<std::unique_ptr<LoadedPlugin>> m_plugins;
 };
