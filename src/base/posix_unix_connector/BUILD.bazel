@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_unix_connector",
+    deps = [
+        "//interfaces/client/i_client_transport",
+        "//interfaces/server/i_socket_connection",
+        "//interfaces/support/callback_connection_handler",
+    ],
+    test_deps = ["//src/base/posix_byte_connection"],
+)

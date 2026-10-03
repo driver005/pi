@@ -22,7 +22,9 @@ pi_module(
         "//app/coding_services",
         "//app/durable_serve",
         "//interfaces/support/protocol_codec",
+        "//interfaces/support/protocol_client",
         "//interfaces/support/protocol_message_decoder",
+        "//src/base/posix_unix_connector",
         "//src/ai/faux_provider",
     ],
 )

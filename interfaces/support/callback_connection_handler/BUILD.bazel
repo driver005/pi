@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "callback_connection_handler",
+    deps = [
+        "//interfaces/server/i_byte_connection_handler",
+        "//interfaces/types/client_transport_handlers",
+    ],
+)

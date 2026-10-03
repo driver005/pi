@@ -12,7 +12,10 @@ import pi.ai.faux_provider;
 import pi.coding_runtime_factory;
 import pi.coding_services;
 import pi.durable_serve;
+import pi.base.posix_byte_connection;
+import pi.base.posix_unix_connector;
 import pi.serve_application;
+import pi.support.protocol_client;
 import pi.support.protocol_codec;
 import pi.support.protocol_message_decoder;
 
@@ -258,6 +261,78 @@ TEST_P(ServeApplicationTest, ASecondServerOnTheSameSocketIsRefused) {
     const auto started = second.start();
     ASSERT_FALSE(started);
     EXPECT_NE(started.error().message.find("already running"), std::string::npos);
+}
+
+TEST_P(ServeApplicationTest, AProtocolClientDrivesASessionOverTheSocket) {
+    startServer();
+    auto* faux = m_services->models().faux();
+    ASSERT_TRUE(faux != nullptr);
+    faux->enqueue(faux->textResponse("pong"));
+    PosixUnixConnector connector(m_app->socketPath(), [](int fd, std::uint64_t limit, std::int64_t grace) {
+        return std::shared_ptr<ISocketConnection>(std::make_shared<PosixByteConnection>(fd, limit, grace));
+    });
+    ProtocolClient client(connector, kServerId);
+    const auto hello = client.connect();
+    ASSERT_TRUE(hello.has_value()) << hello.error().message;
+    EXPECT_EQ(hello->at("serverId"), kServerId);
+
+    const auto catalogue = client.serviceCatalogue(client.serverTarget());
+    ASSERT_TRUE(catalogue.has_value()) << catalogue.error().message;
+    EXPECT_NE(catalogue->dump().find("pi.session-management"), std::string::npos);
+
+    const auto call = [](const std::string& service, const std::string& member, const Json& args) {
+        return Json{{"serviceId", service}, {"member", member}, {"args", args}};
+    };
+    const auto created = client.request(client.serverTarget(), call("pi.session-management", "create", Json::array({Json{{"id", "demo"}}})));
+    ASSERT_TRUE(created.has_value()) << created.error().message;
+    ASSERT_TRUE(client.request(client.serverTarget(), call("pi.session-management", "attach", Json::array({"demo"}))).has_value());
+    std::optional<Json> target;
+    for (int i = 0; i < 500 && !(target = client.attachment()); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    ASSERT_TRUE(target.has_value());
+    EXPECT_EQ(target->at("sessionId"), "demo");
+
+    std::mutex mutex;
+    std::string transcript;
+    const auto subscription = client.subscribeService(*target, "pi.transcript", "singleton", [&](const Json& update) {
+        const std::lock_guard<std::mutex> lock(mutex);
+        transcript += update.dump();
+    });
+    ASSERT_TRUE(subscription.has_value()) << subscription.error().message;
+    client.start(subscription->id);
+
+    const auto prompted = client.request(*target, call("pi.agent-controller", "prompt", Json::array({Json{{"message", "ping"}, {"images", nullptr}}})));
+    ASSERT_TRUE(prompted.has_value() && prompted->has_value()) << (prompted ? "" : prompted.error().message);
+    ASSERT_EQ((**prompted)["accepted"], true);
+    const auto answer = client.request(*target, call("pi.agent-controller", "waitForPrompt", Json::array({(**prompted)["operationId"]})));
+    ASSERT_TRUE(answer.has_value() && answer->has_value()) << (answer ? "" : answer.error().message);
+    EXPECT_EQ((**answer)["text"], "pong");
+
+    bool streamed = false;
+    for (int i = 0; i < 500 && !streamed; ++i) {
+        {
+            const std::lock_guard<std::mutex> lock(mutex);
+            streamed = transcript.find("pong") != std::string::npos;
+        }
+        if (!streamed) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+    EXPECT_TRUE(streamed);
+    ASSERT_TRUE(client.dispose(subscription->id).has_value());
+    client.disconnect();
+}
+
+TEST_P(ServeApplicationTest, AProtocolClientRefusesAServerWithAnotherId) {
+    startServer();
+    PosixUnixConnector connector(m_app->socketPath(), [](int fd, std::uint64_t limit, std::int64_t grace) {
+        return std::shared_ptr<ISocketConnection>(std::make_shared<PosixByteConnection>(fd, limit, grace));
+    });
+    ProtocolClient client(connector, "00000000-0000-4000-8000-000000000002");
+    const auto hello = client.connect();
+    ASSERT_FALSE(hello.has_value());
+    EXPECT_EQ(hello.error().code, "protocol_validation");
 }
 
 INSTANTIATE_TEST_SUITE_P(Backends, ServeApplicationTest, testing::Bool(), [](const testing::TestParamInfo<bool>& info) { return info.param ? std::string("Durable") : std::string("SessionTree"); });

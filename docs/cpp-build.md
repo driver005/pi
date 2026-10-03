@@ -72,6 +72,10 @@ Offline smoke test:
 PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-id 00000000-0000-4000-8000-000000000001
 ```
 
+## Protocol client
+
+`ProtocolClient` (`interfaces/support/protocol_client`) is the C++ counterpart of `packages/client`: it connects over an `IClientTransport` (`PosixUnixConnector` in `src/base` for unix sockets; `FakeClientTransport` in tests), runs the v8 hello handshake (checking the server id), and offers blocking `request` with cancellation (`AbortSignal` -> `cancel` message), `serviceCatalogue`, `subscribeService`/`start`/`dispose` (decoded snapshots and updates, held until `start`), the attachment the server reports, and a disconnect listener. Listeners run in order on a delivery thread, so they may call back into the client. A protocol violation or lost transport disconnects it and fails pending requests. `serve_application_test` drives a real `pi serve` (both session backends) through it: catalogue, create, attach, subscribe to the transcript, prompt, wait.
+
 ## Durable storage (partial port of `packages/durable`)
 
 `IStorage` (`interfaces/durable/i_storage`) is the atomic persistence boundary of the durable session: conversations, entries, tasks, submissions and versioned documents, with fork-aware entry scans, opaque cursors and as-of document reads. Records and writes are JSON in the shape of `packages/durable/src/types.ts`. Three backends exist:
@@ -125,4 +129,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.

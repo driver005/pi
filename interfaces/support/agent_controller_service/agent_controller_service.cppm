@@ -314,11 +314,10 @@ private:
         m_active = false;
     }
 
+    /** Notifies under the lock: the destructor waits for m_running and may destroy the condition variable right after. */
     void finishTask() {
-        {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            --m_running;
-        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        --m_running;
         m_changed.notify_all();
     }
 
