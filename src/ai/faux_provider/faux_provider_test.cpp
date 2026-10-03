@@ -96,3 +96,58 @@ TEST_F(FauxProviderTest, ScriptedErrorResponsePropagates) {
     drain(stream);
     EXPECT_EQ(stream->result()->errorMessage, "overloaded");
 }
+
+TEST_F(FauxProviderTest, DeferredRequestsAnswerWithAHandleAndResolveAfterThePendingFetches) {
+    m_provider.setDeferredBehavior(2, 25);
+    m_provider.enqueue(m_provider.textResponse("final"));
+    StreamOptions options;
+    options.deferred = true;
+    auto first = m_provider.stream(m_model, TranscriptContext{}, options);
+    drain(first);
+    ASSERT_EQ(first->result()->stopReason, StopReason::Deferred);
+    ASSERT_TRUE(first->result()->deferred.has_value());
+    const DeferredHandle handle = *first->result()->deferred;
+    EXPECT_EQ(handle.provider, "faux");
+    EXPECT_EQ(handle.modelId, "faux-1");
+    EXPECT_EQ(handle.pollAfterMs, 25);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        auto pending = m_provider.fetchDeferred(m_model, handle, StreamOptions{});
+        drain(pending);
+        EXPECT_EQ(pending->result()->stopReason, StopReason::Deferred);
+        EXPECT_EQ(pending->result()->deferred->id, handle.id);
+    }
+    auto final = m_provider.fetchDeferred(m_model, handle, StreamOptions{});
+    drain(final);
+    EXPECT_EQ(final->result()->stopReason, StopReason::Stop);
+    EXPECT_EQ(std::get<TextContent>(final->result()->content[0]).text, "final");
+    EXPECT_EQ(m_provider.deferredFetchCount(), 3);
+}
+
+TEST_F(FauxProviderTest, CancelledAndUnknownHandlesFailTheirFetch) {
+    m_provider.enqueue(m_provider.textResponse("final"));
+    StreamOptions options;
+    options.deferred = true;
+    auto first = m_provider.stream(m_model, TranscriptContext{}, options);
+    drain(first);
+    const DeferredHandle handle = *first->result()->deferred;
+    ASSERT_TRUE(m_provider.cancelDeferred(m_model, handle, StreamOptions{}).has_value());
+    ASSERT_EQ(m_provider.cancelledDeferred().size(), 1u);
+    auto cancelled = m_provider.fetchDeferred(m_model, handle, StreamOptions{});
+    drain(cancelled);
+    EXPECT_EQ(cancelled->result()->stopReason, StopReason::Error);
+    EXPECT_NE(cancelled->result()->errorMessage->find("was cancelled"), std::string::npos);
+    DeferredHandle unknown = handle;
+    unknown.id = "nope";
+    auto missing = m_provider.fetchDeferred(m_model, unknown, StreamOptions{});
+    drain(missing);
+    EXPECT_NE(missing->result()->errorMessage->find("Unknown faux deferred response"), std::string::npos);
+}
+
+TEST_F(FauxProviderTest, WithoutTheDeferredOptionResponsesStreamDirectly) {
+    m_provider.setDeferredBehavior(5, 25);
+    m_provider.enqueue(m_provider.textResponse("now"));
+    auto stream = m_provider.stream(m_model, TranscriptContext{}, StreamOptions{});
+    drain(stream);
+    EXPECT_EQ(stream->result()->stopReason, StopReason::Stop);
+    EXPECT_FALSE(stream->result()->deferred.has_value());
+}

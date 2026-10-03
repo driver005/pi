@@ -6,6 +6,7 @@ pi_interface(
         "//interfaces/provider/i_provider",
         "//interfaces/types/auth_result",
         "//interfaces/types/auth_status",
+        "//interfaces/types/deferred_handle",
         "//interfaces/types/json",
         "//interfaces/types/model",
         "//interfaces/types/result",

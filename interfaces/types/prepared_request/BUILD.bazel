@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "prepared_request",
+    deps = [
+        "//interfaces/types/model",
+        "//interfaces/types/stream_options",
+    ],
+)

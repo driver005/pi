@@ -463,6 +463,11 @@ public:
         return messages;
     }
 
+    /** The deferred handle a message or checkpoint carries; nothing when `json` is not an object. */
+    std::optional<DeferredHandle> handleFromJson(const Json& json) const {
+        return deferredFromJson(json);
+    }
+
 private:
     Result<SystemMessage> systemFromJson(const JsonReader& reader) const {
         SystemMessage message;

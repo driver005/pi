@@ -45,9 +45,16 @@ protected:
             return m_faux.stream(model, context, options);
         });
         m_settings.retry = Json::object({{"baseDelayMs", 50}});
+        m_models.setDeferredHandlers(
+            [this](const Model& model, const DeferredHandle& handle, const StreamOptions& options) { return m_faux.fetchDeferred(model, handle, options); },
+            [this](const Model& model, const DeferredHandle& handle, const StreamOptions& options) { return m_faux.cancelDeferred(model, handle, options); });
     }
 
     ~HarnessTest() override {
+        m_tickerStopped.store(true);
+        if (m_ticker.joinable()) {
+            m_ticker.join();
+        }
         if (m_harness) {
             (void)m_harness->close();
         }
@@ -98,6 +105,30 @@ protected:
         return draft;
     }
 
+    /** Moves the harness clock forward until the ticker is dropped, so sleeps until a poll time end. */
+    void startClock() {
+        m_ticker = std::thread([this] {
+            while (!m_tickerStopped.load()) {
+                m_time += 100;
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        });
+    }
+
+    /** Whether some live task waits at the `poll` phase of a deferred response. */
+    bool polling() {
+        auto report = m_harness->inspect();
+        if (!report) {
+            return false;
+        }
+        for (const Json& task : report->at("tasks")) {
+            if (task.at("record").at("state").value("checkpoint", Json::object()).value("phase", std::string()) == "poll") {
+                return true;
+            }
+        }
+        return false;
+    }
+
     template <typename Predicate>
     bool eventually(Predicate predicate) {
         for (int attempt = 0; attempt < 2000; ++attempt) {
@@ -121,6 +152,8 @@ protected:
     std::unique_ptr<Harness> m_harness;
     std::mutex m_mutex;
     std::vector<std::string> m_reports;
+    std::thread m_ticker;
+    std::atomic<bool> m_tickerStopped{false};
 };
 
 TEST_F(HarnessTest, RootIsCreatedOnceAndConversationsAreLookedUpById) {
@@ -561,4 +594,98 @@ TEST_F(HarnessTest, ClosedHarnessesRefuseViews) {
     ASSERT_TRUE(m_harness->close().has_value());
     EXPECT_FALSE(m_harness->viewState(1).has_value());
     EXPECT_FALSE(m_harness->taskGraph().has_value());
+}
+
+TEST_F(HarnessTest, ADeferredResponseIsPolledUntilTheAnswerArrives) {
+    openMemory();
+    m_settings.stream = Json::object({{"deferred", true}});
+    m_faux.setDeferredBehavior(2, 10);
+    m_faux.enqueue(m_faux.textResponse("late answer"));
+    startClock();
+    auto root = rootWithModel();
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value());
+    auto settled = (*submission)->wait();
+    ASSERT_TRUE(settled.has_value()) << settled.error().message;
+    EXPECT_EQ(settled->at("status"), "done");
+    ASSERT_TRUE(root->waitForIdle().has_value());
+    // Two fetches answered `deferred`, the third carried the answer; only the answer reached the transcript.
+    EXPECT_EQ(m_faux.deferredFetchCount(), 3);
+    auto context = root->context();
+    ASSERT_TRUE(context.has_value());
+    ASSERT_EQ(context->at("messages").size(), 2u);
+    EXPECT_EQ(context->at("messages")[1].at("content")[0].at("text"), "late answer");
+    EXPECT_TRUE(m_faux.cancelledDeferred().empty());
+}
+
+TEST_F(HarnessTest, ADeferredToolCallResponseStartsItsToolRoundAfterPolling) {
+    openMemory();
+    m_settings.stream = Json::object({{"deferred", true}});
+    m_faux.setDeferredBehavior(1, 10);
+    m_faux.enqueue(m_faux.toolCallResponse("ghost", Json::object(), "call-1"));
+    m_faux.enqueue(m_faux.textResponse("done"));
+    startClock();
+    auto root = rootWithModel();
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value());
+    auto settled = (*submission)->wait();
+    ASSERT_TRUE(settled.has_value()) << settled.error().message;
+    EXPECT_EQ(settled->at("status"), "done");
+    ASSERT_TRUE(root->waitForIdle().has_value());
+    auto context = root->context();
+    ASSERT_TRUE(context.has_value());
+    // Input, assistant with the call, the unavailable-tool result, the final answer.
+    ASSERT_EQ(context->at("messages").size(), 4u);
+    EXPECT_EQ(context->at("messages")[2].at("role"), "toolResult");
+    EXPECT_EQ(context->at("messages")[3].at("content")[0].at("text"), "done");
+    EXPECT_EQ(m_faux.deferredFetchCount(), 4);
+}
+
+TEST_F(HarnessTest, AbortingWhilePollingCancelsTheDeferredResponse) {
+    openMemory();
+    m_settings.stream = Json::object({{"deferred", true}});
+    m_faux.setDeferredBehavior(0, 1000000);
+    m_faux.enqueue(m_faux.textResponse("never read"));
+    auto root = rootWithModel();
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value());
+    ASSERT_TRUE(eventually([&] { return polling(); }));
+    ASSERT_TRUE(root->abort().has_value());
+    auto settled = (*submission)->wait();
+    ASSERT_TRUE(settled.has_value()) << settled.error().message;
+    EXPECT_EQ(settled->at("status"), "unanswered");
+    EXPECT_EQ(settled->at("reason"), "aborted");
+    ASSERT_EQ(m_faux.cancelledDeferred().size(), 1u);
+    EXPECT_EQ(m_faux.deferredFetchCount(), 0);
+}
+
+TEST_F(HarnessTest, PollingResumesAfterReopeningTheStore) {
+    openJsonl();
+    m_settings.stream = Json::object({{"deferred", true}});
+    m_faux.setDeferredBehavior(0, 1000000);
+    m_faux.enqueue(m_faux.textResponse("after restart"));
+    auto root = rootWithModel();
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value());
+    const std::int64_t submissionId = (*submission)->id();
+    ASSERT_TRUE(eventually([&] { return polling(); }));
+    ASSERT_TRUE(m_harness->close().has_value());
+    m_harness.reset();
+    m_bundle.reset();
+
+    openJsonl();
+    auto reacquired = m_harness->submission(submissionId);
+    ASSERT_TRUE(reacquired.has_value() && *reacquired);
+    ASSERT_TRUE(m_harness->resume().has_value());
+    // The checkpoint still names the handle; once the poll time has passed the answer is fetched.
+    m_time += 2000000;
+    auto settled = (*reacquired)->wait();
+    ASSERT_TRUE(settled.has_value()) << settled.error().message;
+    EXPECT_EQ(settled->at("status"), "done");
+    auto again = m_harness->root();
+    ASSERT_TRUE(again.has_value());
+    auto context = (*again)->context();
+    ASSERT_TRUE(context.has_value());
+    EXPECT_EQ(context->at("messages").back().at("content")[0].at("text"), "after restart");
+    EXPECT_EQ(m_faux.deferredFetchCount(), 1);
 }

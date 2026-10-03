@@ -101,6 +101,33 @@ public:
         return m_codec.toJson(*final);
     }
 
+    /** Fetches the current state of a deferred response and drains it: the final message, or another `deferred` one. */
+    Result<Json> fetchDeferred(IModelRuntime& models, const Model& model, const Json& handle, const StreamOptions& options) const {
+        auto typed = m_codec.handleFromJson(handle);
+        if (!typed) {
+            return std::unexpected(Error{"model_error", "The deferred handle is not an object"});
+        }
+        std::shared_ptr<AssistantMessageStream> stream = models.fetchDeferred(model, *typed, options);
+        if (!stream) {
+            return std::unexpected(Error{"no_model", "Model " + model.provider + "/" + model.id + " produced no stream"});
+        }
+        while (stream->next()) {
+        }
+        auto final = stream->result();
+        if (!final) {
+            return std::unexpected(Error{"model_error", "The model stream ended without a result"});
+        }
+        return m_codec.toJson(*final);
+    }
+
+    Result<void> cancelDeferred(IModelRuntime& models, const Model& model, const Json& handle, const StreamOptions& options) const {
+        auto typed = m_codec.handleFromJson(handle);
+        if (!typed) {
+            return std::unexpected(Error{"model_error", "The deferred handle is not an object"});
+        }
+        return models.cancelDeferred(model, *typed, options);
+    }
+
     Json toJson(const AssistantMessage& message) const {
         return m_codec.toJson(message);
     }

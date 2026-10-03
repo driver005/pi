@@ -86,7 +86,9 @@ All of it lives in `interfaces/support` (logic classes that may hold threads and
 - Observation: `Harness::viewState(conversationId)` returns an `IReplicatedState` of `{conversation, entries, docs}` (the active transcript entries and the `pi.agent`/`pi.live`/`pi.inbox`/`pi.usage` documents) and `Harness::taskGraph()` one of `{tasks: {id: node}}` for every live task (`ConversationViews`, `TaskGraphView`). A mount is built on the session line by its first holder, advances from the ordered commit publications (so it only shows committed state) and is dropped when the last holder releases it; its published ops are the diff of each commit, so replaying them over the first snapshot rebuilds the value.
 - Tests run over `MemoryStorage` and over `JsonlStorage` on a fake file system (restart recovery), with `TaskFixture` (`src/testing/task_fixture`), the faux provider and a fixed clock; the scheduler, tasks, harness and submissions pass under `--config=tsan` and 20x stress runs.
 
-Differences from TS: a deferred provider response (the TS `poll` phase) is not supported and becomes a `model_error`; the agent event stream and the exact-frame committed-state watches are not ported, and `pi serve` still uses the JSONL session store and its own `Transcript` shape rather than publishing the durable `ConversationView` through the `Transcript` service.
+A deferred provider response (stream option `deferred`) is polled through the `poll` phase of the generation task (`IProvider::fetchDeferred/cancelDeferred`, routed by `IModelRuntime`; only the faux provider implements it, as in TS) and an abort during polling cancels the handle.
+
+Differences from TS: the agent event stream and the exact-frame committed-state watches are not ported, and `pi serve` still uses the JSONL session store and its own `Transcript` shape rather than publishing the durable `ConversationView` through the `Transcript` service.
 
 ## MCP servers
 

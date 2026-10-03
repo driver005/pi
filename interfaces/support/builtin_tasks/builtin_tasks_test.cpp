@@ -18,7 +18,7 @@ TEST(BuiltinTasksTest, DefinitionsMatchTheKindsAndSeedTheirFirstCheckpoints) {
     EXPECT_EQ(definitions[0]->initial(Json::object()).dump(), R"({"phase":"prepare","attempt":1})");
     EXPECT_EQ(definitions[1]->initial(Json::object()).dump(), R"({"phase":"call"})");
     EXPECT_EQ(definitions[2]->initial(Json::object()).dump(), R"({"phase":"select"})");
-    EXPECT_EQ(definitions[0]->phases.size(), 4u);
+    EXPECT_EQ(definitions[0]->phases.size(), 5u);
 }
 
 TEST(BuiltinTasksTest, AreResolvableFromARegistryBuiltWithThem) {

@@ -8,6 +8,7 @@ pi_module(
         "//interfaces/provider/i_provider",
         "//interfaces/support/assistant_stream_emitter",
         "//interfaces/support/message_codec",
+        "//interfaces/types/faux_deferred_response",
         "//interfaces/types/json",
     ],
     test_deps = [

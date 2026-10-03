@@ -2,5 +2,7 @@ load("//tools:module.bzl", "pi_test_support")
 
 pi_test_support(
     name = "fake_model_runtime",
-    deps = ["//interfaces/provider/i_model_runtime"],
+    deps = [
+        "//interfaces/provider/i_model_runtime",
+    ],
 )

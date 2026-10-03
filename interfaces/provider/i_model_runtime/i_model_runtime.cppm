@@ -4,6 +4,7 @@ import std;
 export import pi.provider.i_provider;
 export import pi.types.auth_result;
 export import pi.types.auth_status;
+export import pi.types.deferred_handle;
 export import pi.types.json;
 export import pi.types.model;
 export import pi.types.result;
@@ -46,6 +47,17 @@ public:
     virtual std::shared_ptr<AssistantMessageStream> stream(const Model& model,
                                                            const TranscriptContext& context,
                                                            const StreamOptions& options) = 0;
+
+    /**
+     * Fetches the current state of a deferred response (another `deferred` message while pending, then the final one),
+     * with the same auth resolution as stream(). Failures, including a provider without deferred support, arrive as an
+     * Error event.
+     */
+    virtual std::shared_ptr<AssistantMessageStream> fetchDeferred(const Model& model, const DeferredHandle& handle,
+                                                                  const StreamOptions& options) = 0;
+
+    /** Cancels a deferred response. */
+    virtual Result<void> cancelDeferred(const Model& model, const DeferredHandle& handle, const StreamOptions& options) = 0;
 
     /** Registers or replaces a provider from a models.json-style config (plugins). */
     virtual Result<void> registerProvider(const std::string& providerId, const Json& config) = 0;

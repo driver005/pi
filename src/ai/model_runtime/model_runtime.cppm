@@ -22,6 +22,7 @@ export import pi.support.model_composer;
 export import pi.support.models_config_loader;
 export import pi.support.provider_auth_resolver;
 export import pi.types.model_runtime_config;
+export import pi.types.prepared_request;
 export import pi.types.provider_state;
 
 /**
@@ -184,51 +185,39 @@ public:
     }
 
     std::shared_ptr<AssistantMessageStream> stream(const Model& model, const TranscriptContext& context, const StreamOptions& options) override {
-        const auto found = state(model.provider);
-        if (!found) {
-            return m_errors.failed(model, "Unknown provider: " + model.provider, m_clock.nowMs());
+        auto prepared = prepare(model, options);
+        if (!prepared) {
+            return m_errors.failed(model, prepared.error().message, m_clock.nowMs());
         }
-        auto resolution = resolveAuth(model.provider, options.apiKey, options.env);
-        if (!resolution) {
-            return m_errors.failed(model, resolution.error().message, m_clock.nowMs());
-        }
-        if (!resolution->has_value()) {
-            return m_errors.failed(model, "Provider is not configured: " + model.provider, m_clock.nowMs());
-        }
-        const AuthResult& auth = **resolution;
         auto provider = m_providers.find(model.api);
         if (!provider) {
             return m_errors.failed(model, "No API provider registered for api: " + model.api, m_clock.nowMs());
         }
+        return provider->stream(prepared->model, context, prepared->options);
+    }
 
-        HttpHeaders headers = auth.auth.headers;
-        for (const auto& [name, value] : model.headers) {
-            m_headers.set(headers, name, value);
+    std::shared_ptr<AssistantMessageStream> fetchDeferred(const Model& model, const DeferredHandle& handle, const StreamOptions& options) override {
+        auto prepared = prepare(model, options);
+        if (!prepared) {
+            return m_errors.failed(model, prepared.error().message, m_clock.nowMs());
         }
-        std::map<std::string, std::string> env = auth.env;
-        for (const auto& [name, value] : options.env) {
-            env[name] = value;
+        auto provider = m_providers.find(model.api);
+        if (!provider || !provider->supportsDeferred()) {
+            return m_errors.failed(model, "Provider " + model.provider + " does not support deferred responses", m_clock.nowMs());
         }
-        for (const auto& [name, value] : configuredModelHeaders(model, found->config, env)) {
-            m_headers.set(headers, name, value);
-        }
+        return provider->fetchDeferred(prepared->model, handle, prepared->options);
+    }
 
-        StreamOptions requestOptions = options;
-        requestOptions.apiKey = options.apiKey ? options.apiKey : auth.auth.apiKey;
-        requestOptions.env = env;
-        std::vector<std::pair<std::string, std::optional<std::string>>> merged;
-        for (const auto& [name, value] : headers) {
-            merged.emplace_back(name, value);
+    Result<void> cancelDeferred(const Model& model, const DeferredHandle& handle, const StreamOptions& options) override {
+        auto prepared = prepare(model, options);
+        if (!prepared) {
+            return std::unexpected(prepared.error());
         }
-        for (const auto& entry : options.headers) {
-            merged.push_back(entry);
+        auto provider = m_providers.find(model.api);
+        if (!provider || !provider->supportsDeferred()) {
+            return std::unexpected(Error{"provider", "Provider " + model.provider + " does not support deferred responses"});
         }
-        requestOptions.headers = std::move(merged);
-        Model requestModel = model;
-        if (auth.auth.baseUrl) {
-            requestModel.baseUrl = *auth.auth.baseUrl;
-        }
-        return provider->stream(requestModel, context, requestOptions);
+        return provider->cancelDeferred(prepared->model, handle, prepared->options);
     }
 
     Result<void> registerProvider(const std::string& providerId, const Json& config) override {
@@ -260,6 +249,53 @@ public:
     }
 
 private:
+    /** Resolves auth, headers and base URL for a request of `model`; the model's API provider is known to exist. */
+    Result<PreparedRequest> prepare(const Model& model, const StreamOptions& options) {
+        const auto found = state(model.provider);
+        if (!found) {
+            return std::unexpected(Error{"provider", "Unknown provider: " + model.provider});
+        }
+        auto resolution = resolveAuth(model.provider, options.apiKey, options.env);
+        if (!resolution) {
+            return std::unexpected(resolution.error());
+        }
+        if (!resolution->has_value()) {
+            return std::unexpected(Error{"provider", "Provider is not configured: " + model.provider});
+        }
+        const AuthResult& auth = **resolution;
+        if (!m_providers.find(model.api)) {
+            return std::unexpected(Error{"provider", "No API provider registered for api: " + model.api});
+        }
+        HttpHeaders headers = auth.auth.headers;
+        for (const auto& [name, value] : model.headers) {
+            m_headers.set(headers, name, value);
+        }
+        std::map<std::string, std::string> env = auth.env;
+        for (const auto& [name, value] : options.env) {
+            env[name] = value;
+        }
+        for (const auto& [name, value] : configuredModelHeaders(model, found->config, env)) {
+            m_headers.set(headers, name, value);
+        }
+        PreparedRequest prepared;
+        prepared.options = options;
+        prepared.options.apiKey = options.apiKey ? options.apiKey : auth.auth.apiKey;
+        prepared.options.env = env;
+        std::vector<std::pair<std::string, std::optional<std::string>>> merged;
+        for (const auto& [name, value] : headers) {
+            merged.emplace_back(name, value);
+        }
+        for (const auto& entry : options.headers) {
+            merged.push_back(entry);
+        }
+        prepared.options.headers = std::move(merged);
+        prepared.model = model;
+        if (auth.auth.baseUrl) {
+            prepared.model.baseUrl = *auth.auth.baseUrl;
+        }
+        return prepared;
+    }
+
     using ModelMap = std::map<std::string, std::vector<Model>>;
 
     ModelMap loadBaseModels() {

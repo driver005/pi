@@ -26,6 +26,15 @@ public:
         }
     }
 
+    using FetchDeferredHandler = std::function<std::shared_ptr<AssistantMessageStream>(const Model&, const DeferredHandle&, const StreamOptions&)>;
+    using CancelDeferredHandler = std::function<Result<void>(const Model&, const DeferredHandle&, const StreamOptions&)>;
+
+    void setDeferredHandlers(FetchDeferredHandler fetch, CancelDeferredHandler cancel) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_fetchDeferred = std::move(fetch);
+        m_cancelDeferred = std::move(cancel);
+    }
+
     void setStreamHandler(StreamHandler handler) {
         const std::lock_guard<std::mutex> lock(m_mutex);
         m_handler = std::move(handler);
@@ -116,6 +125,27 @@ public:
         return handler ? handler(model, context, options) : nullptr;
     }
 
+    std::shared_ptr<AssistantMessageStream> fetchDeferred(const Model& model, const DeferredHandle& handle, const StreamOptions& options) override {
+        FetchDeferredHandler handler;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            handler = m_fetchDeferred;
+        }
+        return handler ? handler(model, handle, options) : nullptr;
+    }
+
+    Result<void> cancelDeferred(const Model& model, const DeferredHandle& handle, const StreamOptions& options) override {
+        CancelDeferredHandler handler;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            handler = m_cancelDeferred;
+        }
+        if (!handler) {
+            return std::unexpected(Error{"provider", "No deferred handler is set"});
+        }
+        return handler(model, handle, options);
+    }
+
     Result<void> registerProvider(const std::string&, const Json&) override {
         return {};
     }
@@ -126,4 +156,6 @@ private:
     std::vector<Model> m_models;
     std::set<std::string> m_authenticated;
     StreamHandler m_handler;
+    FetchDeferredHandler m_fetchDeferred;
+    CancelDeferredHandler m_cancelDeferred;
 };

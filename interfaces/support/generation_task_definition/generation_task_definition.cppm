@@ -27,12 +27,14 @@ export import pi.support.tool_task_definition;
  * waits for. The run's inputs live in `pi.live.run`. Port of packages/durable/src/harness/generation.ts.
  *
  * Input `{}`. Checkpoints: `{phase: "prepare", attempt, compacted?, overflow?}`, `{phase: "request", attempt, compacted?,
- * model, thinkingLevel, streamOptions, cutoff}`, `{phase: "retry", attempt, compacted?, until}` and `{phase: "tools",
- * assistant, tools, pending}`. Result `{entryId}`. Deferred provider responses (the `poll` phase) are not supported.
+ * model, thinkingLevel, streamOptions, cutoff}`, `{phase: "retry", attempt, compacted?, until}`, `{phase: "poll", attempt, compacted?,
+ * model, cutoff, handle, pollAt}` (a deferred provider response, fetched again at `pollAt`) and `{phase: "tools", assistant,
+ * tools, pending}`. Result `{entryId}`.
  */
 export class GenerationTaskDefinition {
 public:
     static constexpr std::int64_t kPartialIntervalMs = 100;
+    static constexpr std::int64_t kDefaultPollAfterMs = 5000;
 
     std::shared_ptr<TaskDefinition> build() const {
         auto definition = std::make_shared<TaskDefinition>();
@@ -42,6 +44,7 @@ public:
         definition->phases["prepare"] = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.prepare(task, runtime); };
         definition->phases["request"] = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.request(task, runtime); };
         definition->phases["retry"] = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.retry(task, runtime); };
+        definition->phases["poll"] = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.poll(task, runtime); };
         definition->phases["tools"] = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.tools(task, runtime); };
         definition->abort = [self = *this](const Json& task, ITaskRuntime& runtime) { return self.abort(task, runtime); };
         return definition;
@@ -228,6 +231,24 @@ private:
         });
     }
 
+    /** Waits until `pollAt`, fetches the deferred response again and classifies what comes back. */
+    Result<void> poll(const Json& task, ITaskRuntime& runtime) const {
+        const Json& checkpoint = task.at("state").at("checkpoint");
+        auto model = m_requests.find(runtime.models(), checkpoint.at("model"));
+        if (!model) {
+            return failNoModel(runtime, model.error().message);
+        }
+        if (auto slept = runtime.sleep(checkpoint.at("pollAt").get<std::int64_t>()); !slept) {
+            return slept;
+        }
+        const StreamOptions options = m_requests.options(Json::object(), "off", runtime.signal());
+        auto message = m_requests.fetchDeferred(*runtime.models(), *model, checkpoint.at("handle"), options);
+        if (!message) {
+            return std::unexpected(message.error());
+        }
+        return classify(runtime, checkpoint, Json(), *message);
+    }
+
     Result<void> tools(const Json& task, ITaskRuntime& runtime) const {
         const Json& checkpoint = task.at("state").at("checkpoint");
         const std::int64_t assistant = checkpoint.at("assistant").get<std::int64_t>();
@@ -267,6 +288,9 @@ private:
     Result<void> abort(const Json& task, ITaskRuntime& runtime) const {
         const Json& checkpoint = task.at("state").at("checkpoint");
         const std::int64_t conversationId = runtime.conversationId();
+        if (checkpoint.at("phase") == "poll") {
+            cancelDeferred(runtime, checkpoint);
+        }
         // Runs after the round's tool tasks are terminal; calls never started get `aborted` results.
         std::vector<Json> unstarted;
         if (checkpoint.at("phase") == "tools") {
@@ -295,6 +319,18 @@ private:
             }
             return std::optional<Json>(Json::object({{"status", "terminal"}, {"outcome", Json::object({{"status", "aborted"}})}}));
         });
+    }
+
+    /** Cancels the provider's deferred response of a `poll` checkpoint; a failure is reported, the abort goes on. */
+    void cancelDeferred(ITaskRuntime& runtime, const Json& checkpoint) const {
+        auto model = m_requests.find(runtime.models(), checkpoint.at("model"));
+        if (!model) {
+            return;
+        }
+        const StreamOptions options = m_requests.options(Json::object(), "off", runtime.signal());
+        if (auto cancelled = m_requests.cancelDeferred(*runtime.models(), *model, checkpoint.at("handle"), options); !cancelled) {
+            runtime.report(cancelled.error());
+        }
     }
 
     // ─── Requests ───────────────────────────────────────────────────────────
@@ -376,8 +412,8 @@ private:
         const std::optional<std::int64_t> compacted = optionalId(checkpoint, "compacted");
         const std::int64_t cutoff = checkpoint.at("cutoff").get<std::int64_t>();
         const std::string stop = message.value("stopReason", std::string());
-        if (stop == "deferred") {
-            return failModelError(runtime, "Deferred provider responses are not supported");
+        if (stop == "deferred" && message.contains("deferred")) {
+            return pollLater(runtime, checkpoint, message.at("deferred"));
         }
         auto hooked = runtime.eachHook("afterResponse", [&](const HookHandler& hook) -> Result<void> {
             auto handled = hook(message, runtime);
@@ -393,7 +429,16 @@ private:
             }
         }
         if (stop == "toolUse" && !calls.empty()) {
-            return startToolRound(runtime, contextMessages, message, calls);
+            Json messages = contextMessages;
+            if (messages.is_null()) {
+                // A polled response has no request context at hand; the offered tools are those the request saw.
+                auto view = runtime.context(conversationId, cutoff);
+                if (!view) {
+                    return std::unexpected(view.error());
+                }
+                messages = view->at("messages");
+            }
+            return startToolRound(runtime, messages, message, calls);
         }
         if (stop == "stop" || stop == "length" || stop == "toolUse") {
             return answer(runtime, message);
@@ -411,6 +456,31 @@ private:
             }
         }
         return endAttempt(runtime, checkpoint, message, overflow, settings.retry);
+    }
+
+    /** Commits the `poll` checkpoint of a deferred response; a still pending one polls strictly later than before. */
+    Result<void> pollLater(ITaskRuntime& runtime, const Json& checkpoint, const Json& handle) const {
+        const std::int64_t attempt = checkpoint.at("attempt").get<std::int64_t>();
+        std::int64_t pollAt = runtime.now() + handle.value("pollAfterMs", kDefaultPollAfterMs);
+        if (const auto previous = optionalId(checkpoint, "pollAt")) {
+            pollAt = std::max(pollAt, *previous + 1);
+        }
+        return runtime.commit([&](Transaction& tx, const Json&) -> State {
+            auto live = liveOf(tx, runtime.conversationId());
+            if (!live) {
+                return std::unexpected(live.error());
+            }
+            (**live)["generation"] = Json::object({{"attempt", attempt}, {"deferred", Json::object({{"pollAt", pollAt}})}});
+            Json next = Json::object({{"phase", "poll"}, {"attempt", attempt}});
+            if (checkpoint.contains("compacted")) {
+                next["compacted"] = checkpoint.at("compacted");
+            }
+            next["model"] = checkpoint.at("model");
+            next["cutoff"] = checkpoint.at("cutoff");
+            next["handle"] = handle;
+            next["pollAt"] = pollAt;
+            return std::optional<Json>(Json::object({{"status", "running"}, {"checkpoint", next}}));
+        });
     }
 
     /** Appends the overflowing answer and waits for a blocking compaction the generation owns. */

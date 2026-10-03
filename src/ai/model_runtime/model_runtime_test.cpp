@@ -13,6 +13,18 @@ import pi.testing.fixed_clock;
 import pi.testing.inline_executor;
 import pi.testing.scripted_process_runner;
 
+/** A wire API without deferred support: only the defaults of IProvider apply. */
+class PlainProvider : public IProvider {
+public:
+    std::string api() const override {
+        return "plain";
+    }
+
+    std::shared_ptr<AssistantMessageStream> stream(const Model&, const TranscriptContext&, const StreamOptions&) override {
+        return nullptr;
+    }
+};
+
 class ModelRuntimeTest : public testing::Test {
 protected:
     ModelRuntimeTest()
@@ -228,4 +240,65 @@ TEST_F(ModelRuntimeTest, RemoteStoreOverlayAddsModelsWhenNewerThanCatalog) {
     m_models.write("openai", entry);
     ASSERT_TRUE(m_runtime.reload().has_value());
     EXPECT_FALSE(m_runtime.find("openai", "gpt-new").has_value());
+}
+
+TEST_F(ModelRuntimeTest, DeferredResponsesAreFetchedAndCancelledThroughTheProvider) {
+    m_environment.set("OPENAI_API_KEY", "sk");
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    const Model model = *m_runtime.find("openai", "gpt-a");
+    m_faux->setDeferredBehavior(1, 5);
+    m_faux->enqueue(m_faux->textResponse("final"));
+    StreamOptions options;
+    options.deferred = true;
+    const AssistantMessage deferred = run(model, options);
+    ASSERT_EQ(deferred.stopReason, StopReason::Deferred);
+    ASSERT_TRUE(deferred.deferred.has_value());
+    EXPECT_EQ(deferred.deferred->pollAfterMs, 5);
+
+    auto fetch = [&] {
+        auto stream = m_runtime.fetchDeferred(model, *deferred.deferred, StreamOptions{});
+        while (stream->next()) {
+        }
+        return *stream->result();
+    };
+    EXPECT_EQ(fetch().stopReason, StopReason::Deferred);
+    const AssistantMessage answered = fetch();
+    EXPECT_EQ(answered.stopReason, StopReason::Stop);
+    EXPECT_EQ(std::get<TextContent>(answered.content[0]).text, "final");
+    EXPECT_EQ(m_faux->deferredFetchCount(), 2);
+
+    ASSERT_TRUE(m_runtime.cancelDeferred(model, *deferred.deferred, StreamOptions{}).has_value());
+    ASSERT_EQ(m_faux->cancelledDeferred().size(), 1u);
+    EXPECT_EQ(m_faux->cancelledDeferred()[0].id, deferred.deferred->id);
+}
+
+TEST_F(ModelRuntimeTest, DeferredRequestsNeedCredentials) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    const Model model = *m_runtime.find("openai", "gpt-a");
+    DeferredHandle handle;
+    handle.id = "h";
+    auto stream = m_runtime.fetchDeferred(model, handle, StreamOptions{});
+    while (stream->next()) {
+    }
+    EXPECT_EQ(stream->result()->errorMessage, "Provider is not configured: openai");
+    auto cancelled = m_runtime.cancelDeferred(model, handle, StreamOptions{});
+    ASSERT_FALSE(cancelled.has_value());
+    EXPECT_EQ(cancelled.error().message, "Provider is not configured: openai");
+}
+
+TEST_F(ModelRuntimeTest, ProvidersWithoutDeferredSupportRefuseCleanly) {
+    m_environment.set("OPENAI_API_KEY", "sk");
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    m_providers.registerProvider(std::make_shared<PlainProvider>());
+    Model model = *m_runtime.find("openai", "gpt-a");
+    model.api = "plain";
+    DeferredHandle handle;
+    handle.id = "h";
+    auto stream = m_runtime.fetchDeferred(model, handle, StreamOptions{});
+    while (stream->next()) {
+    }
+    EXPECT_EQ(stream->result()->errorMessage, "Provider openai does not support deferred responses");
+    auto cancelled = m_runtime.cancelDeferred(model, handle, StreamOptions{});
+    ASSERT_FALSE(cancelled.has_value());
+    EXPECT_EQ(cancelled.error().message, "Provider openai does not support deferred responses");
 }
