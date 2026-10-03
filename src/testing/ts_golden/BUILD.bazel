@@ -1,0 +1,6 @@
+# Vectors generated from the TypeScript implementation (see tools/ts_cbor_golden.mts); C++ tests assert agreement.
+filegroup(
+    name = "cbor",
+    srcs = ["ts_cbor_golden.json"],
+    visibility = ["//visibility:public"],
+)

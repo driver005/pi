@@ -50,7 +50,7 @@ def pi_interface(name, deps = []):
     """Interface or plain data type module under //interfaces. Has no test of its own."""
     _module(name, deps)
 
-def pi_support(name, deps = [], test_deps = [], header_only = False):
+def pi_support(name, deps = [], test_deps = [], header_only = False, data = []):
     """Pure-logic helper class under //interfaces/support: no I/O, no OS state.
 
     Callers may instantiate these directly (AbortSignal, EventStream, SseParser, ...) because
@@ -58,7 +58,7 @@ def pi_support(name, deps = [], test_deps = [], header_only = False):
     I* interface with an implementation in //src. `header_only` is accepted for old BUILD files.
     """
     _module(name, deps)
-    _test(name, test_deps)
+    _test(name, test_deps, data)
 
 def pi_module(name, deps = [], test_deps = [], data = []):
     """Implementation module under //src, with <name>_test.cpp next to it.

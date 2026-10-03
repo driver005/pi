@@ -10,6 +10,10 @@ python3 tools/check_style.py .        # style gate (also a bazel test)
 bazel build //app/pi:pi               # the executable
 ```
 
+## Cross-checks against the TypeScript implementation
+
+`tools/ts_cbor_golden.mts` runs the TS CBOR codec and frame encoder (Node 22, strip-types, no `npm install` needed) and writes `src/testing/ts_golden/ts_cbor_golden.json`. The C++ encoder, decoder and frame encoder tests read that file and must produce identical bytes and identical accept/reject decisions. Regenerate with `node --experimental-strip-types tools/ts_cbor_golden.mts src/testing/ts_golden/ts_cbor_golden.json`.
+
 ## `pi rpc`
 
 Headless JSONL server: one JSON command per line on stdin, one JSON line per response or event on stdout (LF framing). Command and event shapes follow `packages/coding-agent/src/modes/rpc/rpc-types.ts`.

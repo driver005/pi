@@ -116,3 +116,24 @@ TEST_F(CborDecoderTest, SupportsStricterCallerLimits) {
     bytes.maxByteLength = 2;
     EXPECT_FALSE(m_decoder.decode(fromHex("626162"), bytes).has_value());
 }
+
+TEST_F(CborDecoderTest, AcceptsAndRejectsLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_cbor_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    for (const Json& vector : golden.at("decode")) {
+        const std::string name = vector.at("name").get<std::string>();
+        const auto result = decode(vector.at("hex").get<std::string>());
+        ASSERT_EQ(result.has_value(), vector.at("accepted").get<bool>()) << name << ": " << (result ? "accepted" : result.error().message) << " (TypeScript: "
+                                                                          << (vector.at("accepted").get<bool>() ? "accepted" : vector.at("error").get<std::string>()) << ")";
+        if (!result) {
+            continue;
+        }
+        if (result->is_binary()) {
+            // TypeScript returns a Uint8Array, which its JSON form shows as an index map.
+            EXPECT_EQ(result->get_binary().size(), Json::parse(vector.at("json").get<std::string>()).size()) << name;
+            continue;
+        }
+        EXPECT_EQ(*result, Json::parse(vector.at("json").get<std::string>())) << name;
+    }
+}

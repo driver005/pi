@@ -3,4 +3,6 @@ load("//tools:module.bzl", "pi_support")
 pi_support(
     name = "frame_encoder",
     deps = ["//interfaces/types/result"],
+    test_deps = ["//interfaces/types/json"],
+    data = ["//src/testing/ts_golden:cbor"],
 )

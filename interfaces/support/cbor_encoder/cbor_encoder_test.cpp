@@ -109,3 +109,20 @@ TEST_F(CborEncoderTest, RoundTripsThroughTheDecoder) {
     EXPECT_EQ(*decoded, value);
     EXPECT_EQ(decoded->dump(), value.dump());
 }
+
+TEST_F(CborEncoderTest, EncodesLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_cbor_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    for (const Json& vector : golden.at("encode")) {
+        const std::string name = vector.at("name").get<std::string>();
+        const Json value = Json::parse(vector.at("json").get<std::string>());
+        const auto result = m_encoder.encode(value);
+        if (vector.at("accepted").get<bool>()) {
+            ASSERT_TRUE(result.has_value()) << name << ": " << (result ? "" : result.error().message);
+            EXPECT_EQ(hex(*result), vector.at("cbor").get<std::string>()) << name;
+        } else {
+            EXPECT_FALSE(result.has_value()) << name << " must be rejected like TypeScript does (" << vector.at("error").get<std::string>() << ")";
+        }
+    }
+}
