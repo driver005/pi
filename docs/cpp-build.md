@@ -73,7 +73,19 @@ PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-
 - `MemoryStorage` (`src/durable/memory_storage`): the reference implementation; also an `IStagedStorage` (validate/apply in two steps).
 - `JsonlStorage` (`src/durable/jsonl_storage`): `main.jsonl` commit markers plus `doc-<id>.jsonl` / `task-<id>.jsonl` sidecars, rebuilt into a memory store on open, with torn-tail and unconfirmed-record recovery and sidecar reclamation. Same on-disk format as the TS implementation (format 1).
 
-Both pass the ported conformance suite (`src/testing/storage_conformance`). Not ported: the SQLite backend (sqlite3 cannot be fetched yet), and the Session/Tx/Harness layers on top of storage.
+Both pass the ported conformance suite (`src/testing/storage_conformance`). Not ported: the SQLite backend (sqlite3 cannot be fetched yet).
+
+## Durable harness (port of `packages/durable` Session/Harness)
+
+All of it lives in `interfaces/support` (logic classes that may hold threads and mutexes) over the `interfaces/durable` contracts; messages and entries stay `Json`, typed conversion happens only for provider calls (`MessageCodec` in `ModelRequests`).
+
+- `DurableSession`: the single mutation line. `commit(callback, scope)` runs a `Transaction` (document drafts diffed into deltas, forks, task and submission rules, `read_after_write` refusal), appends one storage commit and returns its sequence. Readers use `snapshot`/`snapshotAsOf`/`readOnLine`; `subscribeCommits` delivers publications in order after the line, `subscribeCommitsOnLine` synchronously on it. A non-`storage_rejected` failure poisons the session.
+- `TaskScheduler` with `Registry` (task kinds, builtin documents, migrations): one worker thread for reconcile/drain, one thread per invocation, ownership overlays, waiters, orphaning, `abort*`, `waitFor*`, `inspect`. Tasks left `running` by a crash return to `pending` when the scheduler opens.
+- Built-in tasks `pi.generation`, `pi.tool`, `pi.compaction` (`GenerationTaskDefinition`, `ToolTaskDefinition`, `CompactionTaskDefinition`, registered by `BuiltinTasks`), with retry policy, output bounding, usage ledger, hooks/wraps and extension registration.
+- `Harness` (`interfaces/support/harness`): `open`, `root`, `conversation(id)`, `createConversation` (forks), `getTask`, `submission`, `abortSubmission/abortTask`, `waitForTask/waitForIdle`, `usage`, `inspect`, `resume`. Conversations expose prompt/steer/follow-up submissions, the inbox boundary, compaction and `BoundConversation` handles.
+- Tests run over `MemoryStorage` and over `JsonlStorage` on a fake file system (restart recovery), with `TaskFixture` (`src/testing/task_fixture`), the faux provider and a fixed clock; the scheduler, tasks, harness and submissions pass under `--config=tsan` and 20x stress runs.
+
+Differences from TS: a deferred provider response (the TS `poll` phase) is not supported and becomes a `model_error`; the observation layer (`ConversationView`, task graph view, agent event stream, committed-state sources/watches) is not ported, so `pi serve` still uses the JSONL session store and its own `Transcript` shape.
 
 ## MCP servers
 
@@ -101,4 +113,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; SQLite storage, the durable Session/Harness layers (so far only the storage layer is ported) and with them the TS-compatible `Transcript` service; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
+OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; SQLite storage; the durable observation layer (conversation views, task graph, event stream) and with it the TS-compatible `Transcript` service on the durable harness; a C++ protocol client; the `PresentationPlugins`/`SessionPlugins` services; HTML export; the package manager.
