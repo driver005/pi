@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "doc_address_args",
+    deps = ["//interfaces/types/json"],
+)

@@ -1,0 +1,20 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_session",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/durable/i_transaction_host",
+        "//interfaces/support/document_resolver",
+        "//interfaces/support/transaction",
+        "//interfaces/types/doc_address_args",
+        "//interfaces/types/doc_definition",
+        "//interfaces/types/json",
+        "//interfaces/types/loaded_document",
+        "//interfaces/types/result",
+        "//interfaces/types/transaction_scope",
+    ],
+    test_deps = [
+        "//src/durable/memory_storage",
+    ],
+)

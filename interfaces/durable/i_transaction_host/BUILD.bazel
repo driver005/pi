@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_transaction_host",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/types/doc_definition",
+        "//interfaces/types/document_address",
+        "//interfaces/types/json",
+        "//interfaces/types/loaded_document",
+        "//interfaces/types/result",
+    ],
+)
