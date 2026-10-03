@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "list_mcp_resource_templates_tool",
+    deps = [
+        "//interfaces/support/mcp_resource_catalog",
+        "//interfaces/tool/i_tool",
+    ],
+    test_deps = [
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+    ],
+)

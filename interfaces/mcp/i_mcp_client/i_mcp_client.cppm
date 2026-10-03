@@ -3,6 +3,7 @@ export module pi.mcp.i_mcp_client;
 import std;
 export import pi.types.json;
 export import pi.types.mcp_call_result;
+export import pi.types.mcp_page;
 export import pi.types.mcp_request_options;
 export import pi.types.mcp_tool;
 export import pi.types.result;
@@ -26,6 +27,10 @@ public:
     virtual Result<std::vector<Json>> listResources(const McpRequestOptions& options) = 0;
     /** Every resource template; servers without templates give an empty list. */
     virtual Result<std::vector<Json>> listResourceTemplates(const McpRequestOptions& options) = 0;
+    /** One page of resources, starting at `cursor` (the first page when absent). */
+    virtual Result<McpPage> listResourcesPage(const std::optional<std::string>& cursor, const McpRequestOptions& options) = 0;
+    /** One page of resource templates; servers without templates give an empty page. */
+    virtual Result<McpPage> listResourceTemplatesPage(const std::optional<std::string>& cursor, const McpRequestOptions& options) = 0;
     virtual Result<Json> readResource(const std::string& uri, const McpRequestOptions& options) = 0;
 
     /** Capabilities and instructions the server announced in initialize (null / nullopt before connect). */

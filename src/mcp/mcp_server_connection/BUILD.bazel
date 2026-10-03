@@ -4,6 +4,7 @@ pi_module(
     name = "mcp_server_connection",
     deps = [
         "//interfaces/mcp/i_mcp_connector",
+        "//interfaces/mcp/i_mcp_resource_server",
         "//interfaces/mcp/i_mcp_tool_caller",
         "//interfaces/platform/i_sleeper",
         "//interfaces/support/abort_signal",

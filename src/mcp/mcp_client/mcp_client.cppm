@@ -118,6 +118,18 @@ public:
         return items;
     }
 
+    Result<McpPage> listResourcesPage(const std::optional<std::string>& cursor, const McpRequestOptions& options) override {
+        return listOne("resources/list", "resources", "resource", cursor, options);
+    }
+
+    Result<McpPage> listResourceTemplatesPage(const std::optional<std::string>& cursor, const McpRequestOptions& options) override {
+        auto page = listOne("resources/templates/list", "resourceTemplates", "resourceTemplate", cursor, options);
+        if (!page && m_codec.rpcNumber(page.error().code) == McpMessageCodec::MethodNotFound) {
+            return McpPage{};
+        }
+        return page;
+    }
+
     Result<Json> readResource(const std::string& uri, const McpRequestOptions& options) override {
         auto raw = request("resources/read", Json{{"uri", uri}}, options);
         if (!raw) {
@@ -457,6 +469,20 @@ private:
             }
             task();
         }
+    }
+
+    Result<McpPage> listOne(const std::string& method, const std::string& key, const std::string& kind, const std::optional<std::string>& cursor, const McpRequestOptions& options) {
+        auto raw = request(method, cursor ? Json{{"cursor", *cursor}} : Json(), options);
+        if (!raw) {
+            return std::unexpected(raw.error());
+        }
+        McpPage page;
+        auto parsed = m_parser.listPage(method, key, kind, *raw, page.nextCursor);
+        if (!parsed) {
+            return std::unexpected(parsed.error());
+        }
+        page.items = std::move(*parsed);
+        return page;
     }
 
     Result<std::vector<Json>> listAll(const std::string& method, const std::string& key, const std::string& kind, const McpRequestOptions& options) {

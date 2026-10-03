@@ -113,7 +113,9 @@ Servers are read from `<agent-dir>/mcp.json` and, for trusted projects, `<cwd>/.
 
 Servers connect in parallel at session start. Startup waits at most `--mcp-wait` milliseconds (default 5000); slower servers add their tools when ready. Tools are named `mcp__<server>__<tool>` (sanitized, at most 64 characters, hash suffix on collisions) and are active alongside the built-in tools, unless `--tools`/`--no-tools` or a `defaultTools` setting restricts the tool set. Results over 20KB keep start and end; the full text goes to a private temp file. A dropped connection reconnects on the next call.
 
-Differences from the TypeScript implementation: codemode and `tool_search` are not ported, so every exposure except `hidden` offers tools directly; MCP resources, OAuth sign-in and server log files are not ported (use an `Authorization` header or `auth.provider`).
+Differences from the TypeScript implementation: codemode and `tool_search` are not ported, so every exposure except `hidden` offers tools directly; OAuth sign-in and server log files are not ported (use an `Authorization` header or `auth.provider`).
+
+Resources: while a visible server announces the resources capability, three tools are registered next to its tools, with Codex's names so models use them unchanged: `list_mcp_resources` and `list_mcp_resource_templates` (`server`, `cursor`: one page of one server, or every page of every server with per-server `errors`) and `read_mcp_resource` (`server`, `uri`: text and images for the model, binary resources in temp files). MCP App resources (`ui://`, `profile=mcp-app`), `_meta` and icons are left out of listings. They are withdrawn when no such server remains.
 
 ## Plugins
 
@@ -133,4 +135,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; MCP resources and OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); HTML export; the package manager.
+OAuth login flows; MCP OAuth; plugin commands, providers and UI APIs; the remaining plugin events in durable sessions (`input`, `before_agent_start`, `before_provider_request`, compaction and tree hooks); HTML export; the package manager.

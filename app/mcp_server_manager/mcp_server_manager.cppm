@@ -8,14 +8,19 @@ export import pi.support.mcp_result_converter;
 export import pi.support.mcp_server_config_validator;
 export import pi.support.mcp_tool_namer;
 export import pi.tool.i_tool_registry;
+import pi.mcp.list_mcp_resource_templates_tool;
+import pi.mcp.list_mcp_resources_tool;
 import pi.mcp.mcp_server_connection;
 import pi.mcp.mcp_tool_adapter;
+import pi.mcp.read_mcp_resource_tool;
+import pi.support.mcp_resource_catalog;
 
 /**
  * Connects the configured MCP servers in parallel and keeps their tools registered. Tool names are
  * `mcp__<server>__<tool>`; names stay unique and stable across list refreshes. Exposure: `hidden`
  * tools are not registered, every other mode registers the tool directly (codemode and tool search
- * are not ported). Port of the connection and tool handling in
+ * are not ported). While a visible server offers resources, the tools `list_mcp_resources`, `list_mcp_resource_templates` and
+ * `read_mcp_resource` are registered too (McpResourceCatalog); they reach every such server at call time. Port of the connection and tool handling in
  * packages/coding-agent/src/extensions/mcp/index.ts.
  */
 export class McpServerManager : public IMcpServerManager {
@@ -26,7 +31,8 @@ public:
           m_sleeper(sleeper),
           m_namer(namer),
           m_converter(converter),
-          m_clientVersion(std::move(clientVersion)) {}
+          m_clientVersion(std::move(clientVersion)),
+          m_catalog(std::make_shared<McpResourceCatalog>([this] { return resourceServers(); }, converter)) {}
 
     ~McpServerManager() override {
         close();
@@ -53,7 +59,7 @@ public:
                     m_inactive.push_back(inactive);
                     continue;
                 }
-                auto connection = std::make_unique<McpServerConnection>(config, cwd, m_clientVersion,
+                auto connection = std::make_shared<McpServerConnection>(config, cwd, m_clientVersion,
                                                                         m_connector, m_sleeper);
                 connection->setToolsListener([this](McpServerConnection& changed) { registerTools(changed); });
                 started.push_back(connection.get());
@@ -98,6 +104,7 @@ public:
         for (const auto& connection : m_connections) {
             removeTools(connection->config().name);
         }
+        removeResourceTools();
     }
 
 private:
@@ -132,6 +139,9 @@ private:
                 return;
             }
             added = syncTools(connection, tools);
+            for (std::string& name : syncResourceTools()) {
+                added.push_back(std::move(name));
+            }
             listener = m_toolsListener;
         }
         if (listener && !added.empty()) {
@@ -185,6 +195,51 @@ private:
         return name;
     }
 
+    /** Enabled servers with the resources capability whose exposure is not `hidden`, which the resource tools reach. */
+    std::vector<std::shared_ptr<IMcpResourceServer>> resourceServers() const {
+        std::vector<std::shared_ptr<McpServerConnection>> connections;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            connections = m_connections;
+        }
+        std::vector<std::shared_ptr<IMcpResourceServer>> servers;
+        for (const std::shared_ptr<McpServerConnection>& connection : connections) {
+            const McpServerConfig& config = connection->config();
+            if (config.enabled && config.exposure != McpExposure::Hidden && connection->hasResources()) {
+                servers.push_back(connection);
+            }
+        }
+        return servers;
+    }
+
+    /** Registers the resource tools while some server offers resources and withdraws them after; returns the names added. Needs the lock. */
+    std::vector<std::string> syncResourceTools() {
+        bool offered = false;
+        for (const auto& connection : m_connections) {
+            const McpServerConfig& config = connection->config();
+            offered = offered || (config.enabled && config.exposure != McpExposure::Hidden && connection->hasResources());
+        }
+        if (offered == m_resourceToolsRegistered) {
+            return {};
+        }
+        m_resourceToolsRegistered = offered;
+        if (!offered) {
+            removeResourceTools();
+            return {};
+        }
+        m_registry.add(std::make_shared<ListMcpResourcesTool>(m_catalog));
+        m_registry.add(std::make_shared<ListMcpResourceTemplatesTool>(m_catalog));
+        m_registry.add(std::make_shared<ReadMcpResourceTool>(m_catalog));
+        return {std::string(McpResourceCatalog::kListResources), std::string(McpResourceCatalog::kListTemplates), std::string(McpResourceCatalog::kReadResource)};
+    }
+
+    void removeResourceTools() {
+        m_registry.remove(std::string(McpResourceCatalog::kListResources));
+        m_registry.remove(std::string(McpResourceCatalog::kListTemplates));
+        m_registry.remove(std::string(McpResourceCatalog::kReadResource));
+        m_resourceToolsRegistered = false;
+    }
+
     void removeTools(const std::string& server) {
         for (const std::string& name : m_registered[server]) {
             m_registry.remove(name);
@@ -213,7 +268,9 @@ private:
     std::condition_variable m_settled;
     std::size_t m_unsettled = 0;
     bool m_closed = false;
-    std::vector<std::unique_ptr<McpServerConnection>> m_connections;
+    std::vector<std::shared_ptr<McpServerConnection>> m_connections;
+    std::shared_ptr<McpResourceCatalog> m_catalog;
+    bool m_resourceToolsRegistered = false;
     std::vector<McpServerStatus> m_inactive;
     std::vector<std::thread> m_workers;
     /** Tool name to the `<server>\0<tool>` that owns it. */

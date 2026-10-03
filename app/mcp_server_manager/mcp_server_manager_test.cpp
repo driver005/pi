@@ -202,3 +202,66 @@ TEST_F(McpServerManagerTest, ListenerHearsAboutNewToolsOnly) {
     EXPECT_EQ(heard[0], (std::vector<std::string>{"mcp__docs__one"}));
     EXPECT_EQ(heard[1], (std::vector<std::string>{"mcp__docs__two"}));
 }
+
+class McpServerManagerResourcesTest : public McpServerManagerTest {
+protected:
+    ScriptedMcpConnector::Setup withResources(const std::string& uri) {
+        return [uri](ScriptedMcpTransport& transport) {
+            transport.answerInitialize(Json{{"resources", Json::object()}});
+            transport.onRequest("resources/list", [uri](const Json&) -> Result<Json> {
+                return Json{{"resources", Json::array({Json{{"uri", uri}, {"name", "doc"}}})}};
+            });
+            transport.onRequest("resources/read", [](const Json& params) -> Result<Json> {
+                return Json{{"contents", Json::array({Json{{"uri", params["uri"]}, {"text", "body of " + params["uri"].get<std::string>()}}})}};
+            });
+        };
+    }
+
+    std::shared_ptr<ITool> tool(const std::string& name) {
+        return m_registry.find(name);
+    }
+};
+
+TEST_F(McpServerManagerResourcesTest, ServersWithResourcesGetTheResourceTools) {
+    m_connector.enqueue(withResources("file:///a"));
+    start({server("docs")});
+    EXPECT_EQ(toolNames(), (std::set<std::string>{"list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"}));
+}
+
+TEST_F(McpServerManagerResourcesTest, ServersWithoutResourcesAddNoResourceTools) {
+    m_connector.enqueue(serving({"search"}));
+    start({server("docs")});
+    const std::set<std::string> names = toolNames();
+    EXPECT_FALSE(names.contains("list_mcp_resources"));
+    EXPECT_FALSE(names.contains("read_mcp_resource"));
+}
+
+TEST_F(McpServerManagerResourcesTest, TheToolsListAndReadTheResourcesOfEveryServer) {
+    m_connector.enqueue(withResources("file:///a"));
+    m_connector.enqueue(withResources("file:///b"));
+    start({server("alpha"), server("beta")});
+    const auto signal = std::make_shared<AbortSignal>();
+    const auto listing = tool("list_mcp_resources")->execute("c1", Json::object(), signal, nullptr);
+    ASSERT_TRUE(listing.has_value()) << listing.error().message;
+    EXPECT_EQ(listing->structuredContent["resources"].size(), 2u);
+    const auto read = tool("read_mcp_resource")->execute("c2", Json{{"server", "alpha"}, {"uri", "file:///a"}}, signal, nullptr);
+    ASSERT_TRUE(read.has_value()) << read.error().message;
+    EXPECT_EQ(std::get<TextContent>(read->content.at(0)).text, "body of file:///a");
+}
+
+TEST_F(McpServerManagerResourcesTest, HiddenServersAreNotReached) {
+    McpServerConfig hidden = server("docs");
+    hidden.exposure = McpExposure::Hidden;
+    hidden.toolExposure.emplace_back("x", McpExposure::Direct);
+    m_connector.enqueue(withResources("file:///a"));
+    start({hidden});
+    EXPECT_FALSE(toolNames().contains("list_mcp_resources"));
+}
+
+TEST_F(McpServerManagerResourcesTest, ClosingWithdrawsTheResourceTools) {
+    m_connector.enqueue(withResources("file:///a"));
+    start({server("docs")});
+    ASSERT_TRUE(toolNames().contains("read_mcp_resource"));
+    m_manager.close();
+    EXPECT_TRUE(toolNames().empty());
+}
