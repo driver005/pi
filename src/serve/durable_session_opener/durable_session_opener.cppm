@@ -2,6 +2,7 @@ export module pi.serve.durable_session_opener;
 
 import std;
 export import pi.durable.i_storage;
+export import pi.plugin.i_hook_bus;
 export import pi.provider.i_model_runtime;
 export import pi.server.i_session_opener;
 export import pi.support.durable_models_service;
@@ -10,6 +11,7 @@ import pi.support.builtin_tasks;
 import pi.support.directory_execution_env;
 import pi.support.durable_served_session;
 import pi.support.pi_prompt_extension;
+import pi.support.plugin_hook_extension;
 import pi.support.registry;
 import pi.support.resource_set_cache;
 import pi.support.tool_bridge;
@@ -19,7 +21,8 @@ import pi.support.tool_set_cache;
  * ISessionOpener that starts the durable session of a cataloged session: its storage is `session.sqlite` in the session's
  * directory (the layout of the TS server), over which a harness runs with pi's coding tools and system prompt installed
  * in a registry of its own. The root conversation is created on first open with the agent seed (directory, model, thinking
- * level) and found again after that; tasks a stop interrupted resume. Counterpart of createSessionWorkerServices.
+ * level) and found again after that; tasks a stop interrupted resume. When a hook source is given, the plugin hooks of the
+ * session's directory are installed as an extension (`plugin-hooks`). Counterpart of createSessionWorkerServices.
  */
 export class DurableSessionOpener : public ISessionOpener {
 public:
@@ -27,16 +30,19 @@ public:
     using SettingsSource = std::function<HarnessRunSettings(const std::string& cwd)>;
     /** The `pi.agent` change a new root conversation starts with. */
     using AgentSeed = std::function<Json(const std::string& cwd)>;
+    /** The hook bus of a directory's plugins. */
+    using HooksSource = std::function<std::shared_ptr<IHookBus>(const std::string& cwd)>;
 
     DurableSessionOpener(IModelRuntime& models, StorageOpener storage, std::shared_ptr<ToolSetCache> tools, std::shared_ptr<ResourceSetCache> resources, SettingsSource settings, AgentSeed seed,
-                         DurableModelsService::SelectedListener onSelected)
+                         DurableModelsService::SelectedListener onSelected, HooksSource hooks = {})
         : m_models(models),
           m_storage(std::move(storage)),
           m_tools(std::move(tools)),
           m_resources(std::move(resources)),
           m_settings(std::move(settings)),
           m_seed(std::move(seed)),
-          m_onSelected(std::move(onSelected)) {}
+          m_onSelected(std::move(onSelected)),
+          m_hooks(std::move(hooks)) {}
 
     Result<std::shared_ptr<IRoutedSessionHandle>> open(const SessionRecord& record, const ServiceContext&) override {
         auto storage = m_storage(record.directory + "/session.sqlite");
@@ -49,6 +55,13 @@ public:
         }
         if (auto installed = registry->install(PiPromptExtension(m_tools, m_resources, record.cwd).extension()); !installed) {
             return std::unexpected(installed.error());
+        }
+        if (m_hooks) {
+            if (const std::shared_ptr<IHookBus> bus = m_hooks(record.cwd)) {
+                if (auto installed = registry->install(PluginHookExtension(bus).extension("plugin-hooks")); !installed) {
+                    return std::unexpected(installed.error());
+                }
+            }
         }
         HarnessOptions options;
         options.models = &m_models;
@@ -87,4 +100,5 @@ private:
     SettingsSource m_settings;
     AgentSeed m_seed;
     DurableModelsService::SelectedListener m_onSelected;
+    HooksSource m_hooks;
 };

@@ -27,7 +27,8 @@ import pi.tools.write_tool;
  * directory, the user's settings as harness policy, and the model a new session starts with. Everything per directory
  * (settings, tools, resources) is built on first use and kept, like pi at startup. The tools of plugins and MCP servers
  * (`DurableToolbox`) are offered next to the built-in ones; a server that connects late drops the directory's tool set, which
- * tells the sessions to install their tools again.
+ * tells the sessions to install their tools again. The hooks of the plugins reach the sessions of their directory through the
+ * `plugin-hooks` extension.
  */
 export class DurableServe {
 public:
@@ -46,7 +47,7 @@ public:
         return std::make_shared<DurableSessionOpener>(
             m_services.models().models(), [this](const std::string& path) { return openStorage(path); }, m_tools, m_resources,
             [this](const std::string& cwd) { return runSettings(cwd); }, [this](const std::string& cwd) { return seed(cwd); },
-            [this](const Model& model) { saveDefault(model); });
+            [this](const Model& model) { saveDefault(model); }, [this](const std::string& cwd) { return toolboxFor(cwd).hooks(); });
     }
 
 private:

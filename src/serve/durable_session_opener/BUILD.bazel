@@ -3,6 +3,8 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "durable_session_opener",
     deps = [
+        "//interfaces/support/plugin_hook_extension",
+        "//interfaces/plugin/i_hook_bus",
         "//interfaces/durable/i_storage",
         "//interfaces/provider/i_model_runtime",
         "//interfaces/server/i_session_opener",

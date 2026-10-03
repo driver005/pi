@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "durable_toolbox",
     deps = [
+        "//interfaces/plugin/i_hook_bus",
         "//app/coding_services",
         "//app/mcp_connector",
         "//app/mcp_server_manager",

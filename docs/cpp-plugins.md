@@ -51,6 +51,11 @@ run synchronously in subscription order and see the changes of earlier handlers.
 | `session_start`, `session_shutdown` | `{type, ...}` | none |
 | agent events: `agent_start`, `agent_end`, `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, and the session events of the RPC protocol | the event JSON of `pi rpc` | none (observation only) |
 
+In `pi serve` (durable sessions) the same hooks are served from the durable hook points: `tool_call` before a tool task
+runs (rewritten arguments are validated against the tool's schema afterwards), `tool_result` after it, `context` before
+each model request, `message_end` after each model response and `turn_end` after each tool round. `terminate`,
+`structuredContent`, the session events and the other agent events are not delivered there.
+
 ## Differences from TypeScript extensions
 
 Not ported: UI APIs (`ctx.ui`, renderers, widgets), `registerProvider`, commands and flags, `registerMcpServer`,

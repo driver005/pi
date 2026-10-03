@@ -102,3 +102,24 @@ TEST_F(DurableServeTest, PluginToolsAreOfferedToDurableSessions) {
     const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
     EXPECT_NE(subscribed.dump().find("Hello, Ada!"), std::string::npos) << subscribed.dump();
 }
+
+TEST_F(DurableServeTest, PluginHooksGuardTheToolCallsOfDurableSessions) {
+    m_startup.pluginPaths = {"plugins/hello_tool/libhello_tool.so"};
+    m_startup.noPlugins = false;
+    DurableServe durable(*m_services, m_startup, m_dir + "/agent");
+    auto* faux = m_services->models().faux();
+    // The hello plugin refuses `rm -rf` before bash would run it.
+    faux->enqueue(faux->toolCallResponse("bash", Json{{"command", "rm -rf " + m_dir + "/project/victim"}}, "c1"));
+    faux->enqueue(faux->textResponse("done"));
+    std::filesystem::create_directories(m_dir + "/project/victim");
+    auto handle = durable.opener()->open(record(), ServiceContext{});
+    ASSERT_TRUE(handle.has_value()) << handle.error().message;
+    auto attachment = (*handle)->attachClient(ServiceContext{});
+    ASSERT_TRUE(attachment.has_value());
+    const Json prompted = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "clean up"}, {"images", nullptr}});
+    ASSERT_TRUE(prompted.at("accepted").get<bool>());
+    EXPECT_EQ(call(**attachment, "pi.agent-controller", "waitForPrompt", prompted.at("operationId")).at("text"), "done");
+    EXPECT_TRUE(std::filesystem::exists(m_dir + "/project/victim"));
+    const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
+    EXPECT_NE(subscribed.dump().find("hello plugin refuses rm -rf"), std::string::npos) << subscribed.dump();
+}

@@ -20,8 +20,8 @@ import pi.tools.tool_registry;
  * The tools beyond the built-in ones that durable sessions of one working directory offer: those of the plugins found in
  * `<agent-dir>/plugins`, the trusted project's `.pi/plugins` and `--plugin`, and those of the servers of `mcp.json`. Plugins
  * load and MCP servers connect when the toolbox is made (startup waits at most `mcpStartupWaitMs` for the servers); a server
- * that connects later adds its tools through the change listener. Plugin hooks and commands are not used by durable
- * sessions. Problems that do not stop the toolbox are diagnostics.
+ * that connects later adds its tools through the change listener. Plugin hooks (`tool_call`, `tool_result`, `context`, `message_end`, `turn_end`) reach durable sessions through `hooks()`
+ * (see PluginHookExtension); plugin commands are not used. Problems that do not stop the toolbox are diagnostics.
  */
 export class DurableToolbox {
 public:
@@ -33,7 +33,7 @@ public:
           m_cwd(std::move(cwd)),
           m_agentDir(std::move(agentDir)),
           m_pluginDiscovery(services.platform().files()),
-          m_plugins(services.platform().libraries(), m_tools, m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{m_cwd, m_agentDir}),
+          m_plugins(services.platform().libraries(), m_tools, *m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{m_cwd, m_agentDir}),
           m_configValues(services.platform().environment(), services.platform().processes()),
           m_mcpConfigs(services.platform().files()),
           m_mcpNamer(services.platform().crypto()),
@@ -65,6 +65,11 @@ public:
         if (m_mcp) {
             m_mcp->setToolsListener([listener = std::move(listener)](const std::vector<std::string>&) { listener(); });
         }
+    }
+
+    /** The bus the directory's plugins subscribe to; stays valid after the plugins shut down (then without handlers). */
+    std::shared_ptr<IHookBus> hooks() const {
+        return m_hooks;
     }
 
     std::vector<std::string> diagnostics() const {
@@ -128,7 +133,7 @@ private:
     std::string m_agentDir;
     std::vector<std::string> m_diagnostics;
     ToolRegistry m_tools;
-    HookBus m_hooks;
+    std::shared_ptr<HookBus> m_hooks = std::make_shared<HookBus>();
     PluginDiscovery m_pluginDiscovery;
     PluginHost m_plugins;
     ConfigValueResolver m_configValues;
