@@ -20,7 +20,7 @@ export import pi.types.mcp_stream_outcome;
  * streams that carried event ids are resumed with Last-Event-ID. Error codes returned by send():
  * "auth_required" (401), "session_expired" (404 with a session), "http:<status>", "protocol",
  * "closed", plus the HTTP client's own codes. Port of packages/mcp/src/transports/streamable-http.ts
- * (OAuth step-up through an auth provider is not ported; use options.bearerToken).
+ * (After a 401, options.onUnauthorized may refresh the bearer token and have the request sent once more.)
  */
 export class StreamableHttpMcpTransport : public IMcpTransport {
 public:
@@ -111,7 +111,7 @@ private:
         HttpRequest request = buildRequest("POST", "application/json, text/event-stream", "",
                                            message.dump(-1, ' ', false, Json::error_handler_t::replace));
         request.signal = m_abort;
-        const auto response = m_http.send(request);
+        const auto response = sendAuthorized(request);
         if (!response) {
             return std::unexpected(response.error());
         }
@@ -335,7 +335,7 @@ private:
             }
         };
         const std::string method = request.method;
-        const auto result = m_http.send(request);
+        const auto result = sendAuthorized(request);
         m_abort->removeListener(link);
         if (!result) {
             return failedOutcome(result.error(), tooLarge);
@@ -465,6 +465,27 @@ private:
             m_headers.set(request.headers, "authorization", "Bearer " + token);
         }
         return request;
+    }
+
+    /** Sends the request; after a 401 the credentials are refreshed (when the options say how) and it goes out once more. */
+    Result<HttpResponse> sendAuthorized(HttpRequest& request) {
+        auto result = m_http.send(request);
+        if (!result || result->status != 401 || !m_options.onUnauthorized) {
+            return result;
+        }
+        std::string used = m_headers.find(request.headers, "authorization").value_or("");
+        if (used.starts_with("Bearer ")) {
+            used = used.substr(7);
+        }
+        if (!m_options.onUnauthorized(m_headers.find(result->headers, "www-authenticate").value_or(""), used)) {
+            return result;
+        }
+        const std::string token = m_options.bearerToken ? m_options.bearerToken() : "";
+        if (token.empty()) {
+            return result;
+        }
+        m_headers.set(request.headers, "authorization", "Bearer " + token);
+        return m_http.send(request);
     }
 
     void captureSession(const HttpHeaders& headers) {

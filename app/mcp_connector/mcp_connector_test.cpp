@@ -4,13 +4,23 @@
 import std;
 import pi.child_process_launcher;
 import pi.mcp_connector;
+import pi.base.base64_codec;
+import pi.base.boring_crypto;
 import pi.support.header_merger;
 import pi.testing.fake_environment;
 import pi.testing.fake_file_system;
+import pi.testing.fixed_clock;
 import pi.testing.recording_sleeper;
 import pi.testing.scripted_http_client;
 import pi.testing.scripted_process_runner;
 
+
+class PassthroughLock : public IFileLock {
+public:
+    Result<void> withLock(const std::string&, const std::function<Result<void>()>& action) override {
+        return action();
+    }
+};
 
 class McpConnectorTest : public testing::Test {
 protected:
@@ -150,4 +160,54 @@ TEST_F(McpConnectorTest, HttpAuthenticationFailuresKeepTheirCode) {
     const auto client = m_connector.connect(http(), "/", m_options);
     ASSERT_FALSE(client.has_value());
     EXPECT_EQ(client.error().code, "auth_required");
+}
+
+TEST_F(McpConnectorTest, OauthServersSendTheStoredTokenAndRefreshAfterA401) {
+    PassthroughLock lock;
+    BoringCrypto crypto;
+    Base64Codec base64;
+    FixedClock clock(1'000'000);
+    m_files.createDirectories("/agent");
+    McpOauthStore store("/agent/mcp-auth.json", "/agent", m_files, lock, crypto);
+    McpOauthRefresher refresher(m_http, clock, base64);
+    McpOauthProviders providers(store, refresher, clock, m_resolver);
+    McpConnector connector(m_launcher, m_http, m_sleeper, m_files, m_resolver, [](const std::string&) { return std::optional<std::string>(); }, &providers);
+    const McpServerConfig config = http();
+    const Json state{{"serverUrl", "http://mcp.test/mcp"},
+                     {"clientInformation", Json{{"client_id", "c1"}}},
+                     {"tokens", Json{{"access_token", "stored"}, {"token_type", "Bearer"}, {"refresh_token", "r1"}}},
+                     {"discovery", Json{{"authorizationServerUrl", "http://localhost:9"},
+                                        {"authorizationServerMetadata", Json{{"issuer", "http://localhost:9"}, {"authorization_endpoint", "http://localhost:9/a"}, {"token_endpoint", "http://localhost:9/token"}, {"response_types_supported", Json::array({"code"})}}}}}};
+    ASSERT_TRUE(store.save("remote", config.url, state).has_value());
+    // The server rejects the stored token, the refresh yields a new one, the retried request is accepted.
+    m_http.enqueue(reply(401, "text/plain", "expired", {{"WWW-Authenticate", "Bearer error=\"invalid_token\""}}));
+    m_http.enqueue(reply(200, "application/json", Json{{"access_token", "fresh"}, {"token_type", "Bearer"}}.dump()));
+    m_http.enqueue(reply(200, "application/json", initializeResult().dump()));
+    m_http.enqueue(reply(202, "", ""));
+    const auto client = connector.connect(config, "/", m_options);
+    ASSERT_TRUE(client.has_value()) << client.error().message;
+    const std::vector<HttpRequest> requests = m_http.requests();
+    EXPECT_EQ(header(requests[0], "authorization"), "Bearer stored");
+    EXPECT_EQ(requests[1].url, "http://localhost:9/token");
+    EXPECT_EQ(header(requests[2], "authorization"), "Bearer fresh");
+    EXPECT_EQ((**store.load("remote", config.url))["tokens"]["access_token"], "fresh");
+}
+
+TEST_F(McpConnectorTest, ServersWithAnAuthorizationHeaderDoNotUseOauth) {
+    PassthroughLock lock;
+    BoringCrypto crypto;
+    Base64Codec base64;
+    FixedClock clock(1'000'000);
+    m_files.createDirectories("/agent");
+    McpOauthStore store("/agent/mcp-auth.json", "/agent", m_files, lock, crypto);
+    McpOauthRefresher refresher(m_http, clock, base64);
+    McpOauthProviders providers(store, refresher, clock, m_resolver);
+    McpConnector connector(m_launcher, m_http, m_sleeper, m_files, m_resolver, [](const std::string&) { return std::optional<std::string>(); }, &providers);
+    McpServerConfig config = http();
+    config.headers["Authorization"] = "Bearer static";
+    m_http.enqueue(reply(401, "text/plain", "no"));
+    const auto client = connector.connect(config, "/", m_options);
+    ASSERT_FALSE(client.has_value());
+    EXPECT_EQ(m_http.calls(), 1);
+    EXPECT_EQ(header(m_http.requests()[0], "authorization"), "Bearer static");
 }

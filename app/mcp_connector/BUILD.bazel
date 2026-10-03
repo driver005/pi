@@ -9,6 +9,7 @@ pi_module(
         "//interfaces/platform/i_http_client",
         "//interfaces/platform/i_sleeper",
         "//interfaces/support/config_value_resolver",
+        "//interfaces/support/mcp_oauth_providers",
         "//interfaces/support/path_resolver",
         "//interfaces/types/mcp_http_options",
         "//interfaces/types/mcp_stdio_options",
@@ -18,7 +19,10 @@ pi_module(
     ],
     test_deps = [
         "//interfaces/support/header_merger",
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
         "//src/testing/fake_environment",
+        "//src/testing/fixed_clock",
         "//src/testing/fake_file_system",
         "//src/testing/recording_sleeper",
         "//src/testing/scripted_http_client",

@@ -11,6 +11,7 @@ pi_module(
         "//interfaces/support/bash_command_executor",
         "//interfaces/support/hook_bus",
         "//interfaces/support/mcp_config_loader",
+        "//interfaces/support/mcp_oauth_providers",
         "//interfaces/support/mcp_result_converter",
         "//interfaces/support/mcp_tool_namer",
         "//interfaces/support/plugin_discovery",

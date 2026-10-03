@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_oauth_providers",
+    deps = [
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/mcp_oauth_token_provider",
+        "//interfaces/types/mcp_server_config",
+    ],
+    test_deps = [
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+        "//src/testing/scripted_process_runner",
+    ],
+)

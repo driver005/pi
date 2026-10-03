@@ -179,9 +179,29 @@ TEST_F(McpServerConnectionTest, AuthRequiredMarksTheServer) {
     const auto result = m_connection->connect();
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, "auth_required");
-    EXPECT_NE(result.error().message.find("requires authentication"), std::string::npos);
+    EXPECT_NE(result.error().message.find("requires OAuth sign-in"), std::string::npos);
     EXPECT_EQ(m_connection->state(), McpServerState::NeedsAuth);
     EXPECT_EQ(m_connection->error(), "");
+}
+
+TEST_F(McpServerConnectionTest, ServersWithTheirOwnCredentialsAreToldToFixThem) {
+    m_connector.enqueueFailure(Error{"auth_required", "401"});
+    McpServerConfig withHeader = config(true);
+    withHeader.headers["Authorization"] = "Bearer x";
+    build(withHeader);
+    const auto result = m_connection->connect();
+    ASSERT_FALSE(result.has_value());
+    EXPECT_NE(result.error().message.find("Set an Authorization header"), std::string::npos);
+}
+
+TEST_F(McpServerConnectionTest, ProviderServersAreToldToSignInWithTheProvider) {
+    m_connector.enqueueFailure(Error{"auth_required", "401"});
+    McpServerConfig withProvider = config(true);
+    withProvider.authProvider = "github";
+    build(withProvider);
+    const auto result = m_connection->connect();
+    ASSERT_FALSE(result.has_value());
+    EXPECT_NE(result.error().message.find("\"github\" provider credentials"), std::string::npos);
 }
 
 TEST_F(McpServerConnectionTest, ExpiredSessionsRetryOnceOnANewOne) {

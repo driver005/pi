@@ -14,6 +14,7 @@ import pi.session.settings_manager;
 import pi.support.bash_command_executor;
 import pi.support.hook_bus;
 import pi.support.mcp_config_loader;
+import pi.support.mcp_oauth_providers;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
 import pi.support.plugin_discovery;
@@ -51,7 +52,10 @@ public:
           m_mcpConfigs(services.platform().files()),
           m_mcpNamer(services.platform().crypto()),
           m_mcpResults(services.platform().files(), services.platform().crypto(), services.platform().base64(), services.platform().environment()),
-          m_mcpConnector(services.platform().children(), services.platform().http(), services.platform().sleeper(), services.platform().files(), m_configValues, [this](const std::string& provider) { return providerToken(provider); }) {
+          m_oauthStore(m_agentDir + "/mcp-auth.json", m_agentDir, services.platform().files(), services.platform().locks(), services.platform().crypto()),
+          m_oauthRefresher(services.platform().http(), services.platform().clock(), services.platform().base64()),
+          m_oauth(m_oauthStore, m_oauthRefresher, services.platform().clock(), m_configValues),
+          m_mcpConnector(services.platform().children(), services.platform().http(), services.platform().sleeper(), services.platform().files(), m_configValues, [this](const std::string& provider) { return providerToken(provider); }, &m_oauth) {
         resolveTrust(options);
         registerTools();
         loadPlugins(options);
@@ -292,6 +296,9 @@ private:
     McpConfigLoader m_mcpConfigs;
     McpToolNamer m_mcpNamer;
     McpResultConverter m_mcpResults;
+    McpOauthStore m_oauthStore;
+    McpOauthRefresher m_oauthRefresher;
+    McpOauthProviders m_oauth;
     McpConnector m_mcpConnector;
     std::unique_ptr<McpServerManager> m_mcp;
     std::unique_ptr<AgentSession> m_session;

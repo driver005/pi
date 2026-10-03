@@ -10,6 +10,11 @@ export struct McpHttpOptions {
     HttpHeaders headers;
     /** Returns a bearer token, or an empty string for none; called before every request. */
     std::function<std::string()> bearerToken;
+    /**
+     * Called with the `WWW-Authenticate` header and the bearer token of a request the server answered with 401. True means
+     * the token was replaced (refreshed): the request is sent once more with the new `bearerToken()`.
+     */
+    std::function<bool(const std::string& wwwAuthenticate, const std::string& staleToken)> onUnauthorized;
     /** Open the server-to-client GET stream once the session is initialized. */
     bool openGetStream = true;
     std::size_t maxMessageBytes = 16 * 1024 * 1024;

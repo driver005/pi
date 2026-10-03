@@ -7,6 +7,7 @@ export import pi.platform.i_file_system;
 export import pi.platform.i_http_client;
 export import pi.platform.i_sleeper;
 export import pi.support.config_value_resolver;
+export import pi.support.mcp_oauth_providers;
 export import pi.support.path_resolver;
 export import pi.types.mcp_http_options;
 export import pi.types.mcp_stdio_options;
@@ -18,20 +19,23 @@ import pi.mcp.streamable_http_mcp_transport;
  * Connects configured MCP servers: stdio servers as child processes, HTTP servers over the
  * streamable HTTP transport. `${VAR}` and `!cmd` values in env and headers are resolved here, `~`
  * and relative paths too. Port of createDefaultTransport and connectOnce in
- * packages/coding-agent/src/extensions/mcp/runtime.ts.
+ * packages/coding-agent/src/extensions/mcp/runtime.ts. HTTP servers without an `Authorization` header or `auth.provider`
+ * send the OAuth token stored by a sign-in (see McpOauthTokenProvider).
  */
 export class McpConnector : public IMcpConnector {
 public:
     /** Returns the current token of a pi provider (servers with `auth.provider`), or nullopt. */
     using ProviderToken = std::function<std::optional<std::string>(const std::string&)>;
 
-    McpConnector(IChildProcessLauncher& launcher, IHttpClient& http, ISleeper& sleeper, IFileSystem& files, ConfigValueResolver& resolver, ProviderToken providerToken)
+    /** `oauth` (optional) supplies the tokens of HTTP servers that authenticate with OAuth. */
+    McpConnector(IChildProcessLauncher& launcher, IHttpClient& http, ISleeper& sleeper, IFileSystem& files, ConfigValueResolver& resolver, ProviderToken providerToken, McpOauthProviders* oauth = nullptr)
         : m_launcher(launcher),
           m_http(http),
           m_sleeper(sleeper),
           m_files(files),
           m_resolver(resolver),
-          m_providerToken(std::move(providerToken)) {}
+          m_providerToken(std::move(providerToken)),
+          m_oauth(oauth) {}
 
     Result<std::unique_ptr<IMcpClient>> connect(const McpServerConfig& config, const std::string& cwd, const McpClientOptions& options) override {
         auto transport = config.http ? httpTransport(config) : stdioTransport(config, cwd);
@@ -84,6 +88,12 @@ private:
             const std::string provider = *config.authProvider;
             http.bearerToken = [this, provider]() { return m_providerToken(provider).value_or(""); };
         }
+        if (m_oauth != nullptr && m_oauth->usesOauth(config)) {
+            // The stored token is read before every request and refreshed when it expires or the server rejects it.
+            const std::shared_ptr<McpOauthTokenProvider> provider = m_oauth->providerFor(config);
+            http.bearerToken = [provider]() { return provider->token(); };
+            http.onUnauthorized = [provider](const std::string& challenge, const std::string& stale) { return provider->onUnauthorized(challenge, stale); };
+        }
         return std::unique_ptr<IMcpTransport>(
             std::make_unique<StreamableHttpMcpTransport>(m_http, m_sleeper, std::move(http)));
     }
@@ -119,4 +129,5 @@ private:
     IFileSystem& m_files;
     ConfigValueResolver& m_resolver;
     ProviderToken m_providerToken;
+    McpOauthProviders* m_oauth;
 };

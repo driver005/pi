@@ -4,6 +4,7 @@ pi_module(
     name = "durable_toolbox",
     deps = [
         "//interfaces/plugin/i_hook_bus",
+        "//interfaces/support/mcp_oauth_providers",
         "//app/coding_services",
         "//app/mcp_connector",
         "//app/mcp_server_manager",

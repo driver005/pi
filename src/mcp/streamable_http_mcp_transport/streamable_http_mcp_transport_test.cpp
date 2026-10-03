@@ -347,3 +347,68 @@ TEST_F(StreamableHttpMcpTransportTest, WorksUnderTheClient) {
     EXPECT_EQ(header(sent[2], "mcp-protocol-version"), "2025-11-25");
     EXPECT_EQ(sent[3].method, "DELETE");
 }
+
+TEST_F(StreamableHttpMcpTransportTest, A401IsRetriedOnceWithTheRefreshedToken) {
+    std::mutex tokenMutex;
+    std::string token = "old";
+    std::vector<std::pair<std::string, std::string>> challenges;
+    m_options.bearerToken = [&]() {
+        const std::lock_guard<std::mutex> lock(tokenMutex);
+        return token;
+    };
+    m_options.onUnauthorized = [&](const std::string& challenge, const std::string& stale) {
+        const std::lock_guard<std::mutex> lock(tokenMutex);
+        challenges.emplace_back(challenge, stale);
+        token = "fresh";
+        return true;
+    };
+    build();
+    m_http.enqueue(reply(401, "text/plain", "expired", {{"WWW-Authenticate", "Bearer error=\"invalid_token\""}}));
+    m_http.enqueue(reply(200, "application/json", rpcResult(1).dump()));
+    ASSERT_TRUE(m_transport->send(request(1)).has_value());
+    ASSERT_TRUE(waitUntil([&]() { return messages().size() == 1; }));
+    ASSERT_EQ(m_http.calls(), 2);
+    EXPECT_EQ(header(m_http.requests()[0], "authorization"), "Bearer old");
+    EXPECT_EQ(header(m_http.requests()[1], "authorization"), "Bearer fresh");
+    ASSERT_EQ(challenges.size(), 1u);
+    EXPECT_EQ(challenges[0].first, "Bearer error=\"invalid_token\"");
+    EXPECT_EQ(challenges[0].second, "old");
+}
+
+TEST_F(StreamableHttpMcpTransportTest, A401AfterTheRetryIsAnAuthError) {
+    m_options.bearerToken = []() { return std::string("tok"); };
+    m_options.onUnauthorized = [](const std::string&, const std::string&) { return true; };
+    build();
+    m_http.enqueue(reply(401, "text/plain", "no"));
+    m_http.enqueue(reply(401, "text/plain", "still no"));
+    const auto sent = m_transport->send(request(1));
+    ASSERT_FALSE(sent.has_value());
+    EXPECT_EQ(sent.error().code, "auth_required");
+    EXPECT_EQ(m_http.calls(), 2);
+}
+
+TEST_F(StreamableHttpMcpTransportTest, WhenTheHookCannotRefreshTheRequestIsNotRetried) {
+    m_options.bearerToken = []() { return std::string("tok"); };
+    m_options.onUnauthorized = [](const std::string&, const std::string&) { return false; };
+    build();
+    m_http.enqueue(reply(401, "text/plain", "no"));
+    const auto sent = m_transport->send(request(1));
+    ASSERT_FALSE(sent.has_value());
+    EXPECT_EQ(sent.error().code, "auth_required");
+    EXPECT_EQ(m_http.calls(), 1);
+}
+
+TEST_F(StreamableHttpMcpTransportTest, NotificationsAreRetriedAfterARefreshToo) {
+    std::string token = "old";
+    m_options.bearerToken = [&]() { return token; };
+    m_options.onUnauthorized = [&](const std::string&, const std::string&) {
+        token = "fresh";
+        return true;
+    };
+    build();
+    m_http.enqueue(reply(401, "text/plain", "no"));
+    m_http.enqueue(reply(202, "", ""));
+    const Json notification = Json{{"jsonrpc", "2.0"}, {"method", "notifications/cancelled"}};
+    ASSERT_TRUE(m_transport->send(notification).has_value());
+    EXPECT_EQ(header(m_http.requests()[1], "authorization"), "Bearer fresh");
+}

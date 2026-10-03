@@ -367,13 +367,28 @@ private:
         return Json::array({Json{{"uri", uri}, {"name", name}}});
     }
 
+    /** HTTP servers authenticate with OAuth unless the configuration brings an `Authorization` header or `auth.provider`. */
+    bool usesOauth() const {
+        if (!m_config.http || m_config.authProvider) {
+            return false;
+        }
+        return std::none_of(m_config.headers.begin(), m_config.headers.end(), [](const auto& header) {
+            std::string name = header.first;
+            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return name == "authorization";
+        });
+    }
+
     std::string signInMessage() const {
         if (m_config.authProvider) {
             return "MCP server \"" + m_config.name + "\" requires sign-in with the \"" + *m_config.authProvider +
                    "\" provider credentials.";
         }
-        return "MCP server \"" + m_config.name +
-               "\" requires authentication. OAuth sign-in is not supported here; set an Authorization header in mcp.json.";
+        if (usesOauth()) {
+            return "MCP server \"" + m_config.name +
+                   "\" requires OAuth sign-in. Sign in with the pi CLI (/mcp), which stores the credentials in mcp-auth.json in the agent directory.";
+        }
+        return "MCP server \"" + m_config.name + "\" requires authentication. Set an Authorization header in mcp.json.";
     }
 
     McpServerConfig m_config;
