@@ -4,3 +4,10 @@ filegroup(
     srcs = ["ts_cbor_golden.json"],
     visibility = ["//visibility:public"],
 )
+
+# Same, for the Delta codec (see tools/ts_delta_golden.mts).
+filegroup(
+    name = "delta",
+    srcs = ["ts_delta_golden.json"],
+    visibility = ["//visibility:public"],
+)

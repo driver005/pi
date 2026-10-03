@@ -33,3 +33,27 @@ TEST(DeltaDecoderTest, RoundTripsWhatTheEncoderProduces) {
         EXPECT_EQ(*decoder.decode(encoder.encode(batch)), batch);
     }
 }
+
+TEST(DeltaDecoderGoldenTest, DecodesLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_delta_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    int rejected = 0;
+    for (const Json& scenario : golden.at("decode")) {
+        DeltaDecoder decoder;
+        const std::string name = scenario.at("name").get<std::string>();
+        const Json& batches = scenario.at("batches");
+        const Json& results = scenario.at("results");
+        for (std::size_t index = 0; index < results.size(); ++index) {
+            const auto decoded = decoder.decode(batches[index]);
+            const bool accepted = results[index].at("accepted").get<bool>();
+            ASSERT_EQ(decoded.has_value(), accepted) << name << " batch " << index << (decoded ? "" : " " + decoded.error().message);
+            if (accepted) {
+                EXPECT_EQ(*decoded, results[index].at("ops")) << name << " batch " << index;
+            } else {
+                ++rejected;
+            }
+        }
+    }
+    EXPECT_GT(rejected, 10);
+}

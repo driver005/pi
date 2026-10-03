@@ -14,6 +14,8 @@ bazel build //app/pi:pi               # the executable
 
 `tools/ts_cbor_golden.mts` runs the TS CBOR codec and frame encoder (Node 22, strip-types, no `npm install` needed) and writes `src/testing/ts_golden/ts_cbor_golden.json`. The C++ encoder, decoder and frame encoder tests read that file and must produce identical bytes and identical accept/reject decisions. Regenerate with `node --experimental-strip-types tools/ts_cbor_golden.mts src/testing/ts_golden/ts_cbor_golden.json`.
 
+`tools/ts_delta_golden.mts` does the same for the Delta code of `packages/chord`: `apply` (244 cases incl. rejections), op and wire validation, the stateful path-dictionary `encoder()`/`decoder()` over multi-batch streams, and `diffRevisions` (204 revision pairs, incl. the 4096-operation cap). The C++ applier, validator, encoder, decoder and differ reproduce every vector exactly. One deliberate difference: TS aligns array elements by object identity when a caller reuses containers between revisions; C++ values have no identity, so containers never anchor and the output equals TS for revisions that crossed a serialisation boundary. Regenerate with `node --experimental-strip-types tools/ts_delta_golden.mts src/testing/ts_golden/ts_delta_golden.json`.
+
 ## `pi rpc`
 
 Headless JSONL server: one JSON command per line on stdin, one JSON line per response or event on stdout (LF framing). Command and event shapes follow `packages/coding-agent/src/modes/rpc/rpc-types.ts`.

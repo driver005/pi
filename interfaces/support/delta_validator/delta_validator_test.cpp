@@ -74,3 +74,14 @@ TEST_F(DeltaValidatorTest, DoesNotInspectPayloads) {
     EXPECT_TRUE(op(R"(["s",["value"],{"__proto__":{"z":1}}])"));
     EXPECT_TRUE(wire(R"(["r",{"constructor":1}])"));
 }
+
+TEST_F(DeltaValidatorTest, ValidatesLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_delta_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    for (const Json& vector : golden.at("validate")) {
+        const Json& candidate = vector.at("op");
+        EXPECT_EQ(m_validator.validateOp(candidate).has_value(), vector.at("op_accepted").get<bool>()) << candidate.dump();
+        EXPECT_EQ(m_validator.validateWireOp(candidate).has_value(), vector.at("wire_accepted").get<bool>()) << candidate.dump();
+    }
+}

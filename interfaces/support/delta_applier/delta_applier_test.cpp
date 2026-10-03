@@ -98,3 +98,20 @@ TEST_F(DeltaApplierTest, NumericPathSegmentsAddressObjectKeys) {
     EXPECT_EQ(applied(R"({"1":"a"})", R"([["s",["1"],"b"]])"), Json::parse(R"({"1":"b"})"));
     EXPECT_EQ(applied(R"({"1":{"x":1}})", R"([["s",[1,"x"],2]])"), Json::parse(R"({"1":{"x":2}})"));
 }
+
+TEST_F(DeltaApplierTest, AppliesLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_delta_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    int accepted = 0;
+    for (const Json& vector : golden.at("apply")) {
+        const std::string name = vector.at("name").get<std::string>();
+        const auto result = m_applier.apply(vector.at("target"), vector.at("ops"));
+        ASSERT_EQ(result.has_value(), vector.at("accepted").get<bool>()) << name << (result ? "" : " " + result.error().message);
+        if (result) {
+            EXPECT_EQ(*result, vector.at("result")) << name << " got=" << result->dump();
+            ++accepted;
+        }
+    }
+    EXPECT_GT(accepted, 200);
+}

@@ -8,4 +8,5 @@ pi_support(
         "//interfaces/types/json",
         "//interfaces/types/result",
     ],
+    data = ["//src/testing/ts_golden:delta"],
 )

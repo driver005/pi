@@ -87,3 +87,21 @@ TEST_F(DeltaCodecTest, RoundTripsDeterministicMixedStreams) {
         EXPECT_EQ(*m_decoder.decode(m_encoder.encode(batch)), batch) << i;
     }
 }
+
+TEST(DeltaEncoderGoldenTest, EncodesLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_delta_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    int batches = 0;
+    for (const Json& scenario : golden.at("encode")) {
+        DeltaEncoder encoder;
+        const Json& inputs = scenario.at("batches");
+        const Json& wires = scenario.at("wire");
+        ASSERT_EQ(inputs.size(), wires.size());
+        for (std::size_t index = 0; index < inputs.size(); ++index) {
+            EXPECT_EQ(encoder.encode(inputs[index]), wires[index]) << scenario.at("name").get<std::string>() << " batch " << index;
+            ++batches;
+        }
+    }
+    EXPECT_GT(batches, 60);
+}

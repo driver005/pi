@@ -59,9 +59,13 @@ TEST_F(DeltaDifferTest, RepresentsArrayInsertionAndRemovalWithSplices) {
               j(R"([["p",["values"],0,1,[]]])"));
 }
 
-TEST_F(DeltaDifferTest, EmitsAPermutationForAPureReorder) {
+TEST_F(DeltaDifferTest, EmitsAPermutationForAPureReorderOfScalars) {
+    EXPECT_EQ(checked(j(R"({"values":["a","b","c"]})"), j(R"({"values":["c","a","b"]})")), j(R"([["m",["values"],[2,0,1]]])"));
+}
+
+TEST_F(DeltaDifferTest, SplicesAReorderOfContainersBecauseTheyHaveNoIdentity) {
     EXPECT_EQ(checked(j(R"({"values":[{"id":"a"},{"id":"b"},{"id":"c"}]})"), j(R"({"values":[{"id":"c"},{"id":"a"},{"id":"b"}]})")),
-              j(R"([["m",["values"],[2,0,1]]])"));
+              j(R"([["p",["values"],0,0,[{"id":"c"}]],["p",["values"],3,1,[]]])"));
 }
 
 TEST_F(DeltaDifferTest, KeepsLeafEditsNarrow) {
@@ -162,5 +166,14 @@ TEST_F(DeltaDifferTest, RandomRevisionsRoundTrip) {
             return copy;
         }();
         checked(before, after);
+    }
+}
+
+TEST_F(DeltaDifferTest, DiffsLikeTheTypeScriptImplementation) {
+    std::ifstream file("src/testing/ts_golden/ts_delta_golden.json");
+    ASSERT_TRUE(file.good());
+    const Json golden = Json::parse(file);
+    for (const Json& vector : golden.at("diff")) {
+        EXPECT_EQ(m_differ.diff(vector.at("before"), vector.at("after")), vector.at("ops")) << vector.at("name").get<std::string>();
     }
 }

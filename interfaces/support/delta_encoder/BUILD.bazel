@@ -6,4 +6,5 @@ pi_support(
     test_deps = [
         "//interfaces/support/delta_decoder",
     ],
+    data = ["//src/testing/ts_golden:delta"],
 )
