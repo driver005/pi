@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "evals_command",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/eval_observation_codec",
+        "//interfaces/support/eval_observation_reader",
+        "//interfaces/support/eval_planner",
+        "//interfaces/support/eval_report_formatter",
+        "//interfaces/support/eval_report_summarizer",
+        "//interfaces/support/path_resolver",
+        "//interfaces/types/command_line",
+    ],
+    test_deps = ["//interfaces/types/json"],
+)

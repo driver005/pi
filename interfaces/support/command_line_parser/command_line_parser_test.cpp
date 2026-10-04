@@ -215,3 +215,20 @@ TEST_F(CommandLineParserTest, ParsesTheExportCommand) {
     EXPECT_FALSE(parse({"export"}).has_value());
     EXPECT_FALSE(parse({"export", "a", "b", "c"}).has_value());
 }
+
+TEST_F(CommandLineParserTest, ParsesTheEvalsCommands) {
+    const auto plan = parse({"evals", "plan", "found.json", "--model", "p/m", "--runs", "3"});
+    ASSERT_TRUE(plan.has_value());
+    EXPECT_EQ(plan->arguments, (std::vector<std::string>{"plan", "found.json"}));
+    EXPECT_EQ(plan->options.startup.model, "p/m");
+    EXPECT_EQ(plan->evalRuns, 3);
+    EXPECT_EQ(parse({"evals", "plan", "found.json"})->evalRuns, 1);
+    EXPECT_TRUE(parse({"evals", "report", "dir"}).has_value());
+    EXPECT_TRUE(parse({"evals", "observe", "task.json", "report.json"}).has_value());
+    EXPECT_FALSE(parse({"evals"}).has_value());
+    EXPECT_FALSE(parse({"evals", "report"}).has_value());
+    EXPECT_FALSE(parse({"evals", "observe", "task.json"}).has_value());
+    EXPECT_FALSE(parse({"evals", "run", "x"}).has_value());
+    EXPECT_FALSE(parse({"evals", "plan", "f", "--runs", "0"}).has_value());
+    EXPECT_FALSE(parse({"evals", "plan", "f", "--runs", "many"}).has_value());
+}

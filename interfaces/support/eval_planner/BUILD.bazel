@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "eval_planner",
+    deps = [
+        "//interfaces/types/discovered_eval_case",
+        "//interfaces/types/eval_task",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

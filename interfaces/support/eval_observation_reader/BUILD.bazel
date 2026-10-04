@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "eval_observation_reader",
+    deps = [
+        "//interfaces/types/eval_reading",
+        "//interfaces/types/eval_task",
+        "//interfaces/types/json",
+    ],
+)

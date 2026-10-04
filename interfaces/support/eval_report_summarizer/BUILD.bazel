@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "eval_report_summarizer",
+    deps = [
+        "//interfaces/support/js_number_format",
+        "//interfaces/types/eval_observation",
+        "//interfaces/types/eval_pair_group",
+        "//interfaces/types/eval_task",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//interfaces/support/eval_observation_codec",
+        "//interfaces/support/eval_planner",
+        "//interfaces/support/eval_report_formatter",
+    ],
+    data = ["//src/testing/ts_golden:evals"],
+)

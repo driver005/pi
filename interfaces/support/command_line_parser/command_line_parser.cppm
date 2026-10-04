@@ -63,6 +63,11 @@ public:
                 return std::unexpected(valid.error());
             }
         }
+        if (line.command == "evals") {
+            if (auto valid = validateEvals(line.arguments); !valid) {
+                return std::unexpected(valid.error());
+            }
+        }
         if (line.command == "export" && (line.arguments.empty() || line.arguments.size() > 2)) {
             return std::unexpected(Error{"usage", "Usage: pi export <session.jsonl> [output.html] [--theme dark|light]"});
         }
@@ -78,13 +83,14 @@ public:
     }
 
     std::string usage() const {
-        return "Usage: pi rpc|serve|mcp|auth|export|install|remove|update|list [options]\n"
+        return "Usage: pi rpc|serve|mcp|auth|export|evals|install|remove|update|list [options]\n"
                "\n"
                "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
                "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
                "auth   pi auth list | status | login <provider> | logout <provider>: sign in to subscription providers.\n"
                "export  pi export <session.jsonl> [output.html]: write a session as a self-contained HTML page (--theme dark|light).\n"
+               "evals   pi evals plan|report|observe: plan, read and compare documentation evals (--model, --runs).\n"
                "install, remove, update, list   pi install|remove <source> [-l], pi update [source], pi list: manage packages\n"
                "                                (skills, prompt templates and plugins from git repositories and local directories).\n"
                "\n"
@@ -113,6 +119,7 @@ public:
                "  --mcp-wait <ms>               How long startup waits for MCP servers (default 5000)\n"
                "  --trust / --no-trust          Answer the project trust question\n"
                "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
+               "  --runs <n>                    evals plan: repetitions per documentation variant (default 1)\n"
                "  --theme <name>                export: color theme of the page (dark or light, default dark)\n"
                "  --method <id>                 auth login: sign-in method (browser, copy_code, device_code)\n"
                "  --manual                      auth login: paste the code instead of using the local callback\n"
@@ -219,6 +226,8 @@ private:
             line.loginMethod = value;
         } else if (flag == "--theme") {
             line.exportTheme = value;
+        } else if (flag == "--runs") {
+            return applyRuns(value, line);
         } else if (flag == "--plugin") {
             options.startup.pluginPaths.push_back(expandHome(value));
         } else if (flag == "--mcp-wait") {
@@ -228,6 +237,16 @@ private:
         } else {
             options.startup.promptTemplatePaths.push_back(expandHome(value));
         }
+        return {};
+    }
+
+    Result<void> applyRuns(const std::string& value, CommandLine& line) const {
+        std::int64_t runs = 0;
+        const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), runs);
+        if (error != std::errc() || end != value.data() + value.size() || runs < 1) {
+            return std::unexpected(Error{"usage", "--runs expects a positive number"});
+        }
+        line.evalRuns = runs;
         return {};
     }
 
@@ -242,7 +261,7 @@ private:
     }
 
     bool takesArguments(const std::string& command) const {
-        return command == "mcp" || command == "auth" || command == "export" || command == "install" || command == "remove" || command == "update" || command == "list";
+        return command == "mcp" || command == "auth" || command == "export" || command == "evals" || command == "install" || command == "remove" || command == "update" || command == "list";
     }
 
     Result<void> validatePackages(const CommandLine& line) const {
@@ -254,6 +273,18 @@ private:
         const bool valid = command == "update" ? count <= 1 : (command == "list" ? count == 0 : count == 1);
         if (!valid) {
             return std::unexpected(Error{"usage", "Usage: pi install <source> [-l] | pi remove <source> [-l] | pi update [source] | pi list"});
+        }
+        return {};
+    }
+
+    Result<void> validateEvals(const std::vector<std::string>& arguments) const {
+        const std::string usage = "Usage: pi evals plan <discovered.json> --model <provider/model> [--runs n] | pi evals report <run-dir> | pi evals observe <task.json> <vitest-report.json>";
+        if (arguments.empty()) {
+            return std::unexpected(Error{"usage", usage});
+        }
+        const std::size_t wanted = arguments[0] == "observe" ? 3 : 2;
+        if ((arguments[0] != "plan" && arguments[0] != "report" && arguments[0] != "observe") || arguments.size() != wanted) {
+            return std::unexpected(Error{"usage", usage});
         }
         return {};
     }
@@ -342,7 +373,7 @@ private:
                                              "--model",         "--thinking",            "--session",
                                              "--session-dir",   "--tools",               "--system-prompt",
                                              "--append-system-prompt", "--skill",        "--prompt-template",
-                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method", "--theme"};
+                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method", "--theme", "--runs"};
     const std::set<std::string> m_switches{"--help", "-h", "--continue", "-c", "--no-session", "--no-tools", "--no-context-files",
                                            "--no-skills", "--no-prompt-templates", "--no-plugins", "--no-mcp", "--trust",
                                            "--no-trust", "--faux", "--session-tree", "--manual", "--local", "-l"};

@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "eval_report_formatter",
+    deps = [
+        "//interfaces/support/js_number_format",
+        "//interfaces/types/json",
+    ],
+)

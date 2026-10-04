@@ -11,6 +11,7 @@ import pi.coding_runtime_factory;
 import pi.coding_services;
 import pi.crash_recorder;
 import pi.durable_serve;
+import pi.evals_command;
 import pi.export_command;
 import pi.auth_command;
 import pi.mcp_command;
@@ -91,6 +92,12 @@ int main(int argc, char** argv) {
         const CodingApplicationOptions& options = line->options;
         CodingServices services(options.agentDir, options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir, options.faux);
         AuthCommand command(services, services.platform().http(), services.platform().sleeper(), []() { return std::unique_ptr<ICallbackServer>(std::make_unique<PosixCallbackServer>()); }, std::cin, std::cout, std::cerr);
+        return command.run(*line);
+    }
+    if (line->command == "evals") {
+        const CodingApplicationOptions& options = line->options;
+        CodingServices services(options.agentDir, options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir, options.faux);
+        EvalsCommand command(services, std::cout, std::cerr);
         return command.run(*line);
     }
     if (line->command == "export") {

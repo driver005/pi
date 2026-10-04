@@ -11,3 +11,10 @@ filegroup(
     srcs = ["ts_delta_golden.json"],
     visibility = ["//visibility:public"],
 )
+
+# Same, for the documentation eval reports (see tools/ts_evals_golden.mts).
+filegroup(
+    name = "evals",
+    srcs = ["ts_evals_golden.json"],
+    visibility = ["//visibility:public"],
+)
