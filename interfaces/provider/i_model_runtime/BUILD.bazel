@@ -10,5 +10,8 @@ pi_interface(
         "//interfaces/types/json",
         "//interfaces/types/model",
         "//interfaces/types/result",
+        "//interfaces/types/virtual_model_definition",
+        "//interfaces/types/virtual_resolve_request",
+        "//interfaces/types/virtual_route",
     ],
 )

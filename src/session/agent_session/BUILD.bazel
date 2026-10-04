@@ -12,6 +12,7 @@ pi_module(
         "//interfaces/support/compaction_controller",
         "//interfaces/support/compactor",
         "//interfaces/support/context_usage_calculator",
+        "//interfaces/support/error_stream_factory",
         "//interfaces/support/custom_message_queue",
         "//interfaces/support/model_controller",
         "//interfaces/support/pending_input_tracker",
@@ -30,6 +31,7 @@ pi_module(
         "//interfaces/support/skill_command_expander",
         "//interfaces/support/summary_generator",
         "//interfaces/support/transcript_normalizer",
+        "//interfaces/support/virtual_model_names",
         "//interfaces/types/agent_session_config",
     ],
     test_deps = [

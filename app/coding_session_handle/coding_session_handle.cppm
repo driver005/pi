@@ -12,6 +12,7 @@ import pi.session.agent_session;
 import pi.session.resource_loader;
 import pi.session.settings_manager;
 import pi.support.bash_command_executor;
+import pi.support.branch_selection_resolver;
 import pi.support.hook_bus;
 import pi.support.mcp_config_loader;
 import pi.support.mcp_oauth_providers;
@@ -156,7 +157,11 @@ private:
         ModelSelectionInput input;
         input.available = models.availableModels();
         input.all = models.models();
-        input.saved = context.model;
+        // A virtual selection holds across the responses of the physical models it routed to.
+        input.saved = m_selection.resolve(m_manager->branchPath(), [&models](const std::string& provider, const std::string& id) { return models.find(provider, id); });
+        if (!input.saved) {
+            input.saved = context.model;
+        }
         input.savedThinking = context.model ? std::optional<std::string>(context.thinkingLevel) : std::nullopt;
         input.requestedModel = options.model;
         input.requestedThinking = options.thinking;
@@ -292,6 +297,7 @@ private:
     PluginHost m_plugins;
     BashCommandExecutor m_bash;
     ModelSelector m_selector;
+    BranchSelectionResolver m_selection;
     ConfigValueResolver m_configValues;
     McpConfigLoader m_mcpConfigs;
     McpToolNamer m_mcpNamer;

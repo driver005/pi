@@ -27,6 +27,7 @@ pi_module(
     data = [
         "//plugins/hello_mcp",
         "//plugins/hello_provider",
+        "//plugins/hello_router",
         "//plugins/hello_tool",
     ],
 )

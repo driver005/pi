@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "routed_selection",
+    deps = [
+        "//interfaces/types/model",
+        "//interfaces/types/thinking_level",
+    ],
+)

@@ -59,6 +59,16 @@ typedef PiOwnedString (*PiToolExecuteFn)(void* user_data, PiString tool_call_id,
 /* Returns the hook's result JSON, or an empty PiOwnedString (data NULL) for "no opinion". */
 typedef PiOwnedString (*PiHookFn)(void* user_data, PiString event, PiString payload_json);
 
+/*
+ * Routes one request of a virtual model: returns {"model":{"provider","id"},"thinkingLevel":"low","state"?:any} or
+ * {"error":"..."}; an empty PiOwnedString (data NULL) fails the request. request_json is {"model":<catalog entry of the
+ * virtual model>, "thinkingLevel", "reason":"user"|"continuation"|"retry"|"direct", "previous"?:{"model","thinkingLevel"?},
+ * "failed"?:{"model","thinkingLevel"?,"message"}, "state"?:any, "messages":[...]}. `abort` is cancelled with the request.
+ * The answer must name a physical model of a provider with credentials (see list_models); state is stored on the session
+ * branch when it differs from the request's.
+ */
+typedef PiOwnedString (*PiRouteFn)(void* user_data, PiString request_json, const PiAbort* abort);
+
 typedef struct PiHostApi {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -116,6 +126,21 @@ typedef struct PiHostApi {
 
     /* Removes an MCP server this plugin registered and closes its connection. Returns {"ok":true} or {"error":"..."}. */
     PiOwnedString (*unregister_mcp_server)(void* host, PiString name);
+
+    /*
+     * Registers (or replaces) a virtual model: a selectable model whose requests `route` maps to a physical model.
+     * definition_json: {"provider","id","name"?,"thinkingLevels"?:["low","high"],"contextWindow"?,"maxTokens"?,
+     * "input"?:["text","image"]}. `provider` may be a provider with physical models or one that does not exist (then the
+     * model needs no credentials); `id` must not be a physical model of the provider. Ends when the plugin is unloaded.
+     * Returns {"ok":true} or {"error":"..."}. Check `struct_size` covers `list_models` before calling these three.
+     */
+    PiOwnedString (*register_virtual_model)(void* host, PiString definition_json, PiRouteFn route, void* user_data);
+
+    /* Removes a virtual model this plugin registered. Returns {"ok":true} or {"error":"..."}. */
+    PiOwnedString (*unregister_virtual_model)(void* host, PiString provider, PiString id);
+
+    /* The physical models whose provider has credentials: [{"provider","id","name","reasoning","input","contextWindow","maxTokens"}]. */
+    PiOwnedString (*list_models)(void* host);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

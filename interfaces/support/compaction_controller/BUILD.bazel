@@ -16,6 +16,7 @@ pi_support(
         "//interfaces/support/summarization_retry_reporter",
         "//interfaces/types/agent_loop_config",
         "//interfaces/types/compaction_result",
+        "//interfaces/types/routed_selection",
         "//interfaces/types/summarization_options",
     ],
     test_deps = [

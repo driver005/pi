@@ -9,6 +9,7 @@ pi_module(
         "//interfaces/plugin/i_hook_bus",
         "//interfaces/session/i_session_runtime_handle",
         "//interfaces/support/bash_command_executor",
+        "//interfaces/support/branch_selection_resolver",
         "//interfaces/support/hook_bus",
         "//interfaces/support/mcp_config_loader",
         "//interfaces/support/mcp_oauth_providers",
@@ -36,5 +37,8 @@ pi_module(
         "//interfaces/types/json",
         "//src/ai/faux_provider",
     ],
-    data = ["//plugins/hello_tool"],
+    data = [
+        "//plugins/hello_router",
+        "//plugins/hello_tool",
+    ],
 )

@@ -22,4 +22,6 @@ export struct LoadedPlugin {
     std::vector<std::uint64_t> subscriptions;
     std::vector<std::string> providers;
     std::vector<std::string> mcpServers;
+    /** Virtual models (provider, id). */
+    std::vector<std::pair<std::string, std::string>> virtualModels;
 };

@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "virtual_route_request",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/failed_selection",
+        "//interfaces/types/json",
+        "//interfaces/types/message",
+        "//interfaces/types/model",
+        "//interfaces/types/routed_selection",
+        "//interfaces/types/thinking_level",
+    ],
+)

@@ -349,6 +349,153 @@ TEST_F(PluginHostProviderTest, APluginCanUnregisterItsOwnProviderOnly) {
     EXPECT_TRUE(m_models.registeredProviders().empty());
 }
 
+std::string g_virtualDefinition;
+std::string g_routeRequest;
+std::string g_routeAnswer;
+bool g_routeEmpty = false;
+
+class PluginHostVirtualModelTest : public PluginHostTest {
+protected:
+    /** A plugin that registers the virtual model in `g_virtualDefinition`; its router records the request and answers `g_routeAnswer`. */
+    void provideRouterPlugin(const std::string& path) {
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            PiRouteFn route = [](void*, PiString request, const PiAbort*) {
+                g_routeRequest.assign(request.data, request.size);
+                return g_routeEmpty ? PiOwnedString{nullptr, 0, nullptr} : text(g_routeAnswer);
+            };
+            g_lastReply = take(host->register_virtual_model(host->host, view(g_virtualDefinition), route, nullptr));
+            return 0;
+        };
+        PiPluginShutdownFn shutdown = []() { ++g_shutdowns; };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)},
+                                   {"pi_plugin_init", reinterpret_cast<void*>(init)},
+                                   {"pi_plugin_shutdown", reinterpret_cast<void*>(shutdown)}});
+    }
+
+    void SetUp() override {
+        g_virtualDefinition = R"({"provider":"router","id":"auto","name":"Auto","thinkingLevels":["low","high"],"contextWindow":1000})";
+        g_routeAnswer = R"({"model":{"provider":"openai","id":"gpt-a"},"thinkingLevel":"high","state":{"phase":2}})";
+        g_routeRequest.clear();
+        g_routeEmpty = false;
+        Model physical;
+        physical.provider = "openai";
+        physical.id = "gpt-a";
+        physical.api = "faux";
+        physical.name = "GPT A";
+        m_models.addModel(physical);
+        m_models.setAuthenticated("openai", true);
+    }
+
+    VirtualResolveRequest request() {
+        VirtualResolveRequest out;
+        out.model = *m_models.find("router", "auto");
+        out.thinkingLevel = ThinkingLevel::High;
+        out.reason = "continuation";
+        out.state = Json{{"phase", 1}};
+        UserMessage user;
+        user.content = std::string("hi");
+        out.messages = {Message(user)};
+        return out;
+    }
+};
+
+TEST_F(PluginHostVirtualModelTest, APluginRegistersAVirtualModelWhoseRouterReceivesTheRequest) {
+    provideRouterPlugin("/plugins/router.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    const auto model = m_models.find("router", "auto");
+    ASSERT_TRUE(model.has_value());
+    EXPECT_EQ(model->contextWindow, 1000);
+    EXPECT_TRUE(model->reasoning);
+
+    const auto route = m_models.resolveVirtual(request());
+    ASSERT_TRUE(route.has_value()) << route.error().message;
+    EXPECT_EQ(route->model.id, "gpt-a");
+    EXPECT_EQ(route->thinkingLevel, ThinkingLevel::Off);
+    ASSERT_TRUE(route->state.has_value());
+    EXPECT_EQ((*route->state)["phase"], 2);
+    const Json seen = Json::parse(g_routeRequest);
+    EXPECT_EQ(seen["model"]["id"], "auto");
+    EXPECT_EQ(seen["thinkingLevel"], "high");
+    EXPECT_EQ(seen["reason"], "continuation");
+    EXPECT_EQ(seen["state"]["phase"], 1);
+    EXPECT_EQ(seen["messages"][0]["role"], "user");
+    EXPECT_FALSE(seen.contains("previous"));
+    EXPECT_FALSE(seen.contains("failed"));
+
+    m_host.shutdown();
+    EXPECT_FALSE(m_models.find("router", "auto").has_value());
+}
+
+TEST_F(PluginHostVirtualModelTest, AnUnchangedStateIsNotStoredAgain) {
+    g_routeAnswer = R"({"model":{"provider":"openai","id":"gpt-a"},"state":{"phase":1}})";
+    provideRouterPlugin("/plugins/router.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router.so"}).empty());
+    const auto route = m_models.resolveVirtual(request());
+    ASSERT_TRUE(route.has_value());
+    EXPECT_FALSE(route->state.has_value());
+}
+
+TEST_F(PluginHostVirtualModelTest, RoutersThatFailFailTheRequest) {
+    provideRouterPlugin("/plugins/router.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router.so"}).empty());
+    g_routeAnswer = R"({"error":"classifier down"})";
+    auto route = m_models.resolveVirtual(request());
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("classifier down"), std::string::npos);
+    g_routeAnswer = R"({"model":{"provider":"openai"}})";
+    route = m_models.resolveVirtual(request());
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("must answer"), std::string::npos);
+    g_routeAnswer = R"({"model":{"provider":"openai","id":"gpt-a"},"thinkingLevel":"sideways"})";
+    route = m_models.resolveVirtual(request());
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("unknown thinking level"), std::string::npos);
+    g_routeEmpty = true;
+    route = m_models.resolveVirtual(request());
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("returned nothing"), std::string::npos);
+}
+
+TEST_F(PluginHostVirtualModelTest, BadDefinitionsAndConflictsAreReportedToThePlugin) {
+    g_virtualDefinition = R"({"provider":"router"})";
+    provideRouterPlugin("/plugins/router.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router.so"}).empty());
+    EXPECT_TRUE(Json::parse(g_lastReply).contains("error"));
+    m_host.shutdown();
+    g_virtualDefinition = R"({"provider":"openai","id":"gpt-a"})";
+    provideRouterPlugin("/plugins/router2.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router2.so"}).empty());
+    EXPECT_NE(Json::parse(g_lastReply)["error"].get<std::string>().find("conflicts with a physical model"), std::string::npos);
+    m_host.shutdown();
+    g_virtualDefinition = R"({"provider":"router","id":"auto","thinkingLevels":["bogus"]})";
+    provideRouterPlugin("/plugins/router3.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router3.so"}).empty());
+    EXPECT_NE(Json::parse(g_lastReply)["error"].get<std::string>().find("thinking level"), std::string::npos);
+}
+
+TEST_F(PluginHostVirtualModelTest, APluginListsThePhysicalModelsWithCredentialsAndUnregistersItsOwn) {
+    provideRouterPlugin("/plugins/router.so");
+    ASSERT_TRUE(m_host.load({"/plugins/router.so"}).empty());
+    Model other;
+    other.provider = "groq";
+    other.id = "llama";
+    other.api = "faux";
+    m_models.addModel(other);
+    const Json models = Json::parse(take(g_host->list_models(g_host->host)));
+    ASSERT_EQ(models.size(), 1U);
+    EXPECT_EQ(models[0]["provider"], "openai");
+    EXPECT_EQ(models[0]["id"], "gpt-a");
+    const std::string provider = "router";
+    const std::string foreign = "other";
+    const std::string id = "auto";
+    EXPECT_TRUE(Json::parse(take(g_host->unregister_virtual_model(g_host->host, view(provider), view(foreign)))).contains("error"));
+    EXPECT_EQ(Json::parse(take(g_host->unregister_virtual_model(g_host->host, view(provider), view(id))))["ok"], true);
+    EXPECT_FALSE(m_models.find("router", "auto").has_value());
+}
+
 TEST_F(PluginHostTest, WithoutAModelRegistryProvidersCannotBeRegistered) {
     FakeDynamicLibraries libraries;
     ToolRegistry registry;

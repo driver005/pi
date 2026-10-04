@@ -32,6 +32,8 @@ import pi.support.session_message_persister;
 import pi.support.session_stats_calculator;
 import pi.support.skill_command_expander;
 import pi.support.summary_generator;
+import pi.support.virtual_model_names;
+import pi.support.error_stream_factory;
 import pi.support.transcript_normalizer;
 
 /**
@@ -174,7 +176,7 @@ public:
     }
 
     std::optional<ContextUsage> contextUsage() const override {
-        const Model current = m_agent->model();
+        const Model current = limitsModel(nullptr);
         if (current.id.empty()) {
             return std::nullopt;
         }
@@ -484,14 +486,14 @@ private:
         options.steeringMode = queueMode(view.steeringMode());
         options.followUpMode = queueMode(view.followUpMode());
         options.streamFn = [this](const Model& model, const TranscriptContext& context, const StreamOptions& request) {
-            return m_config.models.stream(model, context, request);
+            return streamRouted(model, context, request);
         };
         options.loopConfig.options = streamOptions();
         options.loopConfig.convertToLlm = [this](const std::vector<AgentMessage>& messages) {
             return m_converter.convert(messages);
         };
         options.loopConfig.prepareRequest = [this](const PrepareRequestContext& request,
-                                                   const std::shared_ptr<AbortSignal>&) { return prepareRequest(request); };
+                                                   const std::shared_ptr<AbortSignal>& signal) { return prepareRequest(request, signal); };
         options.loopConfig.prepareNextTurn = [this](const AgentTurnContext& turn) { return prepareNextTurn(turn); };
         if (m_hooks) {
             options.loopConfig.beforeToolCall = [this](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
@@ -530,10 +532,13 @@ private:
         m_loadout->setToolFilter(m_config.allowedTools, m_config.excludedTools);
         m_compaction->setEvents(m_events.get());
         m_navigator->setEvents(m_events.get());
+        m_compaction->setSummaryModel([this] { return summaryModel(); });
+        m_navigator->setSummaryModel([this] { return summaryModel(); });
         m_pending = std::make_unique<PendingInputTracker>(m_hub);
         m_custom = std::make_unique<CustomMessageQueue>(session, *m_refresher, m_hub);
         m_persister = std::make_unique<SessionMessagePersister>(session);
         m_postRun = std::make_unique<PostRunHandler>(*m_agent, session, settings, *m_retry, *m_compaction, *m_omitter, m_hub);
+        m_postRun->setLimitsSource([this](const AssistantMessage* message) { return limitsModel(message); });
     }
 
     /**
@@ -590,15 +595,136 @@ private:
         return options;
     }
 
-    std::optional<AgentLoopTurnUpdate> prepareRequest(const PrepareRequestContext& request) const {
+    std::optional<AgentLoopTurnUpdate> prepareRequest(const PrepareRequestContext& request, const std::shared_ptr<AbortSignal>& signal) {
         AgentLoopTurnUpdate update;
         AgentContext context;
         context.messages = m_config.session.buildSessionProjection().messages;
         if (request.context != nullptr) {
             context.tools = request.context->tools;
         }
+        const std::vector<AgentMessage> sent = context.messages;
         update.context = std::move(context);
+        const Model selected = m_agent->model();
+        if (m_virtual.isVirtual(selected)) {
+            routeRequest(selected, sent, signal, update);
+        }
         return update;
+    }
+
+    /**
+     * Routes a request of the selected virtual model: the loop streams the physical model the router picked for this request and
+     * records its thinking level; the selection stays on the agent. A failed route leaves the virtual model in the update, and
+     * the stream function ends that request with the routing error.
+     */
+    void routeRequest(const Model& selected, const std::vector<AgentMessage>& messages, const std::shared_ptr<AbortSignal>& signal, AgentLoopTurnUpdate& update) {
+        VirtualResolveRequest resolve;
+        resolve.model = selected;
+        resolve.thinkingLevel = m_agent->thinkingLevel();
+        resolve.messages = m_converter.convert(messages);
+        resolve.signal = signal;
+        resolve.state = virtualModelState(selected);
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            resolve.failed = std::exchange(m_failedResponse, std::nullopt);
+        }
+        resolve.reason = resolve.failed ? "retry" : startsWithUserTurn(messages) ? "user" : "continuation";
+        auto route = m_config.models.resolveVirtual(resolve);
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_routeError = route ? std::nullopt : std::optional<std::string>(route.error().message);
+        }
+        if (!route) {
+            return;
+        }
+        if (route->state) {
+            Json data = Json::object({{"provider", selected.provider}, {"modelId", selected.id}, {"state", *route->state}});
+            (void)m_config.session.appendCustomEntry(m_virtual.stateEntryType(), data);
+        }
+        update.model = route->model;
+        update.thinkingLevel = route->thinkingLevel;
+    }
+
+    /** Only messages the user wrote start a turn; custom messages can follow them. */
+    bool startsWithUserTurn(const std::vector<AgentMessage>& messages) const {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+            if (std::holds_alternative<AssistantMessage>(*it)) {
+                return false;
+            }
+            if (std::holds_alternative<UserMessage>(*it)) {
+                return true;
+            }
+        }
+        return true;
+    }
+
+    /** The router state last stored on this branch for the virtual model; null before the first. */
+    Json virtualModelState(const Model& model) const {
+        const std::vector<SessionEntry> branch = m_config.session.branchPath();
+        for (auto it = branch.rbegin(); it != branch.rend(); ++it) {
+            if (it->type != "custom" || it->body.value("customType", "") != m_virtual.stateEntryType() || !it->body.contains("data") || !it->body["data"].is_object()) {
+                continue;
+            }
+            const Json& data = it->body["data"];
+            if (data.value("provider", "") == model.provider && data.value("modelId", "") == model.id) {
+                return data.contains("state") ? data["state"] : Json();
+            }
+        }
+        return Json();
+    }
+
+    /** Streams a request: virtual models never reach a provider, so an unrouted one ends with the routing error. */
+    std::shared_ptr<AssistantMessageStream> streamRouted(const Model& model, const TranscriptContext& context, const StreamOptions& request) {
+        if (m_virtual.isVirtual(model)) {
+            std::optional<std::string> reason;
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                reason = m_routeError;
+            }
+            return m_errors.failed(model, reason.value_or("Virtual model " + model.provider + "/" + model.id + " must be routed before streaming"), m_config.clock.nowMs());
+        }
+        return m_config.models.stream(model, context, request);
+    }
+
+    /** The physical model of the selected virtual model's latest response (or the selected model itself) for limits. */
+    Model limitsModel(const AssistantMessage* message) const {
+        const Model selected = m_agent->model();
+        if (!m_virtual.isVirtual(selected)) {
+            return selected;
+        }
+        const std::vector<AgentMessage> all = m_agent->messages();
+        const AssistantMessage* source = message;
+        if (source == nullptr) {
+            for (auto it = all.rbegin(); it != all.rend() && source == nullptr; ++it) {
+                const auto* assistant = std::get_if<AssistantMessage>(&*it);
+                if (assistant != nullptr && assistant->stopReason != StopReason::Error && assistant->stopReason != StopReason::Aborted) {
+                    source = assistant;
+                }
+            }
+        }
+        if (source != nullptr) {
+            if (auto physical = m_config.models.physicalModel(source->provider, source->model)) {
+                return *physical;
+            }
+        }
+        return selected;
+    }
+
+    /** Routes a request made outside the agent loop (a compaction or branch summary); the physical model sizes and answers it. */
+    Result<RoutedSelection> summaryModel() {
+        const Model selected = m_agent->model();
+        if (!m_virtual.isVirtual(selected)) {
+            return RoutedSelection{selected, m_agent->thinkingLevel()};
+        }
+        VirtualResolveRequest resolve;
+        resolve.model = selected;
+        resolve.thinkingLevel = m_agent->thinkingLevel();
+        resolve.reason = "direct";
+        resolve.messages = m_converter.convert(m_agent->messages());
+        auto route = m_config.models.resolveVirtual(resolve);
+        if (!route) {
+            return std::unexpected(route.error());
+        }
+        return RoutedSelection{route->model, route->thinkingLevel};
     }
 
     std::optional<AgentLoopTurnUpdate> prepareNextTurn(const AgentTurnContext&) {
@@ -672,7 +798,7 @@ private:
         out.type = event.type == AgentEventType::AgentEnd ? SessionEventType::AgentEnd : SessionEventType::Agent;
         out.agent = std::make_shared<const AgentEvent>(event);
         if (event.type == AgentEventType::AgentEnd) {
-            out.willRetry = m_retry->willRetryAfterAgentEnd(event.messages, m_agent->model().contextWindow,
+            out.willRetry = m_retry->willRetryAfterAgentEnd(event.messages, limitsModel(nullptr).contextWindow,
                                                             abortRequested());
         }
         m_hub.emit(out);
@@ -764,6 +890,11 @@ private:
     }
 
     Result<void> runAgentPrompt(std::vector<AgentMessage> messages) {
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_failedResponse.reset();
+            m_routeError.reset();
+        }
         m_abortRequested = false;
         m_runActive = true;
         Result<void> outcome = m_agent->prompt(std::move(messages));
@@ -791,6 +922,10 @@ private:
                 const std::lock_guard<std::mutex> lock(m_mutex);
                 last = std::exchange(m_lastAssistant, std::nullopt);
                 toolResults = std::exchange(m_lastToolResults, {});
+            }
+            if (last && last->stopReason == StopReason::Error) {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                m_failedResponse = last;
             }
             if (!m_postRun->afterRun(last, toolResults, [this] { return abortRequested(); }) || abortRequested()) {
                 break;
@@ -866,6 +1001,8 @@ private:
     std::unique_ptr<PluginHookDispatcher> m_hooks;
     std::unique_ptr<PluginSessionEvents> m_events;
     TranscriptNormalizer m_transcript;
+    VirtualModelNames m_virtual;
+    ErrorStreamFactory m_errors;
     SummaryGenerator m_generator;
     Compactor m_compactor;
     BranchSummarizer m_summarizer;
@@ -896,6 +1033,8 @@ private:
     std::optional<AssistantMessage> m_lastAssistant;
     std::vector<ToolResultMessage> m_lastToolResults;
     std::optional<std::string> m_forcedPrompt;
+    std::optional<AssistantMessage> m_failedResponse;
+    std::optional<std::string> m_routeError;
 };
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "virtual_model_definition",
+    deps = [
+        "//interfaces/types/result",
+        "//interfaces/types/thinking_level",
+        "//interfaces/types/virtual_route",
+        "//interfaces/types/virtual_route_request",
+    ],
+)

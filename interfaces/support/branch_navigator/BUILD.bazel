@@ -15,6 +15,7 @@ pi_support(
         "//interfaces/types/forkable_message",
         "//interfaces/types/navigate_tree_options",
         "//interfaces/types/navigate_tree_result",
+        "//interfaces/types/routed_selection",
     ],
     test_deps = [
         "//interfaces/support/hook_bus",

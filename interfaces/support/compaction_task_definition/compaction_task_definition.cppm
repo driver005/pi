@@ -151,9 +151,22 @@ private:
         Json stream = request.at("streamOptions");
         stream.erase("deferred");
         stream["cacheRetention"] = "none";
-        StreamOptions options = m_requests.options(stream, request.value("thinkingLevel", std::string("off")), runtime.signal());
+        std::string thinkingLevel = request.value("thinkingLevel", std::string("off"));
+        Model target = *model;
+        if (m_requests.isVirtual(*model)) {
+            // A summary is a request outside the conversation's turns: the router answers it as a direct one.
+            std::string routedLevel;
+            std::optional<Json> ignoredState;
+            auto physical = m_requests.route(*runtime.models(), *model, thinkingLevel, "direct", messages, Json(), runtime.signal(), routedLevel, ignoredState);
+            if (!physical) {
+                return failNoModel(runtime, physical.error().message);
+            }
+            target = std::move(*physical);
+            thinkingLevel = routedLevel;
+        }
+        StreamOptions options = m_requests.options(stream, thinkingLevel, runtime.signal());
         options.maxTokens = request.at("maxTokens").get<std::int64_t>();
-        auto message = m_requests.complete(*runtime.models(), *model, messages, options);
+        auto message = m_requests.complete(*runtime.models(), target, messages, options);
         if (!message) {
             return std::unexpected(message.error());
         }

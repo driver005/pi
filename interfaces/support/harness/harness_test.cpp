@@ -287,6 +287,84 @@ TEST_F(HarnessTest, ConfigureChangesTheAgentTheNextRunUses) {
     EXPECT_EQ((*agent)->snapshot()->thinkingLevel, "high");
 }
 
+TEST_F(HarnessTest, AVirtualModelRoutesEachRequestAndItsStateIsStoredInTheConversation) {
+    openMemory();
+    std::vector<VirtualRouteRequest> seen;
+    VirtualModelDefinition definition;
+    definition.provider = "router";
+    definition.id = "auto";
+    definition.name = "Auto";
+    definition.route = [&](const VirtualRouteRequest& request) -> Result<VirtualRoute> {
+        seen.push_back(request);
+        VirtualRoute route;
+        route.model = *m_models.physicalModel("faux", "m");
+        route.state = Json{{"routed", static_cast<int>(seen.size())}};
+        return route;
+    };
+    ASSERT_TRUE(m_models.registerVirtualModel(definition).has_value());
+    std::vector<Model> streamed;
+    m_models.setStreamHandler([&](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        streamed.push_back(model);
+        return m_faux.stream(model, context, options);
+    });
+    ConversationCreateOptions create;
+    create.agent = Json::object({{"model", Json::object({{"provider", "router"}, {"modelId", "auto"}})}});
+    auto created = m_harness->root(create);
+    ASSERT_TRUE(created.has_value());
+    auto root = *created;
+    m_faux.enqueue(m_faux.textResponse("first"));
+    m_faux.enqueue(m_faux.textResponse("second"));
+    for (const char* text : {"one", "two"}) {
+        auto submission = root->submit(input(text));
+        ASSERT_TRUE(submission.has_value());
+        ASSERT_TRUE((*submission)->wait().has_value());
+        ASSERT_TRUE(root->waitForIdle().has_value());
+    }
+    ASSERT_EQ(seen.size(), 2U);
+    EXPECT_EQ(seen[0].reason, "user");
+    EXPECT_TRUE(seen[0].state.is_null());
+    EXPECT_EQ(seen[1].state["routed"], 1);
+    ASSERT_TRUE(seen[1].previous.has_value());
+    EXPECT_EQ(seen[1].previous->model.id, "m");
+    for (const Model& model : streamed) {
+        EXPECT_EQ(model.id, "m");
+    }
+    auto context = root->context();
+    ASSERT_TRUE(context.has_value());
+    const Json& answer = context->at("messages").back();
+    EXPECT_EQ(answer.at("provider"), "faux");
+    EXPECT_EQ(answer.at("model"), "m");
+    auto page = root->entries(std::nullopt, std::nullopt, 20);
+    ASSERT_TRUE(page.has_value());
+    int stateEntries = 0;
+    for (const Json& entry : page->items) {
+        if (entry.at("kind") == "pi.virtual-model-state") {
+            ++stateEntries;
+            EXPECT_EQ(entry.at("data").at("modelId"), "auto");
+        }
+    }
+    EXPECT_EQ(stateEntries, 2);
+}
+
+TEST_F(HarnessTest, AVirtualModelThatCannotRouteEndsTheRunWithItsError) {
+    openMemory();
+    VirtualModelDefinition definition;
+    definition.provider = "router";
+    definition.id = "auto";
+    definition.name = "Auto";
+    definition.route = [](const VirtualRouteRequest&) -> Result<VirtualRoute> { return std::unexpected(Error{"x", "classifier down"}); };
+    ASSERT_TRUE(m_models.registerVirtualModel(definition).has_value());
+    ConversationCreateOptions create;
+    create.agent = Json::object({{"model", Json::object({{"provider", "router"}, {"modelId", "auto"}})}});
+    auto root = *m_harness->root(create);
+    auto submission = root->submit(input("hi"));
+    ASSERT_TRUE(submission.has_value());
+    auto settled = (*submission)->wait();
+    ASSERT_TRUE(settled.has_value());
+    EXPECT_EQ(settled->at("status"), "unanswered");
+    EXPECT_EQ(m_faux.callCount(), 0);
+}
+
 TEST_F(HarnessTest, ForkingCopiesTheAgentAsOfTheForkEntryAndRunsIndependently) {
     openMemory();
     auto root = rootWithModel();

@@ -18,6 +18,7 @@ export import pi.support.session_context_refresher;
 export import pi.support.summarization_retry_reporter;
 export import pi.types.agent_loop_config;
 export import pi.types.compaction_result;
+export import pi.types.routed_selection;
 export import pi.types.summarization_options;
 
 /**
@@ -42,6 +43,16 @@ public:
     /** Plugin events to fire; nullptr (the default) fires none. The pointee must outlive the controller. */
     void setEvents(PluginSessionEvents* events) {
         m_events = events;
+    }
+
+    /**
+     * The model and thinking level that write the summary: the agent's by default. A host with virtual models routes the
+     * request here, so the summary is sized and sent for the physical model; an error fails the compaction.
+     */
+    using SummaryModel = std::function<Result<RoutedSelection>()>;
+
+    void setSummaryModel(SummaryModel source) {
+        m_summaryModel = std::move(source);
     }
 
     /** The caller has aborted any active run. Error carries "Compaction failed: ..." text. */
@@ -133,11 +144,11 @@ public:
     }
 
 private:
-    SummarizationOptions optionsFor(const std::shared_ptr<AbortSignal>& signal, const std::string& reason) const {
+    SummarizationOptions optionsFor(const std::shared_ptr<AbortSignal>& signal, const std::string& reason, const RoutedSelection& selection) const {
         SummarizationOptions options;
-        options.model = m_agent.model();
+        options.model = selection.model;
         options.stream.signal = signal;
-        options.thinkingLevel = m_agent.thinkingLevel();
+        options.thinkingLevel = selection.thinkingLevel.value_or(ThinkingLevel::Off);
         options.streamFn = m_streamFn;
         options.retry = m_settings.view().retryPolicy();
         options.callbacks = m_reporter.callbacks("compaction", reason);
@@ -154,8 +165,16 @@ private:
             supplied = std::move(decision.compaction);
         }
         fromExtension = supplied.has_value();
+        std::optional<RoutedSelection> selection;
+        if (!supplied) {
+            auto chosen = m_summaryModel ? m_summaryModel() : Result<RoutedSelection>(RoutedSelection{m_agent.model(), m_agent.thinkingLevel()});
+            if (!chosen) {
+                return std::unexpected(chosen.error());
+            }
+            selection = std::move(*chosen);
+        }
         auto compacted = supplied ? Result<CompactionResult>(std::move(*supplied))
-                                  : m_compactor.compact(preparation, customInstructions, optionsFor(signal, reason));
+                                  : m_compactor.compact(preparation, customInstructions, optionsFor(signal, reason, *selection));
         if (!compacted) {
             const bool aborted = compacted.error().code == "aborted";
             return std::unexpected(aborted ? Error{"aborted", "Compaction cancelled"} : compacted.error());
@@ -245,6 +264,7 @@ private:
     SummarizationRetryReporter m_reporter;
     AuthGuidance m_guidance;
     PluginSessionEvents* m_events = nullptr;
+    SummaryModel m_summaryModel;
 
     mutable std::mutex m_mutex;
     std::shared_ptr<AbortSignal> m_manual;

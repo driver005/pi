@@ -516,3 +516,167 @@ TEST_F(AgentSessionTest, BeforeProviderRequestPluginsSeeAndReplaceThePayload) {
     EXPECT_EQ((*replaced)["model"], "faux-1");
     EXPECT_EQ((*replaced)["metadata"], "tagged");
 }
+
+class VirtualModelSessionTest : public AgentSessionTest {
+protected:
+    VirtualModelSessionTest() {
+        m_physical.id = "deep-1";
+        m_physical.provider = "faux";
+        m_physical.api = "faux";
+        m_physical.reasoning = true;
+        m_physical.contextWindow = 50000;
+        m_physical.maxTokens = 4000;
+        m_models.addModel(m_physical);
+    }
+
+    void registerRouter(const std::function<Result<VirtualRoute>(const VirtualRouteRequest&)>& route) {
+        VirtualModelDefinition definition;
+        definition.provider = "faux";
+        definition.id = "auto";
+        definition.name = "Auto";
+        definition.thinkingLevels = {ThinkingLevel::Low, ThinkingLevel::High};
+        definition.route = route;
+        ASSERT_TRUE(m_models.registerVirtualModel(definition).has_value());
+        m_selected = *m_models.find("faux", "auto");
+        m_session = nullptr;
+        AgentSessionConfig config{m_harness.agents(), m_harness.session(), m_settings, m_models, m_resources,
+                                  m_tools, m_bash, m_harness.files(), m_harness.clock(), m_harness.ids(),
+                                  m_harness.sleeper(), m_selected, ThinkingLevel::High, "/tmp", std::nullopt,
+                                  std::nullopt, {}, {}};
+        m_session = std::make_unique<AgentSession>(config);
+        m_session->subscribe([this](const AgentSessionEvent& event) { m_events.push_back(event); });
+    }
+
+    std::vector<AssistantMessage> responses() {
+        std::vector<AssistantMessage> out;
+        for (const AgentMessage& message : m_session->messages()) {
+            if (const auto* assistant = std::get_if<AssistantMessage>(&message)) {
+                out.push_back(*assistant);
+            }
+        }
+        return out;
+    }
+
+    Model m_physical;
+    Model m_selected;
+};
+
+TEST_F(VirtualModelSessionTest, RequestsGoToThePhysicalModelTheRouterPicksAndTheMessageNamesIt) {
+    std::vector<VirtualRouteRequest> seen;
+    registerRouter([&](const VirtualRouteRequest& request) -> Result<VirtualRoute> {
+        seen.push_back(request);
+        VirtualRoute route;
+        route.model = m_physical;
+        route.thinkingLevel = ThinkingLevel::Medium;
+        route.state = Json{{"calls", static_cast<int>(seen.size())}};
+        return route;
+    });
+    std::vector<Model> streamed;
+    m_models.setStreamHandler([&](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        streamed.push_back(model);
+        return m_harness.provider().stream(model, context, options);
+    });
+    m_harness.provider().enqueue(m_harness.provider().toolCallResponse("read", Json{{"arg", "x"}}, "call-1"));
+    m_harness.provider().enqueue(m_harness.provider().textResponse("done"));
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+
+    ASSERT_EQ(seen.size(), 2U);
+    EXPECT_EQ(seen[0].reason, "user");
+    EXPECT_EQ(seen[1].reason, "continuation");
+    EXPECT_EQ(seen[0].thinkingLevel, ThinkingLevel::High);
+    EXPECT_EQ(seen[0].model.id, "auto");
+    EXPECT_TRUE(seen[0].state.is_null());
+    EXPECT_EQ(seen[1].state["calls"], 1);
+    ASSERT_TRUE(seen[1].previous.has_value());
+    EXPECT_EQ(seen[1].previous->model.id, "deep-1");
+    for (const Model& model : streamed) {
+        EXPECT_EQ(model.id, "deep-1");
+    }
+    EXPECT_EQ(m_session->model().id, "auto");
+    EXPECT_EQ(m_session->thinkingLevel(), ThinkingLevel::High);
+    const auto answers = responses();
+    ASSERT_EQ(answers.size(), 2U);
+    EXPECT_EQ(answers[0].model, "deep-1");
+    EXPECT_EQ(answers[0].thinkingLevel, std::optional<ThinkingLevel>(ThinkingLevel::Medium));
+    // The state travels as custom entries of the branch.
+    int stateEntries = 0;
+    for (const auto& entry : m_harness.session().entries()) {
+        if (entry.type == "custom" && entry.body.value("customType", "") == "pi.virtual-model-state") {
+            ++stateEntries;
+            EXPECT_EQ(entry.body["data"]["provider"], "faux");
+            EXPECT_EQ(entry.body["data"]["modelId"], "auto");
+        }
+    }
+    EXPECT_EQ(stateEntries, 2);
+}
+
+TEST_F(VirtualModelSessionTest, ARouterThatFailsEndsTheRequestWithItsError) {
+    registerRouter([](const VirtualRouteRequest&) -> Result<VirtualRoute> { return std::unexpected(Error{"x", "classifier down"}); });
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    const auto answers = responses();
+    ASSERT_FALSE(answers.empty());
+    EXPECT_EQ(answers.back().stopReason, StopReason::Error);
+    EXPECT_NE(answers.back().errorMessage->find("classifier down"), std::string::npos);
+    EXPECT_EQ(answers.back().model, "auto");
+    EXPECT_EQ(m_harness.provider().callCount(), 0);
+}
+
+TEST_F(VirtualModelSessionTest, ContextUsageFollowsThePhysicalModelThatAnswered) {
+    registerRouter([&](const VirtualRouteRequest&) -> Result<VirtualRoute> {
+        VirtualRoute route;
+        route.model = m_physical;
+        return route;
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    const auto usage = m_session->contextUsage();
+    ASSERT_TRUE(usage.has_value());
+    EXPECT_EQ(usage->contextWindow, 50000);
+}
+
+TEST_F(VirtualModelSessionTest, SummariesAreRoutedAsDirectRequests) {
+    std::vector<std::string> reasons;
+    registerRouter([&](const VirtualRouteRequest& request) -> Result<VirtualRoute> {
+        reasons.push_back(request.reason);
+        VirtualRoute route;
+        route.model = m_physical;
+        return route;
+    });
+    for (int i = 0; i < 4; ++i) {
+        m_harness.provider().enqueue(m_harness.provider().textResponse(std::string(1200, 'a')));
+        ASSERT_TRUE(m_session->prompt(std::string(1200, 'u'), {}).has_value());
+    }
+    reasons.clear();
+    std::vector<Model> streamed;
+    m_models.setStreamHandler([&](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        streamed.push_back(model);
+        return m_harness.provider().stream(model, context, options);
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("## Goal\nsummary"));
+    const auto compacted = m_session->compact(std::nullopt);
+    ASSERT_TRUE(compacted.has_value()) << compacted.error().message;
+    EXPECT_EQ(reasons, std::vector<std::string>{"direct"});
+    ASSERT_EQ(streamed.size(), 1U);
+    EXPECT_EQ(streamed[0].id, "deep-1");
+}
+
+TEST_F(VirtualModelSessionTest, AnAutomaticRetryIsRoutedWithTheFailedRequest) {
+    std::vector<VirtualRouteRequest> seen;
+    registerRouter([&](const VirtualRouteRequest& request) -> Result<VirtualRoute> {
+        seen.push_back(request);
+        VirtualRoute route;
+        route.model = m_physical;
+        return route;
+    });
+    m_harness.provider().enqueue(failure("503 overloaded"));
+    m_harness.provider().enqueue(m_harness.provider().textResponse("second try"));
+    ASSERT_TRUE(m_session->prompt("hi", {}).has_value());
+    EXPECT_EQ(m_session->lastAssistantText(), "second try");
+    ASSERT_EQ(seen.size(), 2U);
+    EXPECT_EQ(seen[0].reason, "user");
+    EXPECT_FALSE(seen[0].failed.has_value());
+    EXPECT_EQ(seen[1].reason, "retry");
+    ASSERT_TRUE(seen[1].failed.has_value());
+    EXPECT_EQ(seen[1].failed->model.id, "deep-1");
+    EXPECT_EQ(seen[1].failed->message.errorMessage, std::optional<std::string>("503 overloaded"));
+}

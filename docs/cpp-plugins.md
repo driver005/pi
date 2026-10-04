@@ -29,7 +29,7 @@ void     pi_plugin_shutdown(void);              /* optional */
 Data crosses the boundary as UTF-8 JSON in `PiString` (borrowed for the call) or `PiOwnedString` (the producer
 allocates, the consumer calls `release` when set). Callbacks may run on any host thread, concurrently; they must
 not throw across the boundary. The host API offers `log`, `register_tool`, `subscribe`, `exec` (run a program, with
-cancellation), `abort_requested`, `get_context` (`cwd`, `agentDir`), `register_provider`, `unregister_provider`, `register_mcp_server` and `unregister_mcp_server`.
+cancellation), `abort_requested`, `get_context` (`cwd`, `agentDir`), `register_provider`, `unregister_provider`, `register_mcp_server`, `unregister_mcp_server`, `register_virtual_model`, `unregister_virtual_model` and `list_models`.
 
 ### Tools
 
@@ -58,6 +58,29 @@ same name in `mcp.json` wins and the registration is ignored; a name another plu
 name again replaces the plugin's own. Nothing is saved: register again on every load. The registration is also ignored
 when MCP is off (`--no-mcp`) or the tool set is restricted. Durable sessions (`pi serve`) support it; the session-tree
 backend does not. `plugins/hello_mcp` is an example.
+
+### Virtual models
+
+`register_virtual_model(definition, route, user_data)` registers a selectable model whose requests a router maps to a physical model
+(see `packages/coding-agent/docs/virtual-models.md`; `plugins/hello_router` is an example). The definition is
+`{"provider", "id", "name"?, "thinkingLevels"?: ["low", "high"], "contextWindow"?, "maxTokens"?, "input"?}`: the model is listed
+under `provider` (a provider with physical models, which must have credentials, or one nobody else defines, which needs none) and
+appears in model selection like any other. `id` must not be a physical model of the provider. `unregister_virtual_model(provider, id)`
+removes one; models also end with the plugin. `list_models()` returns the physical models whose provider has credentials
+(`[{provider, id, name, reasoning, input, contextWindow, maxTokens}]`) for the router to choose from.
+
+`route(request)` runs before every request made with the model. The request is `{model, thinkingLevel, reason, previous?, failed?,
+state?, messages}`: `reason` is `user` (first request after a user message), `continuation` (after tool results), `retry`
+(automatic retry; `failed` carries the physical model, level and failed assistant message) or `direct` (a compaction or branch
+summary); `previous` is the physical model and level of the latest successful response; `state` is what the router returned
+last. It answers `{"model": {"provider", "id"}, "thinkingLevel", "state"?}` or `{"error"}`; the model must be a physical model with
+credentials, the thinking level is clamped to it, and a `state` that differs from the request's is stored on the session branch
+(a `pi.virtual-model-state` custom entry in `pi rpc` sessions, a conversation entry of the same kind in `pi serve`), so forks and
+resumed sessions see it. A failing router ends the request with an error response naming the virtual model. Assistant messages
+name the physical model; the selection stays virtual, and a resumed session keeps the virtual selection while the model is
+still registered (otherwise it falls back to the physical model that answered last). Context usage and compaction use the limits
+of the physical model that produced the latest response. Not ported: the footer display of the routed model and `ctx.modelRegistry`
+for routers (use `list_models`).
 
 ### Hooks
 
@@ -93,7 +116,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth and virtual models (declarative providers work), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth (declarative providers work), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
 between extensions. They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 

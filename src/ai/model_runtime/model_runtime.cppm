@@ -21,6 +21,7 @@ export import pi.support.model_catalog_loader;
 export import pi.support.model_composer;
 export import pi.support.models_config_loader;
 export import pi.support.provider_auth_resolver;
+export import pi.support.virtual_model_registry;
 export import pi.types.model_runtime_config;
 export import pi.types.prepared_request;
 export import pi.types.provider_state;
@@ -28,7 +29,8 @@ export import pi.types.provider_state;
 /**
  * IModelRuntime over the built-in provider table, the generated catalog (plus remote overlays in
  * the models store), the user's models.json and plugin-registered providers. Port of the parts of
- * packages/coding-agent/src/core/model-runtime.ts that a headless backbone needs.
+ * packages/coding-agent/src/core/model-runtime.ts that a headless backbone needs. Virtual models registered by plugins are listed
+ * with the physical models of their provider (hiding a physical model of the same id) and route through VirtualModelRegistry.
  */
 export class ModelRuntime : public IModelRuntime {
 public:
@@ -71,11 +73,17 @@ public:
     }
 
     std::vector<Model> models() const override {
+        const std::vector<Model> virtualModels = m_virtual.models();
         const std::lock_guard<std::mutex> lock(m_mutex);
         std::vector<Model> all;
         for (const auto& [id, state] : m_states) {
-            all.insert(all.end(), state.models.begin(), state.models.end());
+            for (const Model& model : state.models) {
+                if (!hiddenByVirtual(virtualModels, model)) {
+                    all.push_back(model);
+                }
+            }
         }
+        all.insert(all.end(), virtualModels.begin(), virtualModels.end());
         return all;
     }
 
@@ -90,6 +98,13 @@ public:
     }
 
     std::optional<Model> find(const std::string& provider, const std::string& id) const override {
+        if (auto virtualModel = m_virtual.find(provider, id)) {
+            return virtualModel;
+        }
+        return physicalModel(provider, id);
+    }
+
+    std::optional<Model> physicalModel(const std::string& provider, const std::string& id) const override {
         const auto found = state(provider);
         if (!found) {
             return std::nullopt;
@@ -108,10 +123,16 @@ public:
     }
 
     std::vector<std::string> providerIds() const override {
+        const std::set<std::string> virtualProviders = m_virtual.providers();
         const std::lock_guard<std::mutex> lock(m_mutex);
         std::vector<std::string> ids;
         for (const auto& [id, state] : m_states) {
             ids.push_back(id);
+        }
+        for (const std::string& id : virtualProviders) {
+            if (!m_states.contains(id)) {
+                ids.push_back(id);
+            }
         }
         return ids;
     }
@@ -132,7 +153,7 @@ public:
         }
         const auto found = state(provider);
         if (!found) {
-            return AuthStatus{};
+            return m_virtual.listsProvider(provider) ? AuthStatus{true, "virtual", ""} : AuthStatus{};
         }
         const std::string rawKey = found->config.is_object() && found->config.contains("apiKey") &&
                                            found->config["apiKey"].is_string()
@@ -185,6 +206,9 @@ public:
     }
 
     std::shared_ptr<AssistantMessageStream> stream(const Model& model, const TranscriptContext& context, const StreamOptions& options) override {
+        if (m_virtual.isVirtual(model)) {
+            return m_errors.failed(model, "Virtual model " + model.provider + "/" + model.id + " must be routed before streaming", m_clock.nowMs());
+        }
         auto prepared = prepare(model, options);
         if (!prepared) {
             return m_errors.failed(model, prepared.error().message, m_clock.nowMs());
@@ -248,7 +272,26 @@ public:
         buildProviders(m_baseModels, m_modelsJson);
     }
 
+    Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
+        return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
+    }
+
+    void unregisterVirtualModel(const std::string& provider, const std::string& id) override {
+        m_virtual.remove(provider, id);
+    }
+
+    Result<VirtualRoute> resolveVirtual(const VirtualResolveRequest& request) override {
+        return m_virtual.resolve(
+            request, [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id); },
+            [this](const std::string& provider) { return hasConfiguredAuth(provider); });
+    }
+
 private:
+    /** A physical model of the same provider and id as a virtual one is hidden by it. */
+    bool hiddenByVirtual(const std::vector<Model>& virtualModels, const Model& model) const {
+        return std::ranges::any_of(virtualModels, [&](const Model& entry) { return entry.provider == model.provider && entry.id == model.id; });
+    }
+
     /** Resolves auth, headers and base URL for a request of `model`; the model's API provider is known to exist. */
     Result<PreparedRequest> prepare(const Model& model, const StreamOptions& options) {
         const auto found = state(model.provider);
@@ -508,6 +551,7 @@ private:
     ModelComposer m_composer;
     ErrorStreamFactory m_errors;
     HeaderMerger m_headers;
+    VirtualModelRegistry m_virtual;
 
     mutable std::mutex m_mutex;
     std::map<std::string, ProviderState> m_states;

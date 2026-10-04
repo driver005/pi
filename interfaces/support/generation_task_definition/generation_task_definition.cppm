@@ -106,7 +106,7 @@ private:
         const std::vector<Json> entries = m_prompt.plan(*view, *desired, snapshot->tools, runtime.now());
         std::string threshold;
         if (!compacted) {
-            threshold = thresholdCompaction(*view, entries, model->contextWindow, settings.compaction);
+            threshold = thresholdCompaction(*view, entries, m_requests.limitsModel(runtime.models(), *model, view->at("messages")).contextWindow, settings.compaction);
         }
         if (threshold == "blocking") {
             // Compact first and prepare again; the transcript is unchanged until the compaction appends.
@@ -202,16 +202,61 @@ private:
         if (!hooked) {
             return hooked;
         }
-        StreamOptions options = m_requests.options(checkpoint.value("streamOptions", Json::object()),
-                                                   checkpoint.value("thinkingLevel", std::string("off")), runtime.signal());
+        Json routed = checkpoint;
+        Model target = *model;
+        std::string thinkingLevel = checkpoint.value("thinkingLevel", std::string("off"));
+        if (m_requests.isVirtual(*model)) {
+            auto physical = routeVirtual(runtime, *model, thinkingLevel, *view, attempt);
+            if (!physical) {
+                return failModelError(runtime, physical.error().message);
+            }
+            target = *physical;
+            routed["model"] = Json::object({{"provider", target.provider}, {"modelId", target.id}});
+        }
+        StreamOptions options = m_requests.options(checkpoint.value("streamOptions", Json::object()), thinkingLevel, runtime.signal());
         if (auto payloadHooks = installPayloadHooks(runtime, options); !payloadHooks) {
             return payloadHooks;
         }
-        auto message = streamResponse(runtime, *model, messages, options, attempt);
+        auto message = streamResponse(runtime, target, messages, options, attempt);
         if (!message) {
             return std::unexpected(message.error());
         }
-        return classify(runtime, checkpoint, view->at("messages"), *message);
+        // A deferred answer is polled from the physical model, so the checkpoint names it.
+        return classify(runtime, routed, view->at("messages"), *message);
+    }
+
+    /**
+     * Routes a request of a virtual model: the router picks the physical model and thinking level (`thinkingLevel` is replaced by
+     * the router's), and a state it changed is stored as a conversation entry, so forks and restarts keep it.
+     */
+    Result<Model> routeVirtual(ITaskRuntime& runtime, const Model& virtualModel, std::string& thinkingLevel, const Json& view, std::int64_t attempt) const {
+        if (runtime.models() == nullptr) {
+            return std::unexpected(Error{"no_model", "No model runtime is configured"});
+        }
+        std::string routedLevel;
+        std::optional<Json> newState;
+        auto physical = m_requests.route(*runtime.models(), virtualModel, thinkingLevel, m_requests.routeReason(view.at("messages"), attempt > 1),
+                                         view.at("messages"), m_requests.virtualState(view.at("entries"), virtualModel), runtime.signal(), routedLevel, newState);
+        if (!physical) {
+            return std::unexpected(physical.error());
+        }
+        thinkingLevel = routedLevel;
+        if (newState) {
+            const Json entry = Json::object({{"kind", m_requests.virtualStateKind()},
+                                             {"data", Json::object({{"provider", virtualModel.provider}, {"modelId", virtualModel.id}, {"state", *newState}})}});
+            const std::int64_t conversationId = runtime.conversationId();
+            auto stored = runtime.commit([&](Transaction& tx, const Json&) -> State {
+                auto appended = tx.appendEntry(conversationId, entry);
+                if (!appended) {
+                    return std::unexpected(appended.error());
+                }
+                return std::optional<Json>();
+            });
+            if (!stored) {
+                return std::unexpected(stored.error());
+            }
+        }
+        return physical;
     }
 
     /**

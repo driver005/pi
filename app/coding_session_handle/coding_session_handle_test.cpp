@@ -182,3 +182,28 @@ TEST_F(CodingSessionHandleTest, BrokenPluginsAreDiagnostics) {
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_NE(diagnostics[0].message.find("Plugin: /definitely/not/a/plugin.so"), std::string::npos);
 }
+
+TEST_F(CodingSessionHandleTest, APluginsVirtualModelCanBeSelectedAndRoutesToThePhysicalModel) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_router/libhello_router.so"};
+    options.model = "hello-router/auto";
+    m_services->models().faux()->enqueue(m_services->models().faux()->textResponse("routed answer"));
+    const auto handle = open(options);
+    EXPECT_TRUE(handle->diagnostics().empty());
+    EXPECT_EQ(handle->session().model().provider, "hello-router");
+    EXPECT_EQ(handle->session().model().id, "auto");
+    ASSERT_TRUE(handle->session().prompt("hi", PromptOptions{}).has_value());
+    handle->session().waitForIdle();
+    EXPECT_EQ(handle->session().lastAssistantText(), "routed answer");
+    const AssistantMessage* answer = nullptr;
+    const std::vector<AgentMessage> messages = handle->session().messages();
+    for (const AgentMessage& message : messages) {
+        if (const auto* assistant = std::get_if<AssistantMessage>(&message)) {
+            answer = assistant;
+        }
+    }
+    ASSERT_TRUE(answer != nullptr);
+    EXPECT_EQ(answer->provider, "faux");
+    EXPECT_EQ(answer->model, "faux-1");
+    EXPECT_EQ(handle->session().model().id, "auto");
+}

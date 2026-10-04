@@ -54,6 +54,18 @@ struct ToolCall {
 using ToolHandler = std::function<Json(const ToolCall&)>;
 using HookHandler = std::function<Json(const Json& payload)>;
 
+/** One request of a virtual model as the router sees it (see PiRouteFn for the fields of `request`). */
+struct RouteCall {
+    Json request;
+    const PiAbort* abort = nullptr;
+    const PiHostApi* host = nullptr;
+
+    bool aborted() const { return host != nullptr && host->abort_requested(abort) != 0; }
+};
+
+/** Returns {"model":{"provider","id"},"thinkingLevel":"low","state"?:any} or {"error":"message"}. */
+using RouteHandler = std::function<Json(const RouteCall&)>;
+
 /** A text-only tool result. */
 inline Json text(const std::string& value, bool isError = false) {
     return Json{{"content", Json::array({Json{{"type", "text"}, {"text", value}}})}, {"isError", isError}};
@@ -184,7 +196,56 @@ public:
         return Json::parse(detail::take(m_api->unregister_mcp_server(m_api->host, PiString{name.data(), name.size()})), nullptr, false).value("error", "");
     }
 
+    /**
+     * Registers a virtual model (see PiHostApi.register_virtual_model): `route` picks the physical model of each request.
+     * Returns an empty string on success, else the host's error message.
+     */
+    std::string registerVirtualModel(const Json& definition, RouteHandler route) {
+        if (!hasVirtualModelApi()) {
+            return "the host does not support register_virtual_model";
+        }
+        m_routes.push_back(std::make_unique<RouteEntry>(RouteEntry{std::move(route), m_api}));
+        RouteEntry* entry = m_routes.back().get();
+        const std::string text = definition.dump();
+        return Json::parse(
+                   detail::take(m_api->register_virtual_model(
+                       m_api->host, PiString{text.data(), text.size()},
+                       [](void* userData, PiString request, const PiAbort* abort) -> PiOwnedString {
+                           auto* entry = static_cast<RouteEntry*>(userData);
+                           RouteCall call;
+                           call.request = Json::parse(std::string(request.data, request.size), nullptr, false);
+                           call.abort = abort;
+                           call.host = entry->host;
+                           return detail::own(entry->handler(call).dump());
+                       },
+                       entry)),
+                   nullptr, false)
+            .value("error", "");
+    }
+
+    /** Removes a virtual model this plugin registered. Returns an empty string on success. */
+    std::string unregisterVirtualModel(const std::string& provider, const std::string& id) const {
+        if (!hasVirtualModelApi()) {
+            return "the host does not support unregister_virtual_model";
+        }
+        return Json::parse(detail::take(m_api->unregister_virtual_model(m_api->host, PiString{provider.data(), provider.size()}, PiString{id.data(), id.size()})), nullptr, false)
+            .value("error", "");
+    }
+
+    /** The physical models whose provider has credentials (see PiHostApi.list_models); empty on older hosts. */
+    Json models() const {
+        if (!hasVirtualModelApi()) {
+            return Json::array();
+        }
+        return Json::parse(detail::take(m_api->list_models(m_api->host)), nullptr, false);
+    }
+
 private:
+    bool hasVirtualModelApi() const {
+        return m_api->struct_size >= offsetof(PiHostApi, list_models) + sizeof(void*) && m_api->register_virtual_model != nullptr &&
+               m_api->unregister_virtual_model != nullptr && m_api->list_models != nullptr;
+    }
+
     bool hasMcpApi() const {
         return m_api->struct_size >= offsetof(PiHostApi, unregister_mcp_server) + sizeof(void*) && m_api->register_mcp_server != nullptr &&
                m_api->unregister_mcp_server != nullptr;
@@ -200,9 +261,15 @@ private:
         const PiHostApi* host;
     };
 
+    struct RouteEntry {
+        RouteHandler handler;
+        const PiHostApi* host;
+    };
+
     const PiHostApi* m_api;
     std::vector<std::unique_ptr<HookHandler>> m_hooks;
     std::vector<std::unique_ptr<Entry>> m_entries;
+    std::vector<std::unique_ptr<RouteEntry>> m_routes;
 };
 
 /** Derive from this and register the class with PI_PLUGIN. */

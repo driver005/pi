@@ -176,6 +176,25 @@ TEST_F(DurableToolboxTest, PluginsCanRegisterModelProvidersThatEndWithTheToolbox
     EXPECT_FALSE(models.find("hello-proxy", "hello-1").has_value());
 }
 
+TEST_F(DurableToolboxTest, PluginsCanRegisterVirtualModelsThatEndWithTheToolbox) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_router/libhello_router.so"};
+    startup.noMcp = true;
+    IModelRuntime& models = m_services->models().models();
+    {
+        const auto toolbox = open(startup);
+        EXPECT_TRUE(toolbox->diagnostics().empty());
+        const std::optional<Model> model = models.find("hello-router", "auto");
+        ASSERT_TRUE(model.has_value());
+        EXPECT_EQ(model->api, "pi-virtual");
+        EXPECT_EQ(model->contextWindow, 128000);
+        EXPECT_TRUE(models.hasConfiguredAuth("hello-router"));
+        ASSERT_TRUE(toolbox->reload().has_value());
+        EXPECT_TRUE(models.find("hello-router", "auto").has_value());
+    }
+    EXPECT_FALSE(models.find("hello-router", "auto").has_value());
+}
+
 TEST_F(DurableToolboxTest, PluginsCanRegisterMcpServersThatGoAwayWithTheToolbox) {
     CodingStartupOptions startup;
     startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};

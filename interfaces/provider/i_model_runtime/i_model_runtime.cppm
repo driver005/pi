@@ -8,11 +8,15 @@ export import pi.types.deferred_handle;
 export import pi.types.json;
 export import pi.types.model;
 export import pi.types.result;
+export import pi.types.virtual_model_definition;
+export import pi.types.virtual_resolve_request;
+export import pi.types.virtual_route;
 
 /**
  * The model catalog plus request-time authentication. Combines built-in providers, models.json
  * and plugin-registered providers; resolves credentials per request and routes streams to the
- * wire-API implementation of the model.
+ * wire-API implementation of the model. Virtual models (api `pi-virtual`) are listed with the physical ones, but a provider
+ * never receives them: a router picks the physical model of each request (resolveVirtual).
  */
 export class IModelRuntime {
 public:
@@ -26,6 +30,8 @@ public:
     /** Models whose provider has usable credentials. */
     virtual std::vector<Model> availableModels() = 0;
     virtual std::optional<Model> find(const std::string& provider, const std::string& id) const = 0;
+    /** The catalog model of that provider and id unless it is virtual. */
+    virtual std::optional<Model> physicalModel(const std::string& provider, const std::string& id) const = 0;
     virtual std::string providerName(const std::string& provider) const = 0;
     virtual std::vector<std::string> providerIds() const = 0;
 
@@ -62,4 +68,18 @@ public:
     /** Registers or replaces a provider from a models.json-style config (plugins). */
     virtual Result<void> registerProvider(const std::string& providerId, const Json& config) = 0;
     virtual void unregisterProvider(const std::string& providerId) = 0;
+
+    /**
+     * Registers or replaces a virtual model under `definition.provider`, which may also list physical models. Fails when the id
+     * is a physical model of that provider. A provider with only virtual models needs no credentials.
+     */
+    virtual Result<void> registerVirtualModel(VirtualModelDefinition definition) = 0;
+    virtual void unregisterVirtualModel(const std::string& provider, const std::string& id) = 0;
+
+    /**
+     * Asks the router of a virtual model for the physical model and thinking level of one request; fails when the model is not
+     * registered, the router fails or it answers with a virtual model or a model without credentials. The thinking level is
+     * clamped to the answer.
+     */
+    virtual Result<VirtualRoute> resolveVirtual(const VirtualResolveRequest& request) = 0;
 };

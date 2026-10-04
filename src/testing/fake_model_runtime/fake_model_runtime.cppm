@@ -2,6 +2,7 @@ export module pi.testing.fake_model_runtime;
 
 import std;
 export import pi.provider.i_model_runtime;
+export import pi.support.virtual_model_registry;
 
 /**
  * IModelRuntime with a fixed model list and a set of providers that have credentials. Streaming
@@ -50,14 +51,16 @@ public:
 
     std::vector<Model> models() const override {
         const std::lock_guard<std::mutex> lock(m_mutex);
-        return m_models;
+        std::vector<Model> all = m_models;
+        const std::vector<Model> virtualModels = m_virtual.models();
+        all.insert(all.end(), virtualModels.begin(), virtualModels.end());
+        return all;
     }
 
     std::vector<Model> availableModels() override {
-        const std::lock_guard<std::mutex> lock(m_mutex);
         std::vector<Model> out;
-        for (const auto& model : m_models) {
-            if (m_authenticated.contains(model.provider)) {
+        for (const auto& model : models()) {
+            if (hasConfiguredAuth(model.provider)) {
                 out.push_back(model);
             }
         }
@@ -65,6 +68,13 @@ public:
     }
 
     std::optional<Model> find(const std::string& provider, const std::string& id) const override {
+        if (auto virtualModel = m_virtual.find(provider, id)) {
+            return virtualModel;
+        }
+        return physicalModel(provider, id);
+    }
+
+    std::optional<Model> physicalModel(const std::string& provider, const std::string& id) const override {
         const std::lock_guard<std::mutex> lock(m_mutex);
         for (const auto& model : m_models) {
             if (model.provider == provider && model.id == id) {
@@ -79,8 +89,8 @@ public:
     }
 
     std::vector<std::string> providerIds() const override {
+        std::set<std::string> ids = m_virtual.providers();
         const std::lock_guard<std::mutex> lock(m_mutex);
-        std::set<std::string> ids;
         for (const auto& model : m_models) {
             ids.insert(model.provider);
         }
@@ -95,8 +105,9 @@ public:
     }
 
     bool hasConfiguredAuth(const std::string& provider) override {
+        const bool onlyVirtual = m_virtual.listsProvider(provider) && !listsPhysical(provider);
         const std::lock_guard<std::mutex> lock(m_mutex);
-        return m_authenticated.contains(provider);
+        return onlyVirtual || m_authenticated.contains(provider);
     }
 
     void setRuntimeApiKey(const std::string& provider, const std::string&) override {
@@ -159,6 +170,20 @@ public:
         m_registered.erase(providerId);
     }
 
+    Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
+        return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
+    }
+
+    void unregisterVirtualModel(const std::string& provider, const std::string& id) override {
+        m_virtual.remove(provider, id);
+    }
+
+    Result<VirtualRoute> resolveVirtual(const VirtualResolveRequest& request) override {
+        return m_virtual.resolve(
+            request, [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id); },
+            [this](const std::string& provider) { return hasConfiguredAuth(provider); });
+    }
+
     /** Providers registered through registerProvider and not unregistered since, by id. */
     std::map<std::string, Json> registeredProviders() const {
         const std::lock_guard<std::mutex> lock(m_mutex);
@@ -172,7 +197,13 @@ public:
     }
 
 private:
+    bool listsPhysical(const std::string& provider) const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return std::ranges::any_of(m_models, [&](const Model& model) { return model.provider == provider; });
+    }
+
     mutable std::mutex m_mutex;
+    VirtualModelRegistry m_virtual;
     std::vector<Model> m_models;
     std::set<std::string> m_authenticated;
     std::map<std::string, Json> m_registered;

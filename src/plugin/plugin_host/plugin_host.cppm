@@ -15,7 +15,10 @@ export import pi.plugin.i_hook_bus;
 export import pi.mcp.i_mcp_server_registrar;
 export import pi.plugin.i_plugin_host;
 export import pi.provider.i_model_runtime;
+export import pi.support.message_codec;
+export import pi.support.model_codec;
 export import pi.support.plugin_tool_factory;
+export import pi.support.thinking_level_resolver;
 export import pi.tool.i_tool_registry;
 export import pi.types.loaded_plugin;
 export import pi.types.plugin_context;
@@ -161,6 +164,18 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->unregisterMcpServer(*plugin, std::string(name.data, name.size));
         };
+        api.register_virtual_model = [](void* host, PiString definition, PiRouteFn route, void* userData) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerVirtualModel(*plugin, std::string(definition.data, definition.size), route, userData);
+        };
+        api.unregister_virtual_model = [](void* host, PiString provider, PiString id) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->unregisterVirtualModel(*plugin, std::string(provider.data, provider.size), std::string(id.data, id.size));
+        };
+        api.list_models = [](void* host) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->listModels();
+        };
     }
 
     void unload(LoadedPlugin& plugin) {
@@ -178,11 +193,17 @@ private:
                 m_models->unregisterProvider(name);
             }
         }
+        if (m_models != nullptr) {
+            for (const auto& [provider, id] : plugin.virtualModels) {
+                m_models->unregisterVirtualModel(provider, id);
+            }
+        }
         if (m_mcp != nullptr) {
             for (const std::string& name : plugin.mcpServers) {
                 m_mcp->unregisterServer(plugin.path, name);
             }
         }
+        plugin.virtualModels.clear();
         plugin.tools.clear();
         plugin.subscriptions.clear();
         plugin.providers.clear();
@@ -260,6 +281,134 @@ private:
         }
         m_mcp->unregisterServer(plugin.path, name);
         return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString registerVirtualModel(LoadedPlugin& plugin, const std::string& definitionText, PiRouteFn route, void* userData) {
+        if (m_models == nullptr) {
+            return owned(Json{{"error", "this host has no model registry"}});
+        }
+        const Json json = Json::parse(definitionText, nullptr, false);
+        if (route == nullptr || !json.is_object() || !json.contains("provider") || !json["provider"].is_string() || !json.contains("id") || !json["id"].is_string()) {
+            return owned(Json{{"error", "register_virtual_model needs a definition with provider and id and a route function"}});
+        }
+        VirtualModelDefinition definition;
+        definition.provider = json["provider"].get<std::string>();
+        definition.id = json["id"].get<std::string>();
+        definition.name = json.contains("name") && json["name"].is_string() ? json["name"].get<std::string>() : definition.id;
+        if (json.contains("thinkingLevels") && json["thinkingLevels"].is_array()) {
+            for (const Json& name : json["thinkingLevels"]) {
+                const auto level = name.is_string() ? m_levels.parseLevel(name.get<std::string>()) : std::nullopt;
+                if (!level) {
+                    return owned(Json{{"error", "unknown thinking level in thinkingLevels"}});
+                }
+                definition.thinkingLevels.push_back(*level);
+            }
+        }
+        if (json.contains("contextWindow") && json["contextWindow"].is_number_integer()) {
+            definition.contextWindow = json["contextWindow"].get<std::int64_t>();
+        }
+        if (json.contains("maxTokens") && json["maxTokens"].is_number_integer()) {
+            definition.maxTokens = json["maxTokens"].get<std::int64_t>();
+        }
+        if (json.contains("input") && json["input"].is_array()) {
+            for (const Json& kind : json["input"]) {
+                if (kind.is_string()) {
+                    definition.input.push_back(kind.get<std::string>());
+                }
+            }
+        }
+        const std::string provider = definition.provider;
+        const std::string id = definition.id;
+        definition.route = [this, route, userData](const VirtualRouteRequest& request) { return callRoute(route, userData, request); };
+        if (auto registered = m_models->registerVirtualModel(std::move(definition)); !registered) {
+            return owned(Json{{"error", registered.error().message}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const std::pair<std::string, std::string> key{provider, id};
+        if (std::ranges::find(plugin.virtualModels, key) == plugin.virtualModels.end()) {
+            plugin.virtualModels.push_back(key);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString unregisterVirtualModel(LoadedPlugin& plugin, const std::string& provider, const std::string& id) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = std::ranges::find(plugin.virtualModels, std::pair<std::string, std::string>{provider, id});
+        if (m_models == nullptr || found == plugin.virtualModels.end()) {
+            return owned(Json{{"error", "virtual model \"" + provider + "/" + id + "\" was not registered by this plugin"}});
+        }
+        plugin.virtualModels.erase(found);
+        m_models->unregisterVirtualModel(provider, id);
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString listModels() {
+        Json models = Json::array();
+        if (m_models != nullptr) {
+            for (const Model& model : m_models->availableModels()) {
+                if (model.api == "pi-virtual") {
+                    continue;
+                }
+                models.push_back(Json{{"provider", model.provider}, {"id", model.id}, {"name", model.name}, {"reasoning", model.reasoning}, {"input", model.input}, {"contextWindow", model.contextWindow}, {"maxTokens", model.maxTokens}});
+            }
+        }
+        return owned(models);
+    }
+
+    /** Asks the plugin's router; the request and the answer travel as JSON (see PiRouteFn). */
+    Result<VirtualRoute> callRoute(PiRouteFn route, void* userData, const VirtualRouteRequest& request) const {
+        Json json = Json::object({{"model", m_modelCodec.toJson(request.model)},
+                                  {"thinkingLevel", m_levels.levelName(request.thinkingLevel)},
+                                  {"reason", request.reason},
+                                  {"messages", m_messageCodec.toJson(request.messages)}});
+        if (request.previous) {
+            json["previous"] = selectionJson(request.previous->model, request.previous->thinkingLevel);
+        }
+        if (request.failed) {
+            Json failed = selectionJson(request.failed->model, request.failed->thinkingLevel);
+            failed["message"] = m_messageCodec.toJson(request.failed->message);
+            json["failed"] = std::move(failed);
+        }
+        if (!request.state.is_null()) {
+            json["state"] = request.state;
+        }
+        const std::string text = json.dump(-1, ' ', false, Json::error_handler_t::replace);
+        PiOwnedString raw = route(userData, PiString{text.data(), text.size()}, reinterpret_cast<const PiAbort*>(request.signal.get()));
+        const bool empty = raw.data == nullptr || raw.size == 0;
+        const std::string answerText = takeString(raw);
+        if (empty) {
+            return std::unexpected(Error{"plugin", "the router returned nothing"});
+        }
+        const Json answer = Json::parse(answerText, nullptr, false);
+        if (!answer.is_object()) {
+            return std::unexpected(Error{"plugin", "the router returned invalid JSON"});
+        }
+        if (answer.contains("error")) {
+            return std::unexpected(Error{"plugin", answer["error"].is_string() ? answer["error"].get<std::string>() : "the router failed"});
+        }
+        if (!answer.contains("model") || !answer["model"].is_object() || !answer["model"].contains("provider") || !answer["model"]["provider"].is_string() || !answer["model"].contains("id") || !answer["model"]["id"].is_string()) {
+            return std::unexpected(Error{"plugin", "the router must answer {model: {provider, id}, thinkingLevel}"});
+        }
+        VirtualRoute out;
+        out.model.provider = answer["model"]["provider"].get<std::string>();
+        out.model.id = answer["model"]["id"].get<std::string>();
+        const auto level = answer.contains("thinkingLevel") && answer["thinkingLevel"].is_string() ? m_levels.parseLevel(answer["thinkingLevel"].get<std::string>()) : std::optional<ThinkingLevel>(ThinkingLevel::Off);
+        if (!level) {
+            return std::unexpected(Error{"plugin", "the router answered an unknown thinking level"});
+        }
+        out.thinkingLevel = *level;
+        if (answer.contains("state") && answer["state"] != request.state) {
+            out.state = answer["state"];
+        }
+        return out;
+    }
+
+    Json selectionJson(const Model& model, const std::optional<ThinkingLevel>& level) const {
+        Json out = Json::object({{"model", m_modelCodec.toJson(model)}});
+        if (level) {
+            out["thinkingLevel"] = m_levels.levelName(*level);
+        }
+        return out;
     }
 
     PiOwnedString subscribe(LoadedPlugin& plugin, const std::string& event, PiHookFn handler, void* userData) {
@@ -383,6 +532,9 @@ private:
     ILogger& m_logger;
     PluginContext m_context;
     PluginToolFactory m_factory;
+    ModelCodec m_modelCodec;
+    MessageCodec m_messageCodec;
+    ThinkingLevelResolver m_levels;
     IModelRuntime* m_models;
     IMcpServerRegistrar* m_mcp;
     mutable std::mutex m_mutex;

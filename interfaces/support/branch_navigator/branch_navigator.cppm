@@ -13,6 +13,7 @@ export import pi.types.agent_loop_config;
 export import pi.types.forkable_message;
 export import pi.types.navigate_tree_options;
 export import pi.types.navigate_tree_result;
+export import pi.types.routed_selection;
 
 /**
  * Moves the session's current position to another entry of the tree, optionally summarizing the
@@ -34,6 +35,16 @@ public:
     /** Plugin events to fire; nullptr (the default) fires none. The pointee must outlive the navigator. */
     void setEvents(PluginSessionEvents* events) {
         m_events = events;
+    }
+
+    /**
+     * The model and thinking level that write the summary: the agent's by default. A host with virtual models routes the
+     * request here, so the summary is sized and sent for the physical model; an error fails the navigation.
+     */
+    using SummaryModel = std::function<Result<RoutedSelection>()>;
+
+    void setSummaryModel(SummaryModel source) {
+        m_summaryModel = std::move(source);
     }
 
     /** The caller has checked that no run or compaction is active. */
@@ -85,8 +96,13 @@ public:
             }
         }
         if (options.summarize && !summary && !collected.entries.empty()) {
+            auto selection = m_summaryModel ? m_summaryModel() : Result<RoutedSelection>(RoutedSelection{m_agent.model(), m_agent.thinkingLevel()});
+            if (!selection) {
+                finishSummary();
+                return std::unexpected(selection.error());
+            }
             const BranchSummaryResult generated =
-                m_summarizer.summarize(collected.entries, summaryOptions(options, signal));
+                m_summarizer.summarize(collected.entries, summaryOptions(options, signal, *selection));
             const std::lock_guard<std::mutex> lock(m_mutex);
             m_signal.reset();
             if (generated.aborted) {
@@ -179,11 +195,11 @@ private:
         return text;
     }
 
-    BranchSummaryOptions summaryOptions(const NavigateTreeOptions& options, const std::shared_ptr<AbortSignal>& signal) const {
+    BranchSummaryOptions summaryOptions(const NavigateTreeOptions& options, const std::shared_ptr<AbortSignal>& signal, const RoutedSelection& selection) const {
         BranchSummaryOptions out;
-        out.summarization.model = m_agent.model();
+        out.summarization.model = selection.model;
         out.summarization.stream.signal = signal;
-        out.summarization.thinkingLevel = m_agent.thinkingLevel();
+        out.summarization.thinkingLevel = selection.thinkingLevel.value_or(ThinkingLevel::Off);
         out.summarization.streamFn = m_streamFn;
         out.summarization.retry = m_settings.view().retryPolicy();
         out.summarization.callbacks = m_reporter.callbacks("branchSummary", "");
@@ -243,6 +259,7 @@ private:
     StreamFn m_streamFn;
     SummarizationRetryReporter m_reporter;
     PluginSessionEvents* m_events = nullptr;
+    SummaryModel m_summaryModel;
 
     mutable std::mutex m_mutex;
     std::shared_ptr<AbortSignal> m_signal;

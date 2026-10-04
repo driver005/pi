@@ -302,3 +302,101 @@ TEST_F(ModelRuntimeTest, ProvidersWithoutDeferredSupportRefuseCleanly) {
     ASSERT_FALSE(cancelled.has_value());
     EXPECT_EQ(cancelled.error().message, "Provider openai does not support deferred responses");
 }
+
+class VirtualModelRuntimeTest : public ModelRuntimeTest {
+protected:
+    VirtualModelDefinition definition(const std::string& provider, const std::string& id, const std::string& target) {
+        VirtualModelDefinition out;
+        out.provider = provider;
+        out.id = id;
+        out.name = "Auto";
+        out.thinkingLevels = {ThinkingLevel::Low, ThinkingLevel::High};
+        out.route = [this, target](const VirtualRouteRequest& request) -> Result<VirtualRoute> {
+            m_seen = request;
+            VirtualRoute route;
+            route.model.provider = "openai";
+            route.model.id = target;
+            route.thinkingLevel = ThinkingLevel::High;
+            return route;
+        };
+        return out;
+    }
+
+    VirtualRouteRequest m_seen;
+};
+
+TEST_F(VirtualModelRuntimeTest, VirtualModelsAreListedNextToThePhysicalOnesOfTheirProvider) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.registerVirtualModel(definition("openai", "auto", "gpt-a")).has_value());
+    const auto found = m_runtime.find("openai", "auto");
+    ASSERT_TRUE(found.has_value());
+    EXPECT_EQ(found->api, "pi-virtual");
+    EXPECT_FALSE(m_runtime.physicalModel("openai", "auto").has_value());
+    EXPECT_TRUE(m_runtime.physicalModel("openai", "gpt-a").has_value());
+    EXPECT_EQ(m_runtime.models().size(), 3U);
+    // Availability follows the provider's credentials.
+    EXPECT_FALSE(m_runtime.hasConfiguredAuth("openai"));
+    for (const Model& model : m_runtime.availableModels()) {
+        EXPECT_NE(model.provider, "openai");
+    }
+    m_runtime.setRuntimeApiKey("openai", "sk-test");
+    EXPECT_EQ(m_runtime.availableModels().size(), 2U);
+    m_runtime.unregisterVirtualModel("openai", "auto");
+    EXPECT_FALSE(m_runtime.find("openai", "auto").has_value());
+    EXPECT_EQ(m_runtime.models().size(), 2U);
+}
+
+TEST_F(VirtualModelRuntimeTest, AProviderOfOnlyVirtualModelsNeedsNoCredentials) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.registerVirtualModel(definition("router", "auto", "gpt-a")).has_value());
+    EXPECT_TRUE(m_runtime.hasConfiguredAuth("router"));
+    EXPECT_EQ(m_runtime.authStatus("router").source, "virtual");
+    const auto ids = m_runtime.providerIds();
+    EXPECT_NE(std::ranges::find(ids, "router"), ids.end());
+    const auto available = m_runtime.availableModels();
+    EXPECT_EQ(std::ranges::count_if(available, [](const Model& model) { return model.provider == "router"; }), 1);
+    m_runtime.unregisterVirtualModel("router", "auto");
+    EXPECT_FALSE(m_runtime.hasConfiguredAuth("router"));
+}
+
+TEST_F(VirtualModelRuntimeTest, ARegistrationCannotShadowAPhysicalModelIdButHidesALaterOne) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    const auto rejected = m_runtime.registerVirtualModel(definition("openai", "gpt-a", "gpt-a"));
+    ASSERT_FALSE(rejected.has_value());
+    EXPECT_NE(rejected.error().message.find("conflicts with a physical model"), std::string::npos);
+}
+
+TEST_F(VirtualModelRuntimeTest, RequestsAreRoutedToACatalogModelWithCredentials) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.registerVirtualModel(definition("router", "auto", "gpt-a")).has_value());
+    VirtualResolveRequest request;
+    request.model = *m_runtime.find("router", "auto");
+    request.thinkingLevel = ThinkingLevel::Low;
+    request.reason = "user";
+    auto route = m_runtime.resolveVirtual(request);
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("has no credentials"), std::string::npos);
+    m_runtime.setRuntimeApiKey("openai", "sk-test");
+    route = m_runtime.resolveVirtual(request);
+    ASSERT_TRUE(route.has_value()) << route.error().message;
+    EXPECT_EQ(route->model.id, "gpt-a");
+    EXPECT_EQ(route->thinkingLevel, ThinkingLevel::Off);
+    EXPECT_EQ(m_seen.thinkingLevel, ThinkingLevel::Low);
+    EXPECT_EQ(m_seen.reason, "user");
+}
+
+TEST_F(VirtualModelRuntimeTest, ARouterCannotRouteToAVirtualModelAndUnroutedStreamsFail) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.registerVirtualModel(definition("router", "first", "second")).has_value());
+    ASSERT_TRUE(m_runtime.registerVirtualModel(definition("openai", "second", "second")).has_value());
+    m_runtime.setRuntimeApiKey("openai", "sk-test");
+    VirtualResolveRequest request;
+    request.model = *m_runtime.find("router", "first");
+    const auto route = m_runtime.resolveVirtual(request);
+    ASSERT_FALSE(route.has_value());
+    EXPECT_NE(route.error().message.find("not a physical model"), std::string::npos);
+
+    const AssistantMessage message = run(*m_runtime.find("router", "first"), StreamOptions{});
+    EXPECT_EQ(message.stopReason, StopReason::Error);
+    EXPECT_NE(message.errorMessage->find("must be routed before streaming"), std::string::npos);
+}

@@ -31,6 +31,16 @@ public:
           m_sink(sink) {}
 
     /**
+     * The model whose limits (context window, max tokens) the compaction checks use: the selected model by default. A host with
+     * virtual models points this at the physical model that produced `message` (nullptr: the latest response).
+     */
+    using LimitsSource = std::function<Model(const AssistantMessage* message)>;
+
+    void setLimitsSource(LimitsSource source) {
+        m_limits = std::move(source);
+    }
+
+    /**
      * last is the final assistant message of the run. Returns true when the caller should
      * continue the agent (retry, overflow recovery or queued messages).
      */
@@ -42,7 +52,7 @@ public:
         if (!last) {
             return m_agent.hasQueuedMessages();
         }
-        const std::int64_t window = m_agent.model().contextWindow;
+        const std::int64_t window = limitsModel(&*last).contextWindow;
         if (m_retry.isRetryable(*last, window) && m_retry.prepareRetry(*last)) {
             if (abortRequested()) {
                 m_retry.finishCancelled();
@@ -65,7 +75,7 @@ public:
 
     /** The compaction check alone, also run before a prompt for an aborted last response. */
     bool checkCompaction(const AssistantMessage& message, bool skipAbortedCheck, const std::vector<ToolResultMessage>& toolResults) {
-        const Model model = m_agent.model();
+        const Model model = limitsModel(&message);
         const CompactionSettings settings = m_settings.view().compactionSettings(model.provider, model.id);
         const std::vector<SessionEntry> branch = m_session.branchPath();
         const SessionProjection projection = m_session.buildSessionProjection();
@@ -99,7 +109,7 @@ public:
      */
     std::vector<AgentMessage> contextForNextResponse() {
         const SessionProjection projection = m_session.buildSessionProjection();
-        const Model model = m_agent.model();
+        const Model model = limitsModel(nullptr);
         if (model.id.empty() || model.contextWindow <= 0) {
             return projection.messages;
         }
@@ -118,6 +128,10 @@ public:
     }
 
 private:
+    Model limitsModel(const AssistantMessage* message) const {
+        return m_limits ? m_limits(message) : m_agent.model();
+    }
+
     bool applyOverflow(const CompactionDecision& decision, const AssistantMessage& message, const std::vector<ToolResultMessage>& toolResults) {
         if (decision.action == CompactionAction::OverflowNoRetry) {
             return m_compaction.runAuto("overflow", false);
@@ -153,4 +167,5 @@ private:
     AgentTokenEstimator m_estimator;
     MessageEntryLocator m_locator;
     std::atomic<bool> m_overflowRecoveryAttempted{false};
+    LimitsSource m_limits;
 };
