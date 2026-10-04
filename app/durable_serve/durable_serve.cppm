@@ -11,6 +11,7 @@ import pi.serve.durable_session_opener;
 import pi.session.resource_loader;
 import pi.session.settings_manager;
 import pi.support.model_selector;
+import pi.support.package_manager;
 import pi.support.resource_set_cache;
 import pi.support.tool_set_cache;
 import pi.tools.bash_tool;
@@ -126,6 +127,10 @@ private:
         options.additionalPromptTemplatePaths = m_startup.promptTemplatePaths;
         const std::shared_ptr<SettingsManager> settings = settingsFor(cwd);
         ResourceLoader loader(std::move(options), *settings, m_services.platform().files());
+        PlatformServices& platform = m_services.platform();
+        PackageManager packages(platform.files(), platform.processes(), *settings, cwd, m_agentDir);
+        const PackagePaths found = packages.load(true);
+        loader.addPaths(m_startup.noSkills ? std::vector<std::string>{} : found.skills, m_startup.noPromptTemplates ? std::vector<std::string>{} : found.prompts);
         (void)loader.reload();
         return loader.resources();
     }

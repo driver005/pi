@@ -175,6 +175,40 @@ TEST_F(CodingSessionHandleTest, ProjectPluginsLoadOnlyWhenTheProjectIsTrusted) {
     EXPECT_NE(std::find(active.begin(), active.end(), "hello"), active.end());
 }
 
+TEST_F(CodingSessionHandleTest, PackagesContributeSkillsPromptTemplatesAndPlugins) {
+    const std::string package = m_dir + "/pkg";
+    std::filesystem::create_directories(package + "/skills/greet");
+    std::filesystem::create_directories(package + "/prompts");
+    std::filesystem::create_directories(package + "/plugins");
+    std::ofstream(package + "/skills/greet/SKILL.md") << "---\nname: greet\ndescription: Greets people\n---\nSay hello.\n";
+    std::ofstream(package + "/prompts/review.md") << "---\ndescription: Review code\n---\nReview $1\n";
+    std::filesystem::copy_file("plugins/hello_tool/libhello_tool.so", package + "/plugins/libhello_tool.so");
+    std::filesystem::create_directories(m_dir + "/agent");
+    std::ofstream(m_dir + "/agent/settings.json") << R"({"packages":["../pkg"]})";
+    const auto handle = open({});
+    EXPECT_TRUE(handle->diagnostics().empty());
+    std::vector<std::string> commands;
+    for (const SlashCommandInfo& command : handle->session().slashCommands()) {
+        commands.push_back(command.name);
+    }
+    EXPECT_NE(std::ranges::find(commands, "skill:greet"), commands.end());
+    EXPECT_NE(std::ranges::find(commands, "review"), commands.end());
+    const auto active = handle->session().activeToolNames();
+    EXPECT_NE(std::ranges::find(active, "hello"), active.end());
+
+    CodingStartupOptions bare;
+    bare.noSkills = true;
+    bare.noPromptTemplates = true;
+    bare.noPlugins = true;
+    const auto without = open(bare);
+    const auto bareTools = without->session().activeToolNames();
+    EXPECT_EQ(std::ranges::find(bareTools, "hello"), bareTools.end());
+    for (const SlashCommandInfo& command : without->session().slashCommands()) {
+        EXPECT_NE(command.name, "review");
+        EXPECT_NE(command.name, "skill:greet");
+    }
+}
+
 TEST_F(CodingSessionHandleTest, BrokenPluginsAreDiagnostics) {
     CodingStartupOptions options;
     options.pluginPaths = {"/definitely/not/a/plugin.so"};

@@ -14,6 +14,7 @@ pi_module(
         "//interfaces/support/mcp_config_loader",
         "//interfaces/support/mcp_result_converter",
         "//interfaces/support/mcp_tool_namer",
+        "//interfaces/support/package_manager",
         "//interfaces/support/plugin_discovery",
         "//interfaces/tool/i_tool",
         "//interfaces/types/coding_startup_options",

@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "package_entries",
+    deps = [
+        "//interfaces/support/package_source_parser",
+        "//interfaces/types/configured_package",
+        "//interfaces/types/json",
+    ],
+)

@@ -15,6 +15,7 @@ pi_module(
         "//interfaces/support/mcp_oauth_providers",
         "//interfaces/support/mcp_result_converter",
         "//interfaces/support/mcp_tool_namer",
+        "//interfaces/support/package_manager",
         "//interfaces/support/plugin_discovery",
         "//interfaces/support/model_selector",
         "//interfaces/types/coding_startup_options",

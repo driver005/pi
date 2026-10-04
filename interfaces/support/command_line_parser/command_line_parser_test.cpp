@@ -163,6 +163,26 @@ TEST_F(CommandLineParserTest, RejectsMalformedAuthCommands) {
     }
 }
 
+TEST_F(CommandLineParserTest, ParsesThePackageCommands) {
+    const auto install = parse({"install", "git:github.com/a/b@v1", "-l"});
+    ASSERT_TRUE(install.has_value()) << install.error().message;
+    EXPECT_EQ(install->command, "install");
+    EXPECT_EQ(install->arguments, std::vector<std::string>{"git:github.com/a/b@v1"});
+    EXPECT_TRUE(install->localPackages);
+    EXPECT_FALSE(parse({"remove", "./x"})->localPackages);
+    EXPECT_TRUE(parse({"update"})->arguments.empty());
+    EXPECT_EQ(parse({"update", "x"})->arguments, std::vector<std::string>{"x"});
+    EXPECT_EQ(parse({"list", "--local"})->command, "list");
+}
+
+TEST_F(CommandLineParserTest, RejectsMalformedPackageCommands) {
+    for (const std::vector<std::string>& args : std::vector<std::vector<std::string>>{{"install"}, {"install", "a", "b"}, {"remove"}, {"update", "a", "b"}, {"list", "x"}}) {
+        const auto line = parse(args);
+        ASSERT_FALSE(line.has_value());
+        EXPECT_NE(line.error().message.find("Usage: pi install"), std::string::npos);
+    }
+}
+
 TEST_F(CommandLineParserTest, OtherCommandsTakeNoPositionalArguments) {
     const auto line = parse({"serve", "extra"});
     ASSERT_FALSE(line.has_value());

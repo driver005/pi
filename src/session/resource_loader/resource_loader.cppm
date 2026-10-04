@@ -26,6 +26,12 @@ public:
           m_templates(files),
           m_contextFiles(files) {}
 
+    /** More skill and prompt template paths (a package's files) for the next reload(); call it before loading, not while another thread reloads. */
+    void addPaths(const std::vector<std::string>& skills, const std::vector<std::string>& prompts) {
+        m_options.additionalSkillPaths.insert(m_options.additionalSkillPaths.end(), skills.begin(), skills.end());
+        m_options.additionalPromptTemplatePaths.insert(m_options.additionalPromptTemplatePaths.end(), prompts.begin(), prompts.end());
+    }
+
     LoadedResources resources() const override {
         const std::lock_guard<std::mutex> lock(m_mutex);
         return m_loaded;

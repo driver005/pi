@@ -3,7 +3,7 @@ export module pi.testing.fake_settings_manager;
 import std;
 export import pi.session.i_settings_manager;
 
-/** In-memory ISettingsManager: writes change the effective settings directly, nothing is saved. */
+/** In-memory ISettingsManager: global writes change the effective settings directly, nothing is saved. */
 export class FakeSettingsManager : public ISettingsManager {
 public:
     explicit FakeSettingsManager(Json initial = Json::object())
@@ -19,7 +19,8 @@ public:
     }
 
     Json projectSettings() const override {
-        return Json::object();
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_project;
     }
 
     SettingsView view() const override {
@@ -61,12 +62,17 @@ public:
         return {};
     }
 
+    /** Project settings are kept apart from the (merged) effective settings. */
     Result<void> setProject(const std::string& field, const Json& value) override {
-        return setGlobal(field, value);
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_project[field] = value;
+        return {};
     }
 
     Result<void> removeProject(const std::string& field) override {
-        return removeGlobal(field);
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_project.erase(field);
+        return {};
     }
 
     std::vector<SettingsError> drainErrors() override {
@@ -80,5 +86,6 @@ public:
 private:
     mutable std::mutex m_mutex;
     Json m_settings;
+    Json m_project = Json::object();
     bool m_trusted = true;
 };

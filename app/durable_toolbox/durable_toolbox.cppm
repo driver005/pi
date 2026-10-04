@@ -15,6 +15,7 @@ import pi.support.mcp_config_loader;
 import pi.support.mcp_oauth_providers;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
+import pi.support.package_manager;
 import pi.support.plugin_discovery;
 import pi.tools.tool_registry;
 
@@ -154,6 +155,13 @@ private:
                 paths.push_back(std::move(path));
             }
         }
+        PlatformServices& platform = m_services.platform();
+        PackageManager packages(platform.files(), platform.processes(), m_settings, m_cwd, m_agentDir);
+        PackagePaths fromPackages = packages.load(true);
+        for (const std::string& problem : fromPackages.warnings) {
+            addDiagnostic(problem);
+        }
+        paths.insert(paths.end(), fromPackages.plugins.begin(), fromPackages.plugins.end());
         paths.insert(paths.end(), startup.pluginPaths.begin(), startup.pluginPaths.end());
         for (const Error& error : m_plugins.load(paths)) {
             addDiagnostic("Plugin: " + error.message);

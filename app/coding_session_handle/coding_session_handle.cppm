@@ -18,6 +18,7 @@ import pi.support.mcp_config_loader;
 import pi.support.mcp_oauth_providers;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
+import pi.support.package_manager;
 import pi.support.plugin_discovery;
 import pi.support.model_selector;
 import pi.tools.bash_tool;
@@ -59,6 +60,7 @@ public:
           m_mcpConnector(services.platform().children(), services.platform().http(), services.platform().sleeper(), services.platform().files(), m_configValues, [this](const std::string& provider) { return providerToken(provider); }, &m_oauth) {
         resolveTrust(options);
         registerTools();
+        loadPackages(options);
         loadPlugins(options);
         startMcp(options);
         if (auto loaded = m_resources.reload(); !loaded) {
@@ -206,6 +208,18 @@ private:
         m_session = std::make_unique<AgentSession>(std::move(config));
     }
 
+    /** Skills and prompt templates of the configured packages join the resource loader; plugins load with the others. */
+    void loadPackages(const CodingStartupOptions& options) {
+        PlatformServices& platform = m_services.platform();
+        PackageManager packages(platform.files(), platform.processes(), m_settings, m_cwd, m_agentDir);
+        PackagePaths found = packages.load(true);
+        for (const std::string& problem : found.warnings) {
+            warn(problem);
+        }
+        m_resources.addPaths(options.noSkills ? std::vector<std::string>{} : found.skills, options.noPromptTemplates ? std::vector<std::string>{} : found.prompts);
+        m_packagePlugins = std::move(found.plugins);
+    }
+
     void loadPlugins(const CodingStartupOptions& options) {
         if (options.noPlugins) {
             return;
@@ -216,6 +230,7 @@ private:
                 paths.push_back(std::move(path));
             }
         }
+        paths.insert(paths.end(), m_packagePlugins.begin(), m_packagePlugins.end());
         paths.insert(paths.end(), options.pluginPaths.begin(), options.pluginPaths.end());
         for (const Error& error : m_plugins.load(paths)) {
             warn("Plugin: " + error.message);
@@ -294,6 +309,7 @@ private:
     ToolRegistry m_tools;
     HookBus m_hooks;
     PluginDiscovery m_pluginDiscovery;
+    std::vector<std::string> m_packagePlugins;
     PluginHost m_plugins;
     BashCommandExecutor m_bash;
     ModelSelector m_selector;

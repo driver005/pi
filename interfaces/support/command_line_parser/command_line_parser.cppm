@@ -28,7 +28,7 @@ public:
         while (index < args.size()) {
             const std::string flag = args[index++];
             if (!flag.starts_with("-")) {
-                if (line.command != "mcp" && line.command != "auth") {
+                if (!takesArguments(line.command)) {
                     return std::unexpected(Error{"usage", "Unexpected argument \"" + flag + "\""});
                 }
                 line.arguments.push_back(flag);
@@ -48,8 +48,11 @@ public:
         }
         if (line.help) {
             line.command.clear();
-        } else if (line.command != "rpc" && line.command != "serve" && line.command != "mcp" && line.command != "auth") {
+        } else if (line.command != "rpc" && line.command != "serve" && !takesArguments(line.command)) {
             return std::unexpected(Error{"usage", "Unknown command \"" + line.command + "\""});
+        }
+        if (const auto valid = validatePackages(line); !valid) {
+            return std::unexpected(valid.error());
         }
         if (line.command == "mcp") {
             if (auto valid = validateMcp(line.arguments); !valid) {
@@ -68,12 +71,14 @@ public:
     }
 
     std::string usage() const {
-        return "Usage: pi rpc|serve|mcp|auth [options]\n"
+        return "Usage: pi rpc|serve|mcp|auth|install|remove|update|list [options]\n"
                "\n"
                "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
                "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
                "auth   pi auth list | status | login <provider> | logout <provider>: sign in to subscription providers.\n"
+               "install, remove, update, list   pi install|remove <source> [-l], pi update [source], pi list: manage packages\n"
+               "                                (skills, prompt templates and plugins from git repositories and local directories).\n"
                "\n"
                "Options:\n"
                "  --cwd <dir>                   Working directory (default: current directory)\n"
@@ -102,6 +107,7 @@ public:
                "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
                "  --method <id>                 auth login: sign-in method (browser, copy_code, device_code)\n"
                "  --manual                      auth login: paste the code instead of using the local callback\n"
+               "  --local, -l                   install, remove: use the project settings instead of the global ones\n"
                "  --server-dir <dir>            serve: profile and socket directory (default: $PI_SERVER_DIR or ~/.pi/server)\n"
                "  --server-id <uuid>            serve: logical server id (default: $PI_SERVER_ID or the directory's default)\n"
                "  --session-tree                serve: keep sessions as session trees instead of durable (SQLite) sessions\n"
@@ -140,6 +146,8 @@ private:
             line.sessionTree = true;
         } else if (flag == "--manual") {
             line.loginManual = true;
+        } else if (flag == "--local" || flag == "-l") {
+            line.localPackages = true;
         } else {
             return std::unexpected(Error{"usage", "Unknown option " + flag});
         }
@@ -197,6 +205,23 @@ private:
             return std::unexpected(Error{"usage", "--mcp-wait expects a number of milliseconds"});
         }
         startup.mcpStartupWaitMs = milliseconds;
+        return {};
+    }
+
+    bool takesArguments(const std::string& command) const {
+        return command == "mcp" || command == "auth" || command == "install" || command == "remove" || command == "update" || command == "list";
+    }
+
+    Result<void> validatePackages(const CommandLine& line) const {
+        const std::string& command = line.command;
+        if (command != "install" && command != "remove" && command != "update" && command != "list") {
+            return {};
+        }
+        const std::size_t count = line.arguments.size();
+        const bool valid = command == "update" ? count <= 1 : (command == "list" ? count == 0 : count == 1);
+        if (!valid) {
+            return std::unexpected(Error{"usage", "Usage: pi install <source> [-l] | pi remove <source> [-l] | pi update [source] | pi list"});
+        }
         return {};
     }
 

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "package_patterns",
+    deps = ["//interfaces/support/glob_matcher"],
+)

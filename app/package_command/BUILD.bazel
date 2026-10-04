@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "package_command",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/support/package_manager",
+        "//interfaces/types/command_line",
+        "//src/session/settings_manager",
+    ],
+)
