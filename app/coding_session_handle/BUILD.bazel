@@ -17,6 +17,7 @@ pi_module(
         "//interfaces/support/mcp_tool_namer",
         "//interfaces/support/package_manager",
         "//interfaces/support/plugin_discovery",
+        "//interfaces/support/plugin_session_bridge",
         "//interfaces/support/model_selector",
         "//interfaces/types/coding_startup_options",
         "//interfaces/types/session_runtime_request",
@@ -39,6 +40,7 @@ pi_module(
         "//src/ai/faux_provider",
     ],
     data = [
+        "//plugins/hello_commands",
         "//plugins/hello_router",
         "//plugins/hello_stream",
         "//plugins/hello_tool",

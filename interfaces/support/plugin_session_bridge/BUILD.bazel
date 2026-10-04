@@ -1,0 +1,27 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_session_bridge",
+    deps = [
+        "//interfaces/plugin/i_plugin_session_bridge",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_agent_session",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/model_codec",
+        "//interfaces/support/thinking_level_resolver",
+    ],
+    test_deps = [
+        "//src/session/agent_session",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fake_resource_loader",
+        "//src/testing/fake_settings_manager",
+        "//src/testing/scripted_tool",
+        "//src/testing/session_harness",
+        "//src/tools/tool_registry",
+        "//src/base/posix_file_system",
+        "//src/base/posix_process_runner",
+        "//src/base/boring_crypto",
+        "//src/base/system_environment",
+    ],
+)

@@ -196,6 +196,17 @@ public:
             return std::unexpected(Error{"compacting",
                                          "Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry."});
         }
+        if (options.expandPromptTemplates) {
+            if (const auto command = runPluginCommand(text)) {
+                if (!*command) {
+                    return std::unexpected(command->error());
+                }
+                if (options.onDisposition) {
+                    options.onDisposition(PromptDisposition::Handled);
+                }
+                return PromptDisposition::Handled;
+            }
+        }
         InputOutcome input;
         input.text = text;
         input.images = options.images;
@@ -279,6 +290,7 @@ public:
     }
 
     void abort() override {
+        abortPluginCommand();
         if (m_runActive) {
             m_abortRequested = true;
         }
@@ -418,6 +430,11 @@ public:
         }
         for (const auto& skill : resources.skills) {
             out.push_back(SlashCommandInfo{"skill:" + skill.name, skill.description, "skill", skill.sourceInfo});
+        }
+        if (m_config.commands != nullptr) {
+            for (const PluginCommandInfo& command : m_config.commands->commands()) {
+                out.push_back(SlashCommandInfo{command.name, command.description, "extension", SourceInfo{command.path, "extension", "temporary", "top-level", std::nullopt}});
+            }
         }
         return out;
     }
@@ -1172,6 +1189,38 @@ private:
         return name == "all" ? QueueMode::All : QueueMode::OneAtATime;
     }
 
+    /** `/name args` naming a plugin command runs it instead of reaching the model, even while the agent streams; nullopt when no plugin command is named. */
+    std::optional<Result<void>> runPluginCommand(const std::string& text) {
+        if (m_config.commands == nullptr || !text.starts_with("/")) {
+            return std::nullopt;
+        }
+        const std::size_t space = text.find(' ');
+        const std::string name = text.substr(1, space == std::string::npos ? std::string::npos : space - 1);
+        const std::string args = space == std::string::npos ? std::string() : text.substr(space + 1);
+        const auto signal = std::make_shared<AbortSignal>();
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandAbort = signal;
+        }
+        const auto outcome = m_config.commands->execute(name, args, signal);
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandAbort = nullptr;
+        }
+        return outcome;
+    }
+
+    void abortPluginCommand() {
+        std::shared_ptr<AbortSignal> signal;
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            signal = m_commandAbort;
+        }
+        if (signal) {
+            signal->abort();
+        }
+    }
+
     AgentSessionConfig m_config;
     AgentMessageConverter m_converter;
     AuthGuidance m_guidance;
@@ -1211,6 +1260,8 @@ private:
     std::unique_ptr<PostRunHandler> m_postRun;
 
     std::atomic<bool> m_runActive{false};
+    std::mutex m_commandMutex;
+    std::shared_ptr<AbortSignal> m_commandAbort;
     std::atomic<bool> m_abortRequested{false};
     std::mutex m_mutex;
     std::condition_variable m_idle;

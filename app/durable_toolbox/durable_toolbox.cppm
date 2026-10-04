@@ -167,6 +167,11 @@ private:
             addDiagnostic("Plugin: " + error.message);
             problems.push_back(error.message);
         }
+        for (const auto& [name, value] : startup.pluginFlags) {
+            if (const auto set = m_plugins.setFlag(name, value); !set) {
+                addDiagnostic(set.error().message);
+            }
+        }
         return problems;
     }
 

@@ -69,6 +69,12 @@ typedef PiOwnedString (*PiHookFn)(void* user_data, PiString event, PiString payl
  */
 typedef PiOwnedString (*PiRouteFn)(void* user_data, PiString request_json, const PiAbort* abort);
 
+/*
+ * Runs a command a plugin registered when the user prompts `/<name> <args>` (args: the text after the first space, possibly
+ * empty); the prompt is not sent to the model. Returns an empty PiOwnedString (data NULL) on success or {"error":".."}.
+ */
+typedef PiOwnedString (*PiCommandFn)(void* user_data, PiString args, const PiAbort* abort);
+
 /* One response being streamed by a provider's PiStreamFn; valid until that function returns. */
 typedef struct PiStreamSink PiStreamSink;
 
@@ -179,6 +185,52 @@ typedef struct PiHostApi {
      * Consecutive deltas of one kind form one block. Call it from the thread running `stream` only.
      */
     int (*stream_emit)(PiStreamSink* sink, PiString event_json);
+
+    /*
+     * Calls the session: `method` names an operation and params_json holds its arguments (an object; "{}" for none). Returns
+     * the result JSON or {"error":"..."}; before the session exists (during pi_plugin_init) every call answers
+     * {"error":"session not ready"}. Methods (the ExtensionAPI and ExtensionContext of TypeScript extensions):
+     *   sendMessage {customType, content, display?, details?, deliverAs?: "steer"|"followUp"|"nextTurn", triggerTurn?}
+     *   sendUserMessage {text, deliverAs?: "steer"|"followUp"}                   prompts the model (queued while streaming)
+     *   appendEntry {customType, data?}      setSessionName {name}      getSessionName {}      setLabel {entryId, label?}
+     *   getActiveTools {}      getAllTools {}      setActiveTools {names}      getCommands {}      getSettings {}
+     *   getModel {}      setModel {provider, id} -> {ok}      getThinkingLevel {}      setThinkingLevel {level}
+     *   isIdle {}  hasPendingMessages {}  isProjectTrusted {}  abort {}  getContextUsage {}  getSystemPrompt {}
+     *   compact {customInstructions?}        starts a compaction and returns at once
+     *   shutdown {}                          asks the host to end the session
+     *   waitForIdle {}  (newSession, switchSession and fork answer an error: they would dispose the plugin mid-call)
+     *   navigateTree {targetId, summarize?, customInstructions?, label?}  reload {}
+     *   sessionManager.getEntries {}  .getBranch {fromId?}  .getEntry {id}  .getLeafId {}  .getSessionId {}  .getCwd {}
+     *   getMcpServers {}                     the MCP servers and their state
+     * `abort` (may be NULL) cancels waiting methods (waitForIdle, compaction waits). Check `struct_size` covers `event_emit`.
+     */
+    PiOwnedString (*session_call)(void* host, PiString method, PiString params_json, const PiAbort* abort);
+
+    /*
+     * Registers a command (see PiCommandFn). options_json: {"description"?:".."}. Names are unique across plugins (the later
+     * registration is refused) and win over a prompt template of the same name. Ends with the plugin. Returns {"ok":true} or
+     * {"error":".."}.
+     */
+    PiOwnedString (*register_command)(void* host, PiString name, PiString options_json, PiCommandFn handler, void* user_data);
+
+    /*
+     * Declares a command line flag `--<name>`: options_json {"description"?, "type": "boolean"|"string", "default"?}. The value
+     * the user passed (or the default) is read with get_flag. A command line flag no plugin declares is reported as a startup warning.
+     */
+    PiOwnedString (*register_flag)(void* host, PiString name, PiString options_json);
+
+    /* {"value": true|false|"text"|null} for a flag this plugin registered (null: not given and no default). */
+    PiOwnedString (*get_flag)(void* host, PiString name);
+
+    /*
+     * The event bus plugins share (the `pi.events` of TypeScript extensions): handler(user_data, channel, data_json) runs for
+     * every event_emit on the channel, in subscription order, on the emitting thread; its result is ignored. Subscriptions
+     * end with the plugin.
+     */
+    PiOwnedString (*event_on)(void* host, PiString channel, PiHookFn handler, void* user_data);
+
+    /* Emits data on a channel to every subscriber (including the emitting plugin). Returns {"ok":true}. */
+    PiOwnedString (*event_emit)(void* host, PiString channel, PiString data_json);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "plugin_command_entry",
+    deps = ["//sdk:pi_plugin_abi"],
+)

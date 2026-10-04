@@ -115,6 +115,33 @@ still registered (otherwise it falls back to the physical model that answered la
 of the physical model that produced the latest response. Not ported: the footer display of the routed model and `ctx.modelRegistry`
 for routers (use `list_models`).
 
+### Commands, flags, session calls and the event bus
+
+`register_command(name, options, handler, user_data)` registers `/name args` (`options`: `{"description"?}`; the SDK's
+`Host::registerCommand`; `plugins/hello_commands` is an example). A prompt that starts with `/name` runs the handler with the text
+after the first space instead of reaching the model, before the `input` event and even while the agent streams; the prompt is
+answered `Handled`. A command wins over a prompt template of the same name, and names are unique across plugins. A handler that
+returns `{"error"}` makes the prompt fail with that message (TypeScript reports an extension error and swallows the prompt).
+`get_commands` lists them with source `extension`. They are available in `pi rpc` sessions; `pi serve`
+sessions do not dispatch them.
+
+`register_flag(name, options)` declares `--name` (`{"description"?, "type": "boolean"|"string", "default"?}`) and `get_flag(name)`
+reads its value (`{"value": ...}`: the command line value, else the default, else null). `pi rpc` and `pi serve` accept flags
+they do not know (`--name`, `--name value`, `--name=value`); once the plugins are loaded they are checked against the declared
+flags, and one no plugin declared (a plugin missing or disabled) becomes a startup warning diagnostic. A boolean flag takes no
+value (`true`/`false` accepted); a string flag requires one.
+
+`session_call(method, params, abort)` calls the session (the `ExtensionAPI`/`ExtensionContext` methods of TypeScript:
+`sendMessage`, `sendUserMessage`, `appendEntry`, `setSessionName`, `setLabel`, tools, model and thinking level, `compact`,
+`navigateTree`, `reload`, `waitForIdle`, `abort`, `sessionManager.*` reads, `getMcpServers`, ...; the full list is in
+`pi_plugin.h`). It answers `{"error": "session not ready"}` during `pi_plugin_init`. `newSession`, `switchSession`, `fork` and
+`shutdown` answer an error: replacing the session disposes the plugin while its handler is still running. Session calls
+are available in `pi rpc` sessions.
+
+`event_on(channel, handler, user_data)` and `event_emit(channel, data)` are the `pi.events` bus plugins share: handlers run on
+the emitting thread in subscription order (including the emitter's own) and end with the plugin. All of these were appended to
+`PiHostApi`; a plugin checks that `struct_size` covers `event_emit` (the SDK does).
+
 ### Hooks
 
 `subscribe(event, handler)` registers a handler; it returns the result JSON, or nothing for "no opinion". Handlers
@@ -149,8 +176,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
-between extensions. They can be added as new host API functions or events without breaking ABI version 1 because
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...). They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 
 ## Building a plugin

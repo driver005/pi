@@ -711,3 +711,149 @@ TEST_F(PluginHostStreamTest, WithoutAClockStreamProvidersCannotBeRegistered) {
     EXPECT_TRUE(m_host.load({"/plugins/s.so"}).empty());
     EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
 }
+
+std::string g_commandArgs;
+std::string g_eventData;
+std::string g_eventChannel;
+
+class RecordingBridge : public IPluginSessionBridge {
+public:
+    Json call(const std::string& method, const Json& params, const AbortSignal*) override {
+        m_calls.emplace_back(method, params);
+        return Json{{"echo", method}};
+    }
+
+    std::vector<std::pair<std::string, Json>> m_calls;
+};
+
+class PluginHostCommandsTest : public PluginHostTest {
+protected:
+    PluginHostCommandsTest() {
+        g_commandArgs.clear();
+        g_eventData.clear();
+        g_eventChannel.clear();
+    }
+
+    void provideCommandsPlugin(const std::string& path, bool second = false) {
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            PiCommandFn handler = [](void*, PiString args, const PiAbort*) {
+                g_commandArgs.assign(args.data, args.size);
+                return g_commandArgs == "boom" ? text(R"({"error":"it broke"})") : PiOwnedString{nullptr, 0, nullptr};
+            };
+            const std::string name = "greet";
+            const std::string options = R"({"description":"Greets"})";
+            g_lastReply = take(host->register_command(host->host, view(name), view(options), handler, nullptr));
+            const std::string loud = "loud";
+            const std::string loudOptions = R"({"type":"boolean","description":"Shout"})";
+            take(host->register_flag(host->host, view(loud), view(loudOptions)));
+            const std::string who = "who";
+            const std::string whoOptions = R"({"type":"string","default":"world"})";
+            take(host->register_flag(host->host, view(who), view(whoOptions)));
+            PiHookFn onEvent = [](void*, PiString channel, PiString data) {
+                g_eventChannel.assign(channel.data, channel.size);
+                g_eventData.assign(data.data, data.size);
+                return PiOwnedString{nullptr, 0, nullptr};
+            };
+            const std::string chan = "chan";
+            take(host->event_on(host->host, view(chan), onEvent, nullptr));
+            return 0;
+        };
+        PiPluginInitFn conflicting = [](const PiHostApi* host) {
+            g_host = host;
+            PiCommandFn handler = [](void*, PiString, const PiAbort*) { return PiOwnedString{nullptr, 0, nullptr}; };
+            const std::string name = "greet";
+            g_lastReply = take(host->register_command(host->host, view(name), view(std::string("{}")), handler, nullptr));
+            return 0;
+        };
+        PiPluginShutdownFn shutdown = []() { ++g_shutdowns; };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)},
+                                   {"pi_plugin_init", reinterpret_cast<void*>(second ? conflicting : init)},
+                                   {"pi_plugin_shutdown", reinterpret_cast<void*>(shutdown)}});
+    }
+
+    std::shared_ptr<AbortSignal> m_signal = std::make_shared<AbortSignal>();
+};
+
+TEST_F(PluginHostCommandsTest, ACommandRunsWithItsArgumentsAndAnErrorIsReturned) {
+    provideCommandsPlugin("/plugins/c.so");
+    ASSERT_TRUE(m_host.load({"/plugins/c.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    ASSERT_EQ(m_host.commands().size(), 1U);
+    EXPECT_EQ(m_host.commands()[0].name, "greet");
+    EXPECT_EQ(m_host.commands()[0].description, "Greets");
+    EXPECT_EQ(m_host.commands()[0].path, "/plugins/c.so");
+
+    const auto ran = m_host.execute("greet", "to you", m_signal);
+    ASSERT_TRUE(ran.has_value());
+    EXPECT_TRUE(ran->has_value());
+    EXPECT_EQ(g_commandArgs, "to you");
+
+    const auto broke = m_host.execute("greet", "boom", m_signal);
+    ASSERT_TRUE(broke.has_value());
+    ASSERT_FALSE(broke->has_value());
+    EXPECT_EQ(broke->error().message, "it broke");
+
+    EXPECT_FALSE(m_host.execute("unknown", "", m_signal).has_value());
+}
+
+TEST_F(PluginHostCommandsTest, CommandNamesAreUniqueAndEndWithThePlugin) {
+    provideCommandsPlugin("/plugins/c.so");
+    provideCommandsPlugin("/plugins/other.so", true);
+    ASSERT_TRUE(m_host.load({"/plugins/c.so", "/plugins/other.so"}).empty());
+    EXPECT_NE(Json::parse(g_lastReply)["error"].get<std::string>().find("already registered"), std::string::npos);
+    EXPECT_EQ(m_host.commands().size(), 1U);
+    m_host.shutdown();
+    EXPECT_TRUE(m_host.commands().empty());
+    EXPECT_TRUE(m_host.flags().empty());
+}
+
+TEST_F(PluginHostCommandsTest, FlagsTakeValuesFromTheCommandLine) {
+    provideCommandsPlugin("/plugins/c.so");
+    ASSERT_TRUE(m_host.load({"/plugins/c.so"}).empty());
+    EXPECT_EQ(m_host.flags().size(), 2U);
+    const auto read = [](const std::string& name) { return Json::parse(take(g_host->get_flag(g_host->host, view(name))))["value"]; };
+    EXPECT_TRUE(read("loud").is_null());
+    EXPECT_EQ(read("who"), "world");
+
+    EXPECT_TRUE(m_host.setFlag("loud", std::nullopt).has_value());
+    EXPECT_EQ(read("loud"), true);
+    EXPECT_TRUE(m_host.setFlag("loud", "false").has_value());
+    EXPECT_EQ(read("loud"), false);
+    EXPECT_FALSE(m_host.setFlag("loud", "maybe").has_value());
+    EXPECT_TRUE(m_host.setFlag("who", "you").has_value());
+    EXPECT_EQ(read("who"), "you");
+    EXPECT_FALSE(m_host.setFlag("who", std::nullopt).has_value());
+    const auto unknown = m_host.setFlag("nope", std::nullopt);
+    ASSERT_FALSE(unknown.has_value());
+    EXPECT_EQ(unknown.error().message, "Unknown option: --nope");
+}
+
+TEST_F(PluginHostCommandsTest, SessionCallsAnswerNotReadyUntilTheBridgeIsSet) {
+    provideCommandsPlugin("/plugins/c.so");
+    ASSERT_TRUE(m_host.load({"/plugins/c.so"}).empty());
+    const std::string method = "isIdle";
+    const std::string params = "{}";
+    EXPECT_EQ(Json::parse(take(g_host->session_call(g_host->host, view(method), view(params), nullptr)))["error"], "session not ready");
+
+    RecordingBridge bridge;
+    m_host.setSessionBridge(&bridge);
+    EXPECT_EQ(Json::parse(take(g_host->session_call(g_host->host, view(method), view(params), nullptr)))["echo"], "isIdle");
+    const std::string bad = "[1]";
+    take(g_host->session_call(g_host->host, view(method), view(bad), nullptr));
+    ASSERT_EQ(bridge.m_calls.size(), 2U);
+    EXPECT_TRUE(bridge.m_calls[1].second.is_object()) << "non-object params become {}";
+    m_host.setSessionBridge(nullptr);
+    EXPECT_EQ(Json::parse(take(g_host->session_call(g_host->host, view(method), view(params), nullptr)))["error"], "session not ready");
+}
+
+TEST_F(PluginHostCommandsTest, TheEventBusReachesSubscribers) {
+    provideCommandsPlugin("/plugins/c.so");
+    ASSERT_TRUE(m_host.load({"/plugins/c.so"}).empty());
+    const std::string channel = "chan";
+    const std::string data = R"({"n":1})";
+    EXPECT_EQ(Json::parse(take(g_host->event_emit(g_host->host, view(channel), view(data))))["ok"], true);
+    EXPECT_EQ(g_eventChannel, "chan");
+    EXPECT_EQ(g_eventData, data);
+}

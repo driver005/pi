@@ -63,7 +63,8 @@ TEST_F(CommandLineParserTest, HelpClearsTheCommand) {
 }
 
 TEST_F(CommandLineParserTest, ReportsUsageErrors) {
-    EXPECT_FALSE(parse({"--bogus"}).has_value());
+    EXPECT_FALSE(parse({"mcp", "list", "--bogus"}).has_value());
+    EXPECT_FALSE(parse({"-x"}).has_value());
     EXPECT_FALSE(parse({"--model"}).has_value());
     EXPECT_FALSE(parse({"serve2"}).has_value());
 }
@@ -85,6 +86,21 @@ TEST_F(CommandLineParserTest, PluginOptions) {
     EXPECT_EQ(line->options.startup.pluginPaths, (std::vector<std::string>{"/home/me/a.so", "/b.so"}));
     EXPECT_TRUE(line->options.startup.noPlugins);
     EXPECT_FALSE(parse({"rpc"})->options.startup.noPlugins);
+}
+
+TEST_F(CommandLineParserTest, UnknownFlagsOfRpcAndServeAreLeftToThePlugins) {
+    const auto line = parse({"rpc", "--verbose", "--plan", "fast", "--level=3", "--no-tools", "--last"});
+    ASSERT_TRUE(line.has_value());
+    const auto& flags = line->options.startup.pluginFlags;
+    ASSERT_EQ(flags.size(), 4U);
+    EXPECT_FALSE(flags.at("verbose").has_value());
+    EXPECT_EQ(flags.at("plan"), "fast");
+    EXPECT_EQ(flags.at("level"), "3");
+    EXPECT_FALSE(flags.at("last").has_value());
+    EXPECT_TRUE(line->options.startup.noTools);
+    const auto served = parse({"serve", "--audit"});
+    ASSERT_TRUE(served.has_value());
+    EXPECT_EQ(served->options.startup.pluginFlags.count("audit"), 1U);
 }
 
 TEST_F(CommandLineParserTest, ServeDefaultsToTheHomeServerDirectoryAndItsOwnSessions) {

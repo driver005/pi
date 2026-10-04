@@ -10,6 +10,7 @@ export import pi.platform.i_file_system;
 export import pi.platform.i_id_generator;
 export import pi.platform.i_sleeper;
 export import pi.plugin.i_hook_bus;
+export import pi.plugin.i_plugin_commands;
 export import pi.provider.i_model_runtime;
 export import pi.session.i_resource_loader;
 export import pi.session.i_session_manager;
@@ -57,4 +58,6 @@ export struct AgentSessionConfig {
     IHttpClient* http = nullptr;
     /** Paths of the plugins that are loaded, for bug reports. */
     std::function<std::vector<std::string>()> plugins = nullptr;
+    /** Plugin commands: `/name args` prompts run them (before the input event) and slashCommands() lists them; null disables them. */
+    IPluginCommands* commands = nullptr;
 };

@@ -14,15 +14,19 @@ export import pi.platform.i_logger;
 export import pi.platform.i_process_runner;
 export import pi.plugin.i_hook_bus;
 export import pi.mcp.i_mcp_server_registrar;
+export import pi.plugin.i_plugin_commands;
 export import pi.plugin.i_plugin_host;
+export import pi.plugin.i_plugin_session_bridge;
 export import pi.support.plugin_provider;
 export import pi.provider.i_model_runtime;
+export import pi.support.event_bus;
 export import pi.support.message_codec;
 export import pi.support.model_codec;
 export import pi.support.plugin_tool_factory;
 export import pi.support.thinking_level_resolver;
 export import pi.tool.i_tool_registry;
 export import pi.types.loaded_plugin;
+export import pi.types.plugin_command_entry;
 export import pi.types.plugin_context;
 
 /**
@@ -30,7 +34,7 @@ export import pi.types.plugin_context;
  * `host` pointer names its LoadedPlugin, so the tools and subscriptions it registers can be
  * attributed to it and removed when it is unloaded.
  */
-export class PluginHost : public IPluginHost {
+export class PluginHost : public IPluginHost, public IPluginCommands {
 public:
     /**
      * `models` (optional) is where plugins register providers and `mcp` where they register MCP servers; `clock` stamps the
@@ -59,6 +63,73 @@ public:
             }
         }
         return errors;
+    }
+
+    /** The session the plugins' session_call operates on; null (the initial state) answers "session not ready". */
+    void setSessionBridge(IPluginSessionBridge* bridge) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_bridge = bridge;
+    }
+
+    std::vector<PluginCommandInfo> commands() const override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        std::vector<PluginCommandInfo> out;
+        for (const auto& [name, entry] : m_commands) {
+            out.push_back(PluginCommandInfo{name, entry.description, entry.path});
+        }
+        return out;
+    }
+
+    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort) override {
+        PluginCommandEntry entry;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto found = m_commands.find(name);
+            if (found == m_commands.end()) {
+                return std::nullopt;
+            }
+            entry = found->second;
+        }
+        PiOwnedString raw = entry.handler(entry.userData, PiString{args.data(), args.size()}, reinterpret_cast<const PiAbort*>(abort.get()));
+        const bool empty = raw.data == nullptr || raw.size == 0;
+        const std::string text = takeString(raw);
+        if (empty) {
+            return Result<void>{};
+        }
+        const Json answer = Json::parse(text, nullptr, false);
+        if (answer.is_object() && answer.contains("error")) {
+            return Result<void>(std::unexpected(Error{"plugin", answer["error"].is_string() ? answer["error"].get<std::string>() : "the command failed"}));
+        }
+        return Result<void>{};
+    }
+
+    std::vector<PluginFlag> flags() const override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        std::vector<PluginFlag> out;
+        for (const auto& [name, flag] : m_flags) {
+            out.push_back(flag);
+        }
+        return out;
+    }
+
+    Result<void> setFlag(const std::string& name, const std::optional<std::string>& value) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_flags.find(name);
+        if (found == m_flags.end()) {
+            return std::unexpected(Error{"unknown_flag", "Unknown option: --" + name});
+        }
+        if (found->second.type == "string") {
+            if (!value) {
+                return std::unexpected(Error{"missing_value", "Option --" + name + " requires a value"});
+            }
+            m_flagValues[name] = *value;
+            return {};
+        }
+        if (value && *value != "true" && *value != "false") {
+            return std::unexpected(Error{"invalid_value", "Option --" + name + " is a switch: use true or false, or no value"});
+        }
+        m_flagValues[name] = !value || *value == "true";
+        return {};
     }
 
     std::vector<std::string> loaded() const override {
@@ -186,6 +257,30 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->registerStreamProvider(*plugin, std::string(name.data, name.size), std::string(config.data, config.size), stream, userData);
         };
+        api.session_call = [](void* host, PiString method, PiString params, const PiAbort* abort) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->sessionCall(std::string(method.data, method.size), std::string(params.data, params.size), abort);
+        };
+        api.register_command = [](void* host, PiString name, PiString options, PiCommandFn handler, void* userData) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerCommand(*plugin, std::string(name.data, name.size), std::string(options.data, options.size), handler, userData);
+        };
+        api.register_flag = [](void* host, PiString name, PiString options) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerFlag(*plugin, std::string(name.data, name.size), std::string(options.data, options.size));
+        };
+        api.get_flag = [](void* host, PiString name) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->getFlag(std::string(name.data, name.size));
+        };
+        api.event_on = [](void* host, PiString channel, PiHookFn handler, void* userData) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->eventOn(*plugin, std::string(channel.data, channel.size), handler, userData);
+        };
+        api.event_emit = [](void* host, PiString channel, PiString data) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->eventEmit(std::string(channel.data, channel.size), std::string(data.data, data.size));
+        };
         api.stream_emit = [](PiStreamSink* sink, PiString event) {
             return reinterpret_cast<PluginStreamTranslator*>(sink)->emit(std::string(event.data, event.size)) ? 0 : 1;
         };
@@ -221,6 +316,11 @@ private:
                 m_mcp->unregisterServer(plugin.path, name);
             }
         }
+        dropCommandsAndFlags(plugin);
+        for (const std::uint64_t id : plugin.eventSubscriptions) {
+            m_events.off(id);
+        }
+        plugin.eventSubscriptions.clear();
         plugin.virtualModels.clear();
         plugin.tools.clear();
         plugin.subscriptions.clear();
@@ -275,6 +375,117 @@ private:
             dropStreamApi(*api);
         }
         return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString sessionCall(const std::string& method, const std::string& paramsText, const PiAbort* abort) {
+        IPluginSessionBridge* bridge = nullptr;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            bridge = m_bridge;
+        }
+        if (bridge == nullptr) {
+            return owned(Json{{"error", "session not ready"}});
+        }
+        Json params = Json::parse(paramsText, nullptr, false);
+        if (!params.is_object()) {
+            params = Json::object();
+        }
+        return owned(bridge->call(method, params, reinterpret_cast<const AbortSignal*>(abort)));
+    }
+
+    PiOwnedString registerCommand(LoadedPlugin& plugin, const std::string& name, const std::string& optionsText, PiCommandFn handler, void* userData) {
+        const Json options = Json::parse(optionsText, nullptr, false);
+        if (name.empty() || name.find_first_of(" \t\r\n/") != std::string::npos || handler == nullptr) {
+            return owned(Json{{"error", "register_command needs a name without spaces or a slash and a handler"}});
+        }
+        PluginCommandEntry entry;
+        entry.name = name;
+        entry.description = options.is_object() ? options.value("description", std::string()) : std::string();
+        entry.path = plugin.path;
+        entry.handler = handler;
+        entry.userData = userData;
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto existing = m_commands.find(name);
+        if (existing != m_commands.end() && existing->second.path != plugin.path) {
+            return owned(Json{{"error", "command \"" + name + "\" is already registered by another plugin"}});
+        }
+        m_commands[name] = std::move(entry);
+        if (std::ranges::find(plugin.commands, name) == plugin.commands.end()) {
+            plugin.commands.push_back(name);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString registerFlag(LoadedPlugin& plugin, const std::string& name, const std::string& optionsText) {
+        const Json options = Json::parse(optionsText, nullptr, false);
+        const std::string type = options.is_object() ? options.value("type", std::string("boolean")) : std::string("boolean");
+        if (name.empty() || name.starts_with("-") || name.find_first_of(" =\t") != std::string::npos || (type != "boolean" && type != "string")) {
+            return owned(Json{{"error", "register_flag needs a name without dashes, spaces or '=' and a boolean or string type"}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto existing = m_flags.find(name);
+        if (existing != m_flags.end() && existing->second.path != plugin.path) {
+            return owned(Json{{"error", "flag \"" + name + "\" is already registered by another plugin"}});
+        }
+        PluginFlag flag;
+        flag.name = name;
+        flag.description = options.is_object() ? options.value("description", std::string()) : std::string();
+        flag.type = type;
+        flag.defaultValue = options.is_object() && options.contains("default") ? options["default"] : Json(nullptr);
+        flag.path = plugin.path;
+        m_flags[name] = flag;
+        if (!m_flagValues.contains(name) && !flag.defaultValue.is_null()) {
+            m_flagValues[name] = flag.defaultValue;
+        }
+        if (std::ranges::find(plugin.flags, name) == plugin.flags.end()) {
+            plugin.flags.push_back(name);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString getFlag(const std::string& name) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_flagValues.find(name);
+        return owned(Json{{"value", found == m_flagValues.end() ? Json(nullptr) : found->second}});
+    }
+
+    PiOwnedString eventOn(LoadedPlugin& plugin, const std::string& channel, PiHookFn handler, void* userData) {
+        if (channel.empty() || handler == nullptr) {
+            return owned(Json{{"error", "event_on needs a channel and a handler"}});
+        }
+        const std::uint64_t id = m_events.on(channel, [this, handler, userData](const std::string& name, const Json& data) {
+            const std::string text = data.dump(-1, ' ', false, Json::error_handler_t::replace);
+            PiOwnedString raw = handler(userData, PiString{name.data(), name.size()}, PiString{text.data(), text.size()});
+            takeString(raw);
+        });
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        plugin.eventSubscriptions.push_back(id);
+        return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString eventEmit(const std::string& channel, const std::string& dataText) {
+        const Json data = Json::parse(dataText, nullptr, false);
+        m_events.emit(channel, data.is_discarded() ? Json(nullptr) : data);
+        return owned(Json{{"ok", true}});
+    }
+
+    /** Forgets the commands and flags a plugin registered; m_mutex is not held. */
+    void dropCommandsAndFlags(LoadedPlugin& plugin) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        for (const std::string& name : plugin.commands) {
+            const auto found = m_commands.find(name);
+            if (found != m_commands.end() && found->second.path == plugin.path) {
+                m_commands.erase(found);
+            }
+        }
+        for (const std::string& name : plugin.flags) {
+            const auto found = m_flags.find(name);
+            if (found != m_flags.end() && found->second.path == plugin.path) {
+                m_flags.erase(found);
+            }
+        }
+        plugin.commands.clear();
+        plugin.flags.clear();
     }
 
     PiOwnedString registerStreamProvider(LoadedPlugin& plugin, const std::string& name, const std::string& configText, PiStreamFn stream, void* userData) {
@@ -630,5 +841,10 @@ private:
     mutable std::mutex m_mutex;
     /** Stream-handler providers by API name. */
     std::map<std::string, std::shared_ptr<PluginProvider>> m_streamProviders;
+    IPluginSessionBridge* m_bridge = nullptr;
+    std::map<std::string, PluginCommandEntry> m_commands;
+    std::map<std::string, PluginFlag> m_flags;
+    std::map<std::string, Json> m_flagValues;
+    EventBus m_events;
     std::vector<std::unique_ptr<LoadedPlugin>> m_plugins;
 };

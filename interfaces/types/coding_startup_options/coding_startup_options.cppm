@@ -30,6 +30,8 @@ export struct CodingStartupOptions {
     bool noPlugins = false;
     /** Do not connect the MCP servers of mcp.json. */
     bool noMcp = false;
+    /** `--name [value]` flags the parser does not know (rpc and serve): plugin flags, checked once the plugins are loaded. A missing value is nullopt. */
+    std::map<std::string, std::optional<std::string>> pluginFlags;
     /** How long startup waits for MCP servers to connect; slower ones add their tools when ready. */
     std::int64_t mcpStartupWaitMs = 5000;
 };

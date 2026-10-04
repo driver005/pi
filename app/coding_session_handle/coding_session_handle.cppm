@@ -19,6 +19,7 @@ import pi.support.mcp_oauth_providers;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
 import pi.support.package_manager;
+import pi.support.plugin_session_bridge;
 import pi.support.plugin_discovery;
 import pi.support.model_selector;
 import pi.tools.bash_tool;
@@ -66,7 +67,10 @@ public:
         if (auto loaded = m_resources.reload(); !loaded) {
             warn(loaded.error().message);
         }
+        applyPluginFlags(options);
         createSession(options);
+        m_bridge = std::make_unique<PluginSessionBridge>(*m_session, *m_manager, m_settings, m_services.models().models(), [this] { return mcpServers(); }, nullptr);
+        m_plugins.setSessionBridge(m_bridge.get());
         if (!activeTools(options).has_value()) {
             if (m_mcp) {
                 m_mcp->setToolsListener([this](const std::vector<std::string>& added) { activateExtraTools(added); });
@@ -81,6 +85,7 @@ public:
 
     ~CodingSessionHandle() override {
         m_hooks.emit("session_shutdown", Json{{"type", "session_shutdown"}});
+        m_plugins.setSessionBridge(nullptr);
         // The listeners and tools below use the session and the registry: stop them first.
         if (m_mcp) {
             m_mcp->close();
@@ -211,6 +216,7 @@ private:
         config.system = &platform.system();
         config.http = &platform.http();
         config.plugins = [this] { return m_plugins.loaded(); };
+        config.commands = &m_plugins;
         m_session = std::make_unique<AgentSession>(std::move(config));
     }
 
@@ -241,6 +247,39 @@ private:
         for (const Error& error : m_plugins.load(paths)) {
             warn("Plugin: " + error.message);
         }
+    }
+
+    /** Command line flags plugins declared get their values; the others are reported (a plugin may be missing or disabled). */
+    void applyPluginFlags(const CodingStartupOptions& options) {
+        for (const auto& [name, value] : options.pluginFlags) {
+            if (const auto set = m_plugins.setFlag(name, value); !set) {
+                warn(set.error().message);
+            }
+        }
+    }
+
+    Json mcpServers() const {
+        Json out = Json::array();
+        if (!m_mcp) {
+            return out;
+        }
+        for (const McpServerStatus& status : m_mcp->status()) {
+            out.push_back(Json{{"name", status.name}, {"state", mcpStateName(status.state)}, {"error", status.error}, {"toolCount", status.toolCount}});
+        }
+        return out;
+    }
+
+    std::string mcpStateName(McpServerState state) const {
+        switch (state) {
+        case McpServerState::Disabled: return "disabled";
+        case McpServerState::Connecting: return "connecting";
+        case McpServerState::Connected: return "connected";
+        case McpServerState::Disconnected: return "disconnected";
+        case McpServerState::NeedsAuth: return "needs_auth";
+        case McpServerState::Failed: return "failed";
+        case McpServerState::Closed: return "closed";
+        }
+        return "unknown";
     }
 
     void startMcp(const CodingStartupOptions& options) {
@@ -330,6 +369,7 @@ private:
     McpConnector m_mcpConnector;
     std::unique_ptr<McpServerManager> m_mcp;
     std::unique_ptr<AgentSession> m_session;
+    std::unique_ptr<PluginSessionBridge> m_bridge;
 };
 
 /** Loads plugins from <agent-dir>/plugins, the trusted project's .pi/plugins and --plugin. */

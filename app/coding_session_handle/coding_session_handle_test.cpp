@@ -264,3 +264,60 @@ TEST_F(CodingSessionHandleTest, APluginsVirtualModelCanBeSelectedAndRoutesToTheP
     EXPECT_EQ(answer->model, "faux-1");
     EXPECT_EQ(handle->session().model().id, "auto");
 }
+
+TEST_F(CodingSessionHandleTest, APluginsCommandsRunInsteadOfReachingTheModel) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    const auto handle = open(options);
+    EXPECT_TRUE(handle->diagnostics().empty());
+
+    bool listed = false;
+    for (const SlashCommandInfo& command : handle->session().slashCommands()) {
+        listed = listed || (command.name == "note" && command.source == "extension");
+    }
+    EXPECT_TRUE(listed);
+
+    const auto handled = handle->session().prompt("/note remember this", PromptOptions{});
+    ASSERT_TRUE(handled.has_value());
+    EXPECT_EQ(*handled, PromptDisposition::Handled);
+    EXPECT_EQ(m_services->models().faux()->callCount(), 0);
+    std::vector<std::string> notes;
+    for (const SessionEntry& entry : handle->sessionManager().entries()) {
+        if (entry.type == "custom" && entry.body.value("customType", "") == "hello-note") {
+            notes.push_back(entry.body["data"]["text"].get<std::string>());
+        }
+    }
+    EXPECT_EQ(notes, (std::vector<std::string>{"note: remember this"}));
+
+    const auto failed = handle->session().prompt("/note", PromptOptions{});
+    ASSERT_FALSE(failed.has_value());
+    EXPECT_EQ(failed.error().message, "note needs text");
+}
+
+TEST_F(CodingSessionHandleTest, PluginFlagsComeFromTheCommandLine) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    options.pluginFlags = {{"loud", std::nullopt}, {"note-prefix", "todo: "}, {"missing", std::nullopt}};
+    const auto handle = open(options);
+    ASSERT_EQ(handle->diagnostics().size(), 1U);
+    EXPECT_EQ(handle->diagnostics()[0].message, "Unknown option: --missing");
+
+    ASSERT_TRUE(handle->session().prompt("/note buy milk", PromptOptions{}).has_value());
+    bool found = false;
+    for (const SessionEntry& entry : handle->sessionManager().entries()) {
+        found = found || (entry.type == "custom" && entry.body["data"].value("text", "") == "TODO: BUY MILK");
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(CodingSessionHandleTest, PluginsShareAnEventBus) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    const auto handle = open(options);
+    ASSERT_TRUE(handle->session().prompt("/ping", PromptOptions{}).has_value());
+    int pings = 0;
+    for (const SessionEntry& entry : handle->sessionManager().entries()) {
+        pings += entry.type == "custom" && entry.body.value("customType", "") == "hello-ping" ? 1 : 0;
+    }
+    EXPECT_EQ(pings, 1);
+}

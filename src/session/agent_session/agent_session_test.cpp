@@ -17,6 +17,29 @@ import pi.testing.scripted_tool;
 import pi.testing.session_harness;
 import pi.tools.tool_registry;
 
+class RecordingCommands : public IPluginCommands {
+public:
+    std::vector<PluginCommandInfo> commands() const override {
+        return {PluginCommandInfo{"deploy", "Deploys", "/plugins/deploy.so"}};
+    }
+
+    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>&) override {
+        if (name != "deploy") {
+            return std::nullopt;
+        }
+        m_args.push_back(args);
+        if (args == "fail") {
+            return Result<void>(std::unexpected(Error{"plugin", "deploy failed"}));
+        }
+        return Result<void>{};
+    }
+
+    std::vector<PluginFlag> flags() const override { return {}; }
+    Result<void> setFlag(const std::string&, const std::optional<std::string>&) override { return {}; }
+
+    std::vector<std::string> m_args;
+};
+
 class AgentSessionTest : public testing::Test {
 protected:
     AgentSessionTest() : m_harness("/tmp") {
@@ -42,6 +65,7 @@ protected:
                                   m_harness.sleeper(), m_model, ThinkingLevel::Off, "/tmp", std::nullopt,
                                   std::nullopt, {}, {}};
         config.hooks = m_hookBus;
+        config.commands = m_commands;
         config.telemetryEnv = m_telemetryEnv;
         config.environment = m_withEnvironment ? &m_environment : nullptr;
         if (m_withBugReports) {
@@ -96,6 +120,7 @@ protected:
     }
 
     IHookBus* m_hookBus = nullptr;
+    IPluginCommands* m_commands = nullptr;
     std::optional<std::string> m_telemetryEnv;
     bool m_withEnvironment = false;
     bool m_withBugReports = false;
@@ -775,4 +800,37 @@ TEST_F(VirtualModelSessionTest, AnAutomaticRetryIsRoutedWithTheFailedRequest) {
     ASSERT_TRUE(seen[1].failed.has_value());
     EXPECT_EQ(seen[1].failed->model.id, "deep-1");
     EXPECT_EQ(seen[1].failed->message.errorMessage, std::optional<std::string>("503 overloaded"));
+}
+
+TEST_F(AgentSessionTest, PluginCommandsRunInsteadOfPromptingTheModel) {
+    RecordingCommands commands;
+    m_commands = &commands;
+    rebuild();
+    const auto handled = m_session->prompt("/deploy staging now", PromptOptions{});
+    ASSERT_TRUE(handled.has_value());
+    EXPECT_EQ(*handled, PromptDisposition::Handled);
+    EXPECT_EQ(commands.m_args, (std::vector<std::string>{"staging now"}));
+    EXPECT_EQ(m_harness.provider().callCount(), 0);
+
+    const auto bare = m_session->prompt("/deploy", PromptOptions{});
+    ASSERT_TRUE(bare.has_value());
+    EXPECT_EQ(commands.m_args.back(), "");
+
+    const auto failed = m_session->prompt("/deploy fail", PromptOptions{});
+    ASSERT_FALSE(failed.has_value());
+    EXPECT_EQ(failed.error().message, "deploy failed");
+
+    PromptOptions literal;
+    literal.expandPromptTemplates = false;
+    m_harness.provider().enqueue(m_harness.provider().textResponse("ok"));
+    ASSERT_TRUE(m_session->prompt("/deploy raw", literal).has_value());
+    m_session->waitForIdle();
+    EXPECT_EQ(commands.m_args.size(), 3U) << "without template expansion the text goes to the model";
+    EXPECT_EQ(m_harness.provider().callCount(), 1);
+
+    bool listed = false;
+    for (const SlashCommandInfo& command : m_session->slashCommands()) {
+        listed = listed || (command.name == "deploy" && command.source == "extension" && command.sourceInfo.path == "/plugins/deploy.so");
+    }
+    EXPECT_TRUE(listed);
 }

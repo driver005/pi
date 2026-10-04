@@ -54,6 +54,20 @@ struct ToolCall {
 using ToolHandler = std::function<Json(const ToolCall&)>;
 using HookHandler = std::function<Json(const Json& payload)>;
 
+/** One run of a plugin command: the text after `/name `. */
+struct CommandCall {
+    std::string args;
+    const PiAbort* abort = nullptr;
+    const PiHostApi* host = nullptr;
+
+    bool aborted() const { return host != nullptr && host->abort_requested(abort) != 0; }
+};
+
+/** Returns an empty string on success, else the failure message the prompt reports. */
+using CommandHandler = std::function<std::string(const CommandCall&)>;
+/** Receives the data of an event another plugin (or this one) emitted on a channel. */
+using EventHandler = std::function<void(const Json& data)>;
+
 /** One request of a virtual model as the router sees it (see PiRouteFn for the fields of `request`). */
 struct RouteCall {
     Json request;
@@ -241,6 +255,95 @@ public:
             .value("error", "");
     }
 
+    /**
+     * Registers the command `/name args` (see PiHostApi.register_command); `options` may hold {"description"}. Returns an
+     * empty string on success, else the host's error message.
+     */
+    std::string registerCommand(const std::string& name, const Json& options, CommandHandler handler) {
+        if (!hasSessionApi()) {
+            return "the host does not support register_command";
+        }
+        m_commands.push_back(std::make_unique<CommandEntry>(CommandEntry{std::move(handler), m_api}));
+        CommandEntry* entry = m_commands.back().get();
+        const std::string text = options.dump();
+        return Json::parse(
+                   detail::take(m_api->register_command(
+                       m_api->host, PiString{name.data(), name.size()}, PiString{text.data(), text.size()},
+                       [](void* userData, PiString args, const PiAbort* abort) -> PiOwnedString {
+                           auto* entry = static_cast<CommandEntry*>(userData);
+                           CommandCall call;
+                           call.args.assign(args.data, args.size);
+                           call.abort = abort;
+                           call.host = entry->host;
+                           const std::string failed = entry->handler(call);
+                           return failed.empty() ? PiOwnedString{nullptr, 0, nullptr} : detail::own(Json{{"error", failed}}.dump());
+                       },
+                       entry)),
+                   nullptr, false)
+            .value("error", "");
+    }
+
+    /**
+     * Declares the command line flag `--name` ({"description"?, "type": "boolean"|"string", "default"?}). Returns an empty
+     * string on success, else the host's error message.
+     */
+    std::string registerFlag(const std::string& name, const Json& options) const {
+        if (!hasSessionApi()) {
+            return "the host does not support register_flag";
+        }
+        const std::string text = options.dump();
+        return Json::parse(detail::take(m_api->register_flag(m_api->host, PiString{name.data(), name.size()}, PiString{text.data(), text.size()})), nullptr, false)
+            .value("error", "");
+    }
+
+    /** The value the user gave a flag this plugin declared: true/false, a string, or null (not given, no default). */
+    Json flag(const std::string& name) const {
+        if (!hasSessionApi()) {
+            return nullptr;
+        }
+        const Json reply = Json::parse(detail::take(m_api->get_flag(m_api->host, PiString{name.data(), name.size()})), nullptr, false);
+        return reply.is_object() && reply.contains("value") ? reply["value"] : Json(nullptr);
+    }
+
+    /**
+     * Calls the session (see PiHostApi.session_call for the methods). The result is the method's JSON, or
+     * {"error": "..."}; hosts without the call answer an error.
+     */
+    Json session(const std::string& method, const Json& params = Json::object(), const PiAbort* abort = nullptr) const {
+        if (!hasSessionApi()) {
+            return failure("the host does not support session_call");
+        }
+        const std::string text = params.dump();
+        return Json::parse(detail::take(m_api->session_call(m_api->host, PiString{method.data(), method.size()}, PiString{text.data(), text.size()}, abort)), nullptr, false);
+    }
+
+    /** Subscribes to a channel of the event bus plugins share. Returns an empty string on success. */
+    std::string onEvent(const std::string& channel, EventHandler handler) {
+        if (!hasSessionApi()) {
+            return "the host does not support event_on";
+        }
+        m_events.push_back(std::make_unique<EventHandler>(std::move(handler)));
+        return Json::parse(
+                   detail::take(m_api->event_on(
+                       m_api->host, PiString{channel.data(), channel.size()},
+                       [](void* userData, PiString, PiString data) -> PiOwnedString {
+                           (*static_cast<EventHandler*>(userData))(Json::parse(std::string(data.data, data.size), nullptr, false));
+                           return PiOwnedString{nullptr, 0, nullptr};
+                       },
+                       m_events.back().get())),
+                   nullptr, false)
+            .value("error", "");
+    }
+
+    /** Emits data on a channel to every subscriber, including this plugin's own. */
+    void emitEvent(const std::string& channel, const Json& data) const {
+        if (!hasSessionApi()) {
+            return;
+        }
+        const std::string text = data.dump();
+        detail::take(m_api->event_emit(m_api->host, PiString{channel.data(), channel.size()}, PiString{text.data(), text.size()}));
+    }
+
     /** Removes a provider this plugin registered. Returns an empty string on success. */
     std::string unregisterProvider(const std::string& name) const {
         if (!hasProviderApi()) {
@@ -322,6 +425,12 @@ public:
     }
 
 private:
+    bool hasSessionApi() const {
+        return m_api->struct_size >= offsetof(PiHostApi, event_emit) + sizeof(void*) && m_api->session_call != nullptr &&
+               m_api->register_command != nullptr && m_api->register_flag != nullptr && m_api->get_flag != nullptr &&
+               m_api->event_on != nullptr && m_api->event_emit != nullptr;
+    }
+
     bool hasVirtualModelApi() const {
         return m_api->struct_size >= offsetof(PiHostApi, list_models) + sizeof(void*) && m_api->register_virtual_model != nullptr &&
                m_api->unregister_virtual_model != nullptr && m_api->list_models != nullptr;
@@ -357,11 +466,18 @@ private:
         const PiHostApi* host;
     };
 
+    struct CommandEntry {
+        CommandHandler handler;
+        const PiHostApi* host;
+    };
+
     const PiHostApi* m_api;
     std::vector<std::unique_ptr<HookHandler>> m_hooks;
     std::vector<std::unique_ptr<Entry>> m_entries;
     std::vector<std::unique_ptr<RouteEntry>> m_routes;
     std::vector<std::unique_ptr<StreamEntry>> m_streams;
+    std::vector<std::unique_ptr<CommandEntry>> m_commands;
+    std::vector<std::unique_ptr<EventHandler>> m_events;
 };
 
 /** Derive from this and register the class with PI_PLUGIN. */

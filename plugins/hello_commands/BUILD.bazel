@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_commands.so; load it with `pi rpc --plugin bazel-bin/plugins/hello_commands/libhello_commands.so --loud`.
+cc_binary(
+    name = "hello_commands",
+    srcs = ["hello_commands.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

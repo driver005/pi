@@ -34,6 +34,10 @@ public:
                 line.arguments.push_back(flag);
                 continue;
             }
+            if (isPluginFlag(flag, line.command)) {
+                collectPluginFlag(flag, args, index, line.options.startup);
+                continue;
+            }
             Result<void> applied;
             if (!m_valueFlags.contains(flag)) {
                 applied = applySwitch(flag, line);
@@ -112,10 +116,32 @@ public:
                "  --server-id <uuid>            serve: logical server id (default: $PI_SERVER_ID or the directory's default)\n"
                "  --session-tree                serve: keep sessions as session trees instead of durable (SQLite) sessions\n"
                "                                serve keeps its sessions in --session-dir (default: <agent-dir>/server-sessions)\n"
+               "  --<flag> [value]              rpc, serve: a flag a plugin declares (see its documentation)\n"
                "  --help, -h                    Show this help\n";
     }
 
 private:
+    /** A `--name` or `--name=value` the parser does not know, on a command that loads plugins (which may declare it). */
+    bool isPluginFlag(const std::string& flag, const std::string& command) const {
+        if (!flag.starts_with("--") || flag.size() < 3 || (command != "rpc" && command != "serve")) {
+            return false;
+        }
+        const std::string name = flag.substr(0, flag.find('='));
+        return !m_valueFlags.contains(name) && !m_switches.contains(name);
+    }
+
+    /** `--name=value`, or `--name value` when the next argument is not a flag, or `--name` alone. */
+    void collectPluginFlag(const std::string& flag, const std::vector<std::string>& args, std::size_t& index, CodingStartupOptions& startup) const {
+        const std::size_t equals = flag.find('=');
+        if (equals != std::string::npos) {
+            startup.pluginFlags[flag.substr(2, equals - 2)] = flag.substr(equals + 1);
+        } else if (index < args.size() && !args[index].starts_with("-")) {
+            startup.pluginFlags[flag.substr(2)] = args[index++];
+        } else {
+            startup.pluginFlags[flag.substr(2)] = std::nullopt;
+        }
+    }
+
     Result<void> applySwitch(const std::string& flag, CommandLine& line) const {
         CodingApplicationOptions& options = line.options;
         if (flag == "--help" || flag == "-h") {
@@ -310,4 +336,7 @@ private:
                                              "--session-dir",   "--tools",               "--system-prompt",
                                              "--append-system-prompt", "--skill",        "--prompt-template",
                                              "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method"};
+    const std::set<std::string> m_switches{"--help", "-h", "--continue", "-c", "--no-session", "--no-tools", "--no-context-files",
+                                           "--no-skills", "--no-prompt-templates", "--no-plugins", "--no-mcp", "--trust",
+                                           "--no-trust", "--faux", "--session-tree", "--manual", "--local", "-l"};
 };
