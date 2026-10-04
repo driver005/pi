@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bug_report_uploader",
+    deps = [
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/types/bug_report_file",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/testing/scripted_http_client",
+        "//src/testing/sequential_id_generator",
+    ],
+)

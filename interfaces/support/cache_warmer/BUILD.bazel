@@ -1,0 +1,25 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "cache_warmer",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/types/cache_warm_request",
+        "//interfaces/types/cache_warm_run",
+        "//interfaces/types/cache_warming_decision",
+        "//interfaces/types/cache_warming_status",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/recording_sleeper",
+        "//src/testing/session_harness",
+    ],
+)

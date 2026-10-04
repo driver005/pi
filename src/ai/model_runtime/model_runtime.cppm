@@ -327,7 +327,13 @@ private:
         if (!m_providers.find(model.api)) {
             return std::unexpected(Error{"provider", "No API provider registered for api: " + model.api});
         }
-        HttpHeaders headers = auth.auth.headers;
+        HttpHeaders headers;
+        if (!m_config.userAgent.empty()) {
+            m_headers.set(headers, "User-Agent", m_config.userAgent);
+        }
+        for (const auto& [name, value] : auth.auth.headers) {
+            m_headers.set(headers, name, value);
+        }
         for (const auto& [name, value] : model.headers) {
             m_headers.set(headers, name, value);
         }
@@ -349,6 +355,10 @@ private:
         for (const auto& entry : options.headers) {
             merged.push_back(entry);
         }
+        if (options.transformHeaders) {
+            merged = options.transformHeaders(model, merged);
+        }
+        prepared.options.transformHeaders = nullptr;
         prepared.options.headers = std::move(merged);
         prepared.model = model;
         if (auth.auth.baseUrl) {

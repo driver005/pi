@@ -1,6 +1,9 @@
 export module pi.types.agent_session_config;
 
 import std;
+export import pi.platform.i_environment;
+export import pi.platform.i_http_client;
+export import pi.platform.i_system_info;
 export import pi.agent.i_agent_factory;
 export import pi.platform.i_clock;
 export import pi.platform.i_file_system;
@@ -44,4 +47,14 @@ export struct AgentSessionConfig {
     std::vector<ScopedModel> scopedModels;
     /** Plugin hooks (tool_call, tool_result, context and agent events); null disables them. */
     IHookBus* hooks = nullptr;
+    /** The value of PI_TELEMETRY at startup, which overrides the `enableInstallTelemetry` setting (see InstallTelemetryPolicy). */
+    std::optional<std::string> telemetryEnv = std::nullopt;
+    /** Environment for the prompt-cache warmer (PI_CACHE_RETENTION); without it the session never warms the cache. */
+    const IEnvironment* environment = nullptr;
+    /** The agent directory (crash log, credentials) and what bug reports need beyond the session: host info and an HTTP client. */
+    std::string agentDir = "";
+    const ISystemInfo* system = nullptr;
+    IHttpClient* http = nullptr;
+    /** Paths of the plugins that are loaded, for bug reports. */
+    std::function<std::vector<std::string>()> plugins = nullptr;
 };

@@ -210,6 +210,11 @@ public:
                                                                                     : Json::array();
     }
 
+    /** Anonymous version and attribution headers (default true); PI_TELEMETRY overrides it, see InstallTelemetryPolicy. */
+    bool enableInstallTelemetry() const {
+        return boolAt(m_settings, "enableInstallTelemetry", true);
+    }
+
     bool enableSkillCommands() const {
         return boolAt(m_settings, "enableSkillCommands", true);
     }

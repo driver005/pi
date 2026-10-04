@@ -205,6 +205,12 @@ private:
                                   {},
                                   {}};
         config.hooks = &m_hooks;
+        config.telemetryEnv = platform.environment().get("PI_TELEMETRY");
+        config.environment = &platform.environment();
+        config.agentDir = m_agentDir;
+        config.system = &platform.system();
+        config.http = &platform.http();
+        config.plugins = [this] { return m_plugins.loaded(); };
         m_session = std::make_unique<AgentSession>(std::move(config));
     }
 

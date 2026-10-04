@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_telemetry_context",
+    deps = ["//interfaces/telemetry/i_telemetry_span"],
+)

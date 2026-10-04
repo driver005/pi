@@ -9,6 +9,7 @@ import pi.base.posix_dynamic_libraries;
 import pi.base.posix_file_lock;
 import pi.base.posix_file_system;
 import pi.base.posix_process_runner;
+import pi.base.posix_system_info;
 import pi.base.stderr_logger;
 import pi.base.system_clock;
 import pi.base.system_environment;
@@ -30,6 +31,10 @@ public:
 
     Uuid7Generator& ids() {
         return m_ids;
+    }
+
+    PosixSystemInfo& system() {
+        return m_system;
     }
 
     SystemEnvironment& environment() {
@@ -87,6 +92,7 @@ private:
     PosixFileSystem m_files;
     PosixFileLock m_locks;
     PosixProcessRunner m_processes;
+    PosixSystemInfo m_system;
     ChildProcessLauncher m_children;
     BoringCrypto m_crypto;
     Base64Codec m_base64;

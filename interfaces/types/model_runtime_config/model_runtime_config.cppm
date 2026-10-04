@@ -8,4 +8,6 @@ export struct ModelRuntimeConfig {
     std::string modelsJsonPath;
     /** Generated catalog directory (models.json or per-provider files). */
     std::string catalogDir;
+    /** Default User-Agent of provider requests (PiUserAgent); a header the model, the provider config or the caller sets wins. */
+    std::string userAgent = "pi";
 };

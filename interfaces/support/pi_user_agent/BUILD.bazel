@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "pi_user_agent",
+    deps = ["//interfaces/platform/i_system_info"],
+    test_deps = ["//src/testing/fake_system_info"],
+)

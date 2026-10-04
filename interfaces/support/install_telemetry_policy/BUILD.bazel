@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "install_telemetry_policy",
+    deps = ["//interfaces/support/settings_view"],
+)

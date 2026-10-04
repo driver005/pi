@@ -11,11 +11,15 @@ import pi.support.agent_message_converter;
 import pi.support.auth_guidance;
 import pi.support.auto_retry_controller;
 import pi.support.branch_navigator;
+import pi.support.agent_message_codec;
 import pi.support.branch_summarizer;
+import pi.support.bug_report_coordinator;
+import pi.support.cache_warmer;
 import pi.support.compaction_controller;
 import pi.support.compactor;
 import pi.support.context_usage_calculator;
 import pi.support.custom_message_queue;
+import pi.support.install_telemetry_policy;
 import pi.support.model_controller;
 import pi.support.pending_input_tracker;
 import pi.support.plugin_hook_dispatcher;
@@ -23,7 +27,9 @@ import pi.support.plugin_session_events;
 import pi.support.post_run_handler;
 import pi.support.prompt_loadout;
 import pi.support.prompt_template_expander;
+import pi.support.provider_attribution;
 import pi.support.recovery_attempt_omitter;
+import pi.support.thinking_level_resolver;
 import pi.support.session_bash_controller;
 import pi.support.session_context_refresher;
 import pi.support.session_event_codec;
@@ -59,6 +65,7 @@ public:
         }
         createAgent();
         createCollaborators();
+        createCacheWarmer();
         m_agentListener = m_agent->subscribe(
             [this](const AgentEvent& event, const std::shared_ptr<AbortSignal>&) { onAgentEvent(event); });
         if (m_hooks) {
@@ -465,9 +472,100 @@ public:
         return {};
     }
 
+    Result<Json> reportBug(const Json& options) override {
+        if (m_config.system == nullptr || m_config.http == nullptr || m_config.environment == nullptr) {
+            return std::unexpected(Error{"unsupported", "Bug reports are not available in this host"});
+        }
+        BugReportRequest request;
+        if (options.is_object()) {
+            if (options.contains("hint") && options["hint"].is_string()) {
+                request.hint = options["hint"].get<std::string>();
+            }
+            request.includeSession = options.contains("includeSession") && options["includeSession"] == true;
+            request.includeSummary = options.contains("includeSummary") && options["includeSummary"] == true;
+            request.delivery = options.value("delivery", std::string("zip"));
+            if (options.contains("outputPath") && options["outputPath"].is_string()) {
+                request.outputPath = options["outputPath"].get<std::string>();
+            }
+        }
+        const Model model = m_agent->model();
+        BugReportBuilder builder(*m_config.environment, *m_config.system, m_config.clock, m_config.ids);
+        BugReportInput input;
+        input.sessionId = m_config.session.sessionId();
+        input.cwd = m_config.cwd;
+        input.messageCount = static_cast<int>(m_agent->messages().size());
+        if (!model.id.empty()) {
+            input.model = model;
+            input.provider = builder.describeProvider(m_config.models, model.provider, model.baseUrl);
+        }
+        input.thinkingLevel = m_levels.levelName(m_agent->thinkingLevel());
+        if (m_config.plugins) {
+            input.plugins = m_config.plugins();
+        }
+        input.globalSettings = m_config.settings.globalSettings();
+        input.projectSettings = m_config.settings.projectSettings();
+        SummarizationOptions summary;
+        if (request.includeSummary) {
+            auto chosen = summaryModel();
+            if (!chosen) {
+                return std::unexpected(chosen.error());
+            }
+            summary.model = chosen->model;
+            summary.thinkingLevel = chosen->thinkingLevel.value_or(ThinkingLevel::Off);
+            summary.stream.sessionId = m_config.session.sessionId();
+            summary.streamFn = [this](const Model& target, const TranscriptContext& context, const StreamOptions& stream) { return m_config.models.stream(target, context, stream); };
+            summary.retry = m_config.settings.view().retryPolicy();
+        }
+        BugReportSummarizer summarizer(m_generator);
+        SessionBranchSerializer serializer(m_config.clock);
+        BugReportUploader uploader(*m_config.http, m_config.ids);
+        CrashLog crashes(m_config.files, m_config.clock);
+        BugReportCoordinator coordinator(builder, summarizer, serializer, uploader, crashes, m_config.files, m_config.clock, *m_config.environment);
+        const RadiusGateway radius;
+        const auto token = [this, &radius]() -> std::optional<std::string> {
+            const auto auth = m_config.models.getAuth(radius.providerId());
+            return auth && auth->has_value() ? (*auth)->auth.apiKey : std::nullopt;
+        };
+        auto outcome = coordinator.report(request, std::move(input), m_agent->messages(), summary, m_config.session, token, m_config.agentDir, m_config.cwd, radius.gatewayUrl(*m_config.environment));
+        if (!outcome) {
+            return std::unexpected(outcome.error());
+        }
+        Json out = Json::object({{"id", outcome->id}, {"delivery", outcome->delivery}});
+        if (outcome->path) {
+            out["path"] = *outcome->path;
+        }
+        return out;
+    }
+
+    CacheWarmingStatus cacheWarmingStatus() const override {
+        if (!m_warmer) {
+            CacheWarmingStatus status;
+            status.reason = "cache warming unavailable";
+            return status;
+        }
+        return m_warmer->status();
+    }
+
+    Result<void> setCacheWarmingMode(const std::string& mode) override {
+        if (mode != "off" && mode != "streaming" && mode != "idle") {
+            return std::unexpected(Error{"invalid_argument", "Cache warming mode must be off, streaming or idle"});
+        }
+        if (auto stored = m_config.settings.setGlobal("cacheWarming", mode); !stored) {
+            return stored;
+        }
+        if (m_warmer) {
+            m_warmer->onModeChanged();
+        }
+        return {};
+    }
+
     void dispose() override {
         if (m_agent == nullptr) {
             return;
+        }
+        if (m_warmer) {
+            m_warmer->setOnWarmed({});
+            m_warmer->cancel();
         }
         abort();
         m_bash->abort();
@@ -508,6 +606,27 @@ private:
             return projectForcedPrompt(m_hooks ? m_hooks->transformContext(messages) : messages);
         };
         m_agent = m_config.agents.create(std::move(options));
+    }
+
+    /** The prompt-cache warmer exists only when the session was given an environment to read PI_CACHE_RETENTION from. */
+    void createCacheWarmer() {
+        if (m_config.environment == nullptr) {
+            return;
+        }
+        CacheWarmer::Decide decide;
+        if (m_events) {
+            decide = [this](const CacheWarmingDecision& decision) {
+                return m_events->cacheWarmingDecision(decision.warmCost, decision.missCost, decision.continuationProbability, decision.action);
+            };
+        }
+        m_warmer = std::make_unique<CacheWarmer>(m_config.models, m_config.session, m_config.sleeper, m_config.clock, *m_config.environment,
+                                                 [this] { return m_config.settings.view().cacheWarmingMode(); }, std::move(decide));
+        m_warmer->setOnWarmed([this](const SessionEntry& entry) {
+            AgentSessionEvent event;
+            event.type = SessionEventType::EntryAppended;
+            event.entry = entry;
+            m_hub.emit(event);
+        });
     }
 
     void createCollaborators() {
@@ -592,7 +711,31 @@ private:
         if (m_events) {
             options.onPayload = [this](const Json& payload, const Model&) { return m_events->beforeProviderRequest(payload); };
         }
+        options.transformHeaders = [this](const Model& model, const ProviderAttribution::Headers& headers) { return transformHeaders(model, headers); };
         return options;
+    }
+
+    /** Adds the attribution headers, then lets plugins change the assembled headers (`before_provider_headers`). */
+    ProviderAttribution::Headers transformHeaders(const Model& model, const ProviderAttribution::Headers& headers) const {
+        const bool telemetry = m_installTelemetry.enabled(m_config.settings.view(), m_config.telemetryEnv);
+        ProviderAttribution::Headers merged = m_attribution.merge(model, telemetry, m_config.session.sessionId(), {headers});
+        if (!m_events) {
+            return merged;
+        }
+        Json asJson = Json::object();
+        for (const auto& [name, value] : merged) {
+            if (value) {
+                asJson[name] = *value;
+            }
+        }
+        const Json changed = m_events->beforeProviderHeaders(asJson);
+        ProviderAttribution::Headers out;
+        for (const auto& entry : changed.items()) {
+            if (entry.value().is_string()) {
+                out.emplace_back(entry.key(), entry.value().get<std::string>());
+            }
+        }
+        return out;
     }
 
     std::optional<AgentLoopTurnUpdate> prepareRequest(const PrepareRequestContext& request, const std::shared_ptr<AbortSignal>& signal) {
@@ -682,7 +825,40 @@ private:
             }
             return m_errors.failed(model, reason.value_or("Virtual model " + model.provider + "/" + model.id + " must be routed before streaming"), m_config.clock.nowMs());
         }
+        // Compaction and summaries use routing ids of their own; only session requests replace the cache entry, so only they
+        // restart the warming. It goes on while the transcript still extends the request's prefix.
+        if (m_warmer && request.sessionId && *request.sessionId == m_config.session.sessionId()) {
+            CacheWarmRequest warm;
+            warm.model = model;
+            warm.context = context;
+            warm.options = request;
+            m_warmer->start(std::move(warm), cacheContextIsCurrent(model));
+        }
         return m_config.models.stream(model, context, request);
+    }
+
+    /** True while the selected model is the request's and the transcript still starts with the messages the request was sent with. */
+    std::function<bool()> cacheContextIsCurrent(const Model& requestModel) const {
+        std::vector<Json> sent;
+        for (const AgentMessage& message : m_agent->messages()) {
+            sent.push_back(m_messageCodec.toJson(message));
+        }
+        return [this, provider = requestModel.provider, id = requestModel.id, sent = std::move(sent)] {
+            const Model current = m_agent->model();
+            if (current.provider != provider || current.id != id) {
+                return false;
+            }
+            const std::vector<AgentMessage> messages = m_agent->messages();
+            if (sent.size() > messages.size()) {
+                return false;
+            }
+            for (std::size_t i = 0; i < sent.size(); ++i) {
+                if (m_messageCodec.toJson(messages[i]) != sent[i]) {
+                    return false;
+                }
+            }
+            return true;
+        };
     }
 
     /** The physical model of the selected virtual model's latest response (or the selected model itself) for limits. */
@@ -809,6 +985,9 @@ private:
         AgentSessionEvent event;
         event.type = SessionEventType::AgentSettled;
         m_hub.emit(event);
+        if (m_warmer) {
+            m_warmer->onAgentSettled();
+        }
         notifyIdle();
     }
 
@@ -1000,6 +1179,11 @@ private:
     SessionEventCodec m_eventCodec;
     std::unique_ptr<PluginHookDispatcher> m_hooks;
     std::unique_ptr<PluginSessionEvents> m_events;
+    std::unique_ptr<CacheWarmer> m_warmer;
+    AgentMessageCodec m_messageCodec;
+    ThinkingLevelResolver m_levels;
+    ProviderAttribution m_attribution;
+    InstallTelemetryPolicy m_installTelemetry;
     TranscriptNormalizer m_transcript;
     VirtualModelNames m_virtual;
     ErrorStreamFactory m_errors;

@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_module")
 pi_module(
     name = "model_services",
     deps = [
+        "//interfaces/support/pi_user_agent",
         "//app/platform_services",
         "//interfaces/provider/i_credential_store",
         "//interfaces/provider/i_model_runtime",

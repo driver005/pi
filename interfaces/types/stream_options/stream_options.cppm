@@ -6,6 +6,7 @@ export module pi.types.stream_options;
 
 import std;
 export import pi.support.abort_signal;
+export import pi.telemetry.i_telemetry_context;
 export import pi.types.json;
 export import pi.types.model;
 export import pi.types.provider_response;
@@ -22,6 +23,13 @@ export struct StreamOptions {
     /** Inspect or replace the request payload; return nullopt to keep it. */
     std::function<std::optional<Json>(const Json&, const Model&)> onPayload;
     std::function<void(const ProviderResponse&, const Model&)> onResponse;
+    /**
+     * Runs last over the fully assembled request headers (model, auth and caller headers) and returns the headers to send; the
+     * model-runtime applies it, providers never see it.
+     */
+    std::function<std::vector<std::pair<std::string, std::optional<std::string>>>(const Model&, const std::vector<std::pair<std::string, std::optional<std::string>>>&)> transformHeaders;
+    /** Explicit parent context for telemetry produced by this logical request (not used by the providers themselves, like in TypeScript). */
+    std::shared_ptr<ITelemetryContext> telemetryContext;
     std::optional<std::int64_t> timeoutMs;
     std::optional<int> maxRetries;
     std::optional<std::int64_t> maxRetryDelayMs;

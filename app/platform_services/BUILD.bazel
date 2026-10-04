@@ -11,6 +11,7 @@ pi_module(
         "//app/child_process_launcher",
         "//src/base/posix_file_system",
         "//src/base/posix_process_runner",
+        "//src/base/posix_system_info",
         "//src/base/stderr_logger",
         "//src/base/system_clock",
         "//src/base/system_environment",

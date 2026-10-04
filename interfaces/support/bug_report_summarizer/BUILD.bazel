@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bug_report_summarizer",
+    deps = [
+        "//interfaces/support/agent_message_converter",
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/conversation_serializer",
+        "//interfaces/support/summary_generator",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/summarization_options",
+    ],
+    test_deps = [
+        "//src/testing/fixed_clock",
+        "//src/testing/recording_sleeper",
+        "//src/testing/sequential_id_generator",
+    ],
+)

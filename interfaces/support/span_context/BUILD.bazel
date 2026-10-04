@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "span_context",
+    deps = ["//interfaces/telemetry/i_telemetry_context"],
+    test_deps = ["//interfaces/support/in_memory_telemetry_context"],
+)

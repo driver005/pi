@@ -11,6 +11,8 @@ import pi.support.hook_bus;
 import pi.testing.fake_model_runtime;
 import pi.testing.fake_resource_loader;
 import pi.testing.fake_settings_manager;
+import pi.testing.fake_system_info;
+import pi.testing.scripted_http_client;
 import pi.testing.scripted_tool;
 import pi.testing.session_harness;
 import pi.tools.tool_registry;
@@ -40,6 +42,15 @@ protected:
                                   m_harness.sleeper(), m_model, ThinkingLevel::Off, "/tmp", std::nullopt,
                                   std::nullopt, {}, {}};
         config.hooks = m_hookBus;
+        config.telemetryEnv = m_telemetryEnv;
+        config.environment = m_withEnvironment ? &m_environment : nullptr;
+        if (m_withBugReports) {
+            config.agentDir = "/agent";
+            config.system = &m_systemInfo;
+            config.http = &m_http;
+            config.environment = &m_environment;
+            config.plugins = [] { return std::vector<std::string>{"/plugins/libhello.so"}; };
+        }
         m_session = std::make_unique<AgentSession>(config);
         m_session->subscribe([this](const AgentSessionEvent& event) { m_events.push_back(event); });
     }
@@ -85,6 +96,11 @@ protected:
     }
 
     IHookBus* m_hookBus = nullptr;
+    std::optional<std::string> m_telemetryEnv;
+    bool m_withEnvironment = false;
+    bool m_withBugReports = false;
+    FakeSystemInfo m_systemInfo;
+    ScriptedHttpClient m_http;
     SessionHarness m_harness;
     FakeSettingsManager m_settings{Json{{"retry", Json{{"enabled", true}, {"maxRetries", 2}, {"baseDelayMs", 10}}},
                                         {"compaction", Json{{"keepRecentTokens", 500}, {"reserveTokens", 1000}}}}};
@@ -118,6 +134,86 @@ TEST_F(AgentSessionTest, PromptRunsATurnPersistsItAndSettles) {
     ASSERT_EQ(eventsOf(SessionEventType::AgentSettled).size(), 1U);
     EXPECT_EQ(m_events.back().type, SessionEventType::AgentSettled);
     EXPECT_NE(m_session->systemPrompt().find("read: Read file contents"), std::string::npos);
+}
+
+TEST_F(AgentSessionTest, RequestsCarryTheAttributionHeadersWhileInstallTelemetryIsOn) {
+    StreamOptions seen;
+    m_models.setStreamHandler([this, &seen](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        seen = options;
+        return m_harness.provider().stream(model, context, options);
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    ASSERT_TRUE(static_cast<bool>(seen.transformHeaders));
+    Model openrouter = m_model;
+    openrouter.provider = "openrouter";
+    openrouter.baseUrl = "https://openrouter.ai/api/v1";
+    const auto headers = seen.transformHeaders(openrouter, {{"x-keep", "k"}});
+    std::map<std::string, std::string> byName;
+    for (const auto& [name, value] : headers) {
+        byName[name] = value.value_or("");
+    }
+    EXPECT_EQ(byName["HTTP-Referer"], "https://pi.dev");
+    EXPECT_EQ(byName["x-keep"], "k");
+
+    m_telemetryEnv = "0";
+    rebuild();
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("again", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    const auto quiet = seen.transformHeaders(openrouter, {{"x-keep", "k"}});
+    EXPECT_EQ(quiet.size(), 1U);
+}
+
+TEST_F(AgentSessionTest, WithoutAnEnvironmentThereIsNoCacheWarming) {
+    EXPECT_EQ(m_session->cacheWarmingStatus().state, "inactive");
+    EXPECT_EQ(m_session->cacheWarmingStatus().reason, "cache warming unavailable");
+}
+
+TEST_F(AgentSessionTest, CacheWarmingStopsForModelsWithoutAPromptCacheLifetimeAndTheModeIsStored) {
+    m_withEnvironment = true;
+    rebuild();
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    const CacheWarmingStatus status = m_session->cacheWarmingStatus();
+    EXPECT_EQ(status.state, "inactive");
+    EXPECT_EQ(status.reason, "cache lifetime unavailable");
+    ASSERT_TRUE(m_session->setCacheWarmingMode("idle").has_value());
+    EXPECT_EQ(m_settings.settings()["cacheWarming"], "idle");
+    ASSERT_TRUE(m_session->setCacheWarmingMode("off").has_value());
+    EXPECT_EQ(m_session->cacheWarmingStatus().reason, "cache warming disabled");
+    EXPECT_FALSE(m_session->setCacheWarmingMode("sometimes").has_value());
+}
+
+TEST_F(AgentSessionTest, BugReportsNeedAHostThatSupportsThem) {
+    const auto result = m_session->reportBug(Json{{"delivery", "zip"}});
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, "unsupported");
+}
+
+TEST_F(AgentSessionTest, ABugReportDescribesTheSessionAndIsRecordedInIt) {
+    m_withBugReports = true;
+    rebuild();
+    m_harness.files().createDirectories("/tmp");
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    const auto filed = m_session->reportBug(Json{{"delivery", "zip"}, {"hint", "broken"}, {"includeSession", true}});
+    ASSERT_TRUE(filed.has_value()) << filed.error().message;
+    EXPECT_EQ((*filed)["delivery"], "zip");
+    const std::string path = (*filed)["path"].get<std::string>();
+    const auto archive = m_harness.files().readFile(path);
+    ASSERT_TRUE(archive.has_value());
+    EXPECT_NE(archive->find("report.json"), std::string::npos);
+    EXPECT_NE(archive->find("/plugins/libhello.so"), std::string::npos);
+    EXPECT_NE(archive->find("faux-1"), std::string::npos);
+    bool recorded = false;
+    for (const auto& entry : m_harness.session().entries()) {
+        recorded = recorded || (entry.type == "custom" && entry.body.value("customType", std::string()) == "pi.bug-report");
+    }
+    EXPECT_TRUE(recorded);
 }
 
 TEST_F(AgentSessionTest, PromptNeedsModelAndCredentials) {

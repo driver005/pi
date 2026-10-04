@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "noop_telemetry_context",
+    deps = [
+        "//interfaces/support/noop_telemetry_span",
+        "//interfaces/telemetry/i_telemetry_context",
+    ],
+)

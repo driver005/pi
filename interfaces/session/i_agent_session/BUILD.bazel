@@ -5,6 +5,7 @@ pi_interface(
     deps = [
         "//interfaces/types/agent_session_event",
         "//interfaces/types/bash_result",
+        "//interfaces/types/cache_warming_status",
         "//interfaces/types/compaction_result",
         "//interfaces/types/context_usage",
         "//interfaces/types/forkable_message",

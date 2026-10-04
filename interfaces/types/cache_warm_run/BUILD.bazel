@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "cache_warm_run",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/cache_warm_request",
+    ],
+)

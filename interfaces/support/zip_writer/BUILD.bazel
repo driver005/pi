@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "zip_writer",
+    deps = [
+        "//interfaces/support/crc32",
+        "//interfaces/types/zip_entry",
+    ],
+)

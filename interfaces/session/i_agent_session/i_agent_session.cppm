@@ -5,6 +5,7 @@ module;
 export module pi.session.i_agent_session;
 
 import std;
+export import pi.types.cache_warming_status;
 export import pi.types.agent_message;
 export import pi.types.agent_session_event;
 export import pi.types.bash_result;
@@ -115,6 +116,18 @@ public:
     virtual std::vector<std::string> activeToolNames() const = 0;
     virtual std::vector<ToolInfo> allTools() const = 0;
     virtual void setActiveToolsByName(const std::vector<std::string>& names) = 0;
+
+    /** What the prompt-cache warmer is doing (inactive while it is off or the session has no environment to read). */
+    virtual CacheWarmingStatus cacheWarmingStatus() const = 0;
+    /** Persists the `cacheWarming` setting ("off", "streaming" or "idle") and applies it to a running warmer. */
+    virtual Result<void> setCacheWarmingMode(const std::string& mode) = 0;
+
+    /**
+     * Files a bug report about this session: `{hint?, includeSession?, includeSummary?, delivery: "upload" | "zip", outputPath?}`
+     * answers `{id, delivery, path?}`. Uploads go to the Radius gateway; the report holds environment and configuration
+     * metadata without secrets, failed-turn diagnostics, and optionally the transcript or a summary the session model writes.
+     */
+    virtual Result<Json> reportBug(const Json& options) = 0;
 
     /** Prompt templates and skills a prompt can invoke by name. */
     virtual std::vector<SlashCommandInfo> slashCommands() const = 0;

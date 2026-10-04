@@ -1,0 +1,32 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bug_report_coordinator",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/support/bug_report_builder",
+        "//interfaces/support/bug_report_summarizer",
+        "//interfaces/support/bug_report_uploader",
+        "//interfaces/support/crash_log",
+        "//interfaces/support/radius_gateway",
+        "//interfaces/support/session_branch_serializer",
+        "//interfaces/support/zip_writer",
+        "//interfaces/types/bug_report_input",
+        "//interfaces/types/bug_report_outcome",
+        "//interfaces/types/bug_report_request",
+        "//interfaces/types/summarization_options",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/fake_system_info",
+        "//src/testing/fixed_clock",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+        "//src/testing/sequential_id_generator",
+        "//src/testing/session_harness",
+    ],
+)

@@ -121,6 +121,52 @@ public:
         return emitted.payload["payload"];
     }
 
+    /**
+     * The request headers (name to value) after every `before_provider_headers` handler. A handler answers an object of the
+     * headers to set (`null` removes one); TypeScript handlers mutate the headers in place, which a C ABI cannot.
+     */
+    Json beforeProviderHeaders(const Json& headers) {
+        if (!m_bus.hasHandlers("before_provider_headers")) {
+            return headers;
+        }
+        const HookOutcome emitted = m_bus.emit("before_provider_headers", Json::object({{"headers", headers}}),
+                                               [](Json& current, const Json& result) {
+                                                   if (!result.is_object()) {
+                                                       return;
+                                                   }
+                                                   for (const auto& entry : result.items()) {
+                                                       if (entry.value().is_null()) {
+                                                           current["headers"].erase(entry.key());
+                                                       } else if (entry.value().is_string()) {
+                                                           current["headers"][entry.key()] = entry.value();
+                                                       }
+                                                   }
+                                               });
+        return emitted.payload["headers"];
+    }
+
+    /**
+     * What a `cache_warming_decision` handler wants done with the refresh pi decided on (`warm` or `stop`): the payload carries
+     * the prices and pi's action, a handler answers `{"action": "warm" | "stop"}`, the last answer wins; `action` is returned
+     * when nobody answers.
+     */
+    std::string cacheWarmingDecision(double warmCost, double missCost, double continuationProbability, const std::string& action) {
+        if (!m_bus.hasHandlers("cache_warming_decision")) {
+            return action;
+        }
+        const HookOutcome emitted = m_bus.emit("cache_warming_decision",
+                                               Json::object({{"warmCost", warmCost}, {"missCost", missCost}, {"continuationProbability", continuationProbability}, {"action", action}}),
+                                               [](Json& current, const Json& result) {
+                                                   if (result.is_object() && result.contains("action") && result["action"].is_string()) {
+                                                       const std::string next = result["action"].get<std::string>();
+                                                       if (next == "warm" || next == "stop") {
+                                                           current["action"] = next;
+                                                       }
+                                                   }
+                                               });
+        return emitted.payload.value("action", action);
+    }
+
     BeforeCompactOutcome beforeCompact(const CompactionPreparation& preparation, const std::vector<SessionEntry>& branch, const std::optional<std::string>& customInstructions, const std::string& reason, bool willRetry) {
         BeforeCompactOutcome outcome;
         if (!m_bus.hasHandlers("session_before_compact")) {

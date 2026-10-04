@@ -1,18 +1,22 @@
 import std;
 import pi.base.posix_callback_server;
+import pi.base.posix_file_system;
 import pi.base.posix_signal_waiter;
 import pi.base.stdio_byte_input;
 import pi.base.stdio_byte_output;
+import pi.base.system_clock;
 import pi.base.system_environment;
 import pi.coding_application;
 import pi.coding_runtime_factory;
 import pi.coding_services;
+import pi.crash_recorder;
 import pi.durable_serve;
 import pi.auth_command;
 import pi.mcp_command;
 import pi.package_command;
 import pi.serve_application;
 import pi.support.command_line_parser;
+import pi.support.timings;
 
 int main(int argc, char** argv) {
     SystemEnvironment environment;
@@ -28,6 +32,18 @@ int main(int argc, char** argv) {
         std::cout << parser.usage();
         return 0;
     }
+    SystemClock clock;
+    Timings timings(clock, environment.get("PI_TIMING") == "1");
+    timings.reset();
+    PosixFileSystem crashFiles;
+    CrashRecorder crashes(crashFiles, clock, line->options.agentDir, line->options.cwd);
+    if (line->command == "rpc" || line->command == "serve") {
+        if (const std::string notice = crashes.notice(); !notice.empty()) {
+            std::cerr << "pi: " << notice << "\n";
+        }
+        crashes.install();
+    }
+    timings.time("arguments");
     if (line->command == "serve") {
         PosixSignalWaiter signals;
         signals.block();
@@ -57,6 +73,8 @@ int main(int argc, char** argv) {
             std::cerr << "pi: " << started.error().message << "\n";
             return 1;
         }
+        timings.time("server start");
+        std::cerr << timings.report();
         std::cerr << "pi: serving " << server.serverId() << " on " << server.socketPath() << "\n";
         signals.wait();
         server.stop();
@@ -85,6 +103,8 @@ int main(int argc, char** argv) {
         std::cerr << "pi: " << opened.error().message << "\n";
         return 1;
     }
+    timings.time("application open");
+    std::cerr << timings.report();
     for (const auto& diagnostic : application.diagnostics()) {
         std::cerr << "pi: " << diagnostic.type << ": " << diagnostic.message << "\n";
     }

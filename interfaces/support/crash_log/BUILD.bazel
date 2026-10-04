@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "crash_log",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/support/pi_version",
+        "//interfaces/types/crash_record",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+    ],
+)

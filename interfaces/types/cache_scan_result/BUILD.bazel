@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "cache_scan_result",
+    deps = [
+        "//interfaces/types/cache_previous_request",
+        "//interfaces/types/cache_waste_totals",
+    ],
+)

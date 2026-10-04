@@ -1,0 +1,27 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bug_report_builder",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_system_info",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/support/bug_report_redactor",
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/support/pi_version",
+        "//interfaces/types/bug_report_bundle",
+        "//interfaces/types/bug_report_file",
+        "//interfaces/types/bug_report_input",
+        "//interfaces/types/crash_record",
+        "//interfaces/types/session_entry",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fake_system_info",
+        "//src/testing/fixed_clock",
+        "//src/testing/sequential_id_generator",
+    ],
+)

@@ -5,7 +5,10 @@ pi_interface(
     deps = [
         "//interfaces/agent/i_agent_factory",
         "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_environment",
         "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_system_info",
         "//interfaces/platform/i_id_generator",
         "//interfaces/platform/i_sleeper",
         "//interfaces/plugin/i_hook_bus",

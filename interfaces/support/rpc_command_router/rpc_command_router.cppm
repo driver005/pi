@@ -160,6 +160,10 @@ private:
                            Json{{"tree", m_data.tree(session.tree())}, {"leafId", m_data.optionalString(session.leafId())}});
         };
         m_handlers["set_session_name"] = [this](const Json& c) { return setSessionName(c); };
+        m_handlers["bug_report"] = [this](const Json& c) {
+            auto filed = m_runtime.session().reportBug(c);
+            return filed ? success(c, "bug_report", *filed) : failure(c, "bug_report", filed.error().message);
+        };
         m_handlers["export_html"] = [this](const Json& c) {
             return failure(c, "export_html", "export_html is not supported by the headless backbone");
         };

@@ -1,6 +1,7 @@
 export module pi.model_services;
 
 import std;
+import pi.support.pi_user_agent;
 export import pi.provider.i_model_runtime;
 import pi.ai.anthropic_messages_provider;
 import pi.ai.azure_responses_provider;
@@ -40,7 +41,7 @@ public:
           m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(), platform.base64()),
           m_flows(buildFlows()),
           m_copilot(platform.http()),
-          m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
+          m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir, PiUserAgent().value(platform.system())}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
         m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
             platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
         m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(

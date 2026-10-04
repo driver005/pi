@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "cache_warm_request",
+    deps = [
+        "//interfaces/types/model",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/transcript_context",
+    ],
+)

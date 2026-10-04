@@ -120,6 +120,19 @@ TEST_F(PluginSessionEventsTest, ProviderRequestPayloadsAreReplacedInOrder) {
     EXPECT_EQ((*replaced)["marker"], true);
 }
 
+TEST_F(PluginSessionEventsTest, ProviderHeadersAreChangedByHandlerAnswers) {
+    EXPECT_EQ(m_events.beforeProviderHeaders(Json{{"a", "1"}}), (Json{{"a", "1"}}));
+    Json seen;
+    on("before_provider_headers", [&seen](const Json& payload) {
+        seen = payload;
+        return Json{{"x-added", "yes"}, {"a", nullptr}, {"bad", 5}};
+    });
+    on("before_provider_headers", [](const Json&) { return Json{{"x-second", "2"}}; });
+    const Json changed = m_events.beforeProviderHeaders(Json{{"a", "1"}, {"keep", "k"}});
+    EXPECT_EQ(seen["headers"], (Json{{"a", "1"}, {"keep", "k"}}));
+    EXPECT_EQ(changed, (Json{{"keep", "k"}, {"x-added", "yes"}, {"x-second", "2"}}));
+}
+
 TEST_F(PluginSessionEventsTest, BeforeCompactCanSupplyTheCompaction) {
     Json seen;
     on("session_before_compact", [&seen](const Json& payload) {

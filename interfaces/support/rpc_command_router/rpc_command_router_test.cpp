@@ -183,6 +183,10 @@ TEST_F(RpcCommandRouterTest, BashCompactAndStatsCommands) {
     const Json stats = send(Json{{"type", "get_session_stats"}})["data"];
     EXPECT_EQ(stats["totalMessages"], 1);
     EXPECT_EQ(send(Json{{"type", "export_html"}})["success"], false);
+    const Json bug = send(Json{{"type", "bug_report"}, {"delivery", "zip"}});
+    EXPECT_EQ(bug["success"], false);
+    EXPECT_EQ(bug["command"], "bug_report");
+    EXPECT_EQ(bug["error"], "Bug reports are not available in this host");
     EXPECT_TRUE(send(Json{{"type", "get_commands"}})["data"]["commands"].empty());
     EXPECT_EQ(send(Json{{"type", "get_messages"}})["data"]["messages"].size(), 1U);
 }

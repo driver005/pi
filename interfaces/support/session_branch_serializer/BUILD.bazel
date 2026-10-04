@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_branch_serializer",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/types/json",
+        "//interfaces/types/session_entry",
+    ],
+    test_deps = ["//src/testing/fixed_clock"],
+)

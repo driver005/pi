@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "in_memory_telemetry_context",
+    deps = [
+        "//interfaces/support/in_memory_telemetry_recorder",
+        "//interfaces/support/in_memory_telemetry_span",
+        "//interfaces/telemetry/i_telemetry_context",
+    ],
+)

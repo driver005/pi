@@ -81,6 +81,60 @@ protected:
     ModelRuntime m_runtime;
 };
 
+TEST_F(ModelRuntimeTest, TransformHeadersRunsLastOverTheAssembledHeaders) {
+    m_environment.set("OPENAI_API_KEY", "sk");
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    StreamOptions seen;
+    Model seenModel;
+    StreamOptions options = captureOptions(seen, seenModel);
+    options.headers = {{"x-caller", "c"}};
+    std::string transformedFor;
+    options.transformHeaders = [&](const Model& model, const std::vector<std::pair<std::string, std::optional<std::string>>>& headers) {
+        transformedFor = model.id;
+        auto out = headers;
+        out.erase(std::remove_if(out.begin(), out.end(), [](const auto& header) { return header.first == "x-model"; }), out.end());
+        out.emplace_back("x-added", "yes");
+        return out;
+    };
+    run(*m_runtime.find("openai", "gpt-a"), options);
+    EXPECT_EQ(transformedFor, "gpt-a");
+    EXPECT_FALSE(seen.transformHeaders);
+    std::map<std::string, std::string> headers;
+    for (const auto& [name, value] : seen.headers) {
+        if (value) {
+            headers[name] = *value;
+        }
+    }
+    EXPECT_EQ(headers.count("x-model"), 0U);
+    EXPECT_EQ(headers["x-caller"], "c");
+    EXPECT_EQ(headers["x-added"], "yes");
+}
+
+TEST_F(ModelRuntimeTest, RequestsCarryTheConfiguredUserAgentUnlessAHeaderSetsOne) {
+    m_environment.set("OPENAI_API_KEY", "sk");
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    StreamOptions seen;
+    Model seenModel;
+    StreamOptions options = captureOptions(seen, seenModel);
+    run(*m_runtime.find("openai", "gpt-a"), options);
+    std::map<std::string, std::string> headers;
+    for (const auto& [name, value] : seen.headers) {
+        headers[name] = value.value_or("");
+    }
+    EXPECT_EQ(headers["User-Agent"], "pi");
+    StreamOptions again = captureOptions(seen, seenModel);
+    again.headers = {{"User-Agent", "mine"}};
+    run(*m_runtime.find("openai", "gpt-a"), again);
+    std::vector<std::string> agents;
+    for (const auto& [name, value] : seen.headers) {
+        if (name == "User-Agent" && value) {
+            agents.push_back(*value);
+        }
+    }
+    ASSERT_FALSE(agents.empty());
+    EXPECT_EQ(agents.back(), "mine");
+}
+
 TEST_F(ModelRuntimeTest, LoadsCatalogModels) {
     ASSERT_TRUE(m_runtime.reload().has_value());
     EXPECT_FALSE(m_runtime.error().has_value());

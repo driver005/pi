@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bug_report_redactor",
+    deps = ["//interfaces/types/json"],
+)

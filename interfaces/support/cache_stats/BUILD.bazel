@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "cache_stats",
+    deps = [
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/cache_miss",
+        "//interfaces/types/cache_previous_request",
+        "//interfaces/types/cache_scan_result",
+        "//interfaces/types/cache_waste_totals",
+        "//interfaces/types/model",
+        "//interfaces/types/session_entry",
+    ],
+)

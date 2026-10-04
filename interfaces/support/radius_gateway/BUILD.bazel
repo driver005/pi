@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "radius_gateway",
+    deps = ["//interfaces/platform/i_environment"],
+    test_deps = ["//src/testing/fake_environment"],
+)

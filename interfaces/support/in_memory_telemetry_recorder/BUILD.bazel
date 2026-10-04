@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "in_memory_telemetry_recorder",
+    deps = [
+        "//interfaces/types/error",
+        "//interfaces/types/recorded_telemetry_span",
+        "//interfaces/types/span_options",
+    ],
+)

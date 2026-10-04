@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "crash_recorder",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/crash_log",
+    ],
+    test_deps = [
+        "//src/base/posix_file_system",
+        "//src/base/system_clock",
+    ],
+)
