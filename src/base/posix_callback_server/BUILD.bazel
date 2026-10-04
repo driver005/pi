@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_callback_server",
+    deps = [
+        "//interfaces/platform/i_callback_server",
+        "//interfaces/support/url_parser",
+    ],
+)

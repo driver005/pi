@@ -120,3 +120,28 @@ TEST_F(CommandLineParserTest, RpcLeavesTheServeOptionsUnset) {
     EXPECT_TRUE(line->serverDir.empty());
     EXPECT_FALSE(line->options.sessionDir.has_value());
 }
+
+TEST_F(CommandLineParserTest, ParsesTheMcpCommands) {
+    const auto login = parse({"mcp", "login", "docs", "--agent-dir", "/a", "--trust"});
+    ASSERT_TRUE(login.has_value()) << login.error().message;
+    EXPECT_EQ(login->command, "mcp");
+    EXPECT_EQ(login->arguments, (std::vector<std::string>{"login", "docs"}));
+    EXPECT_EQ(login->options.agentDir, "/a");
+    EXPECT_EQ(parse({"mcp", "logout", "docs"})->arguments, (std::vector<std::string>{"logout", "docs"}));
+    EXPECT_EQ(parse({"mcp", "list"})->arguments, std::vector<std::string>{"list"});
+    EXPECT_EQ(parse({"mcp", "--cwd", "/p", "list"})->options.cwd, "/p");
+}
+
+TEST_F(CommandLineParserTest, RejectsMalformedMcpCommands) {
+    for (const std::vector<std::string>& args : std::vector<std::vector<std::string>>{{"mcp"}, {"mcp", "login"}, {"mcp", "login", "a", "b"}, {"mcp", "list", "x"}, {"mcp", "frobnicate", "a"}}) {
+        const auto line = parse(args);
+        ASSERT_FALSE(line.has_value());
+        EXPECT_NE(line.error().message.find("Usage: pi mcp"), std::string::npos);
+    }
+}
+
+TEST_F(CommandLineParserTest, OtherCommandsTakeNoPositionalArguments) {
+    const auto line = parse({"serve", "extra"});
+    ASSERT_FALSE(line.has_value());
+    EXPECT_EQ(line.error().code, "usage");
+}

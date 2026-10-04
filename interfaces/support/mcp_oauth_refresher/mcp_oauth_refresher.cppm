@@ -14,8 +14,9 @@ export import pi.types.result;
  * authorization server (the cached discovery, a configured metadata URL, or protected-resource and authorization-server
  * metadata discovery, with issuer validation), then sends a `refresh_token` grant to its token endpoint with the stored (or
  * configured) client, authenticating as the server's metadata allows (RFC 6749, RFC 8707 `resource`, RFC 9728 discovery).
- * Interactive sign-in (browser, registration, code exchange) is not done here. Port of the refresh path of
- * runFlow/authorizeMcp in packages/mcp/src/oauth/flow.ts.
+ * The discovery, client selection and token request steps are public because the interactive sign-in
+ * (McpOauthSignIn) uses them for its authorization code exchange. Port of the refresh path of runFlow/authorizeMcp and of
+ * tokenRequest in packages/mcp/src/oauth/flow.ts.
  *
  * Errors: "auth_required" when only a new sign-in helps (no refresh token or client, `invalid_grant`, `invalid_client`),
  * "oauth:<code>" for other OAuth errors the server reported, "oauth_insecure" for a non-HTTPS endpoint, "oauth_discovery"
@@ -35,37 +36,73 @@ public:
      * `clientSecret` (already resolved) and `authServerMetadataUrl` of the server's `oauth` configuration.
      */
     Result<Json> refresh(const std::string& serverUrl, Json state, const Json& settings, const std::optional<std::string>& resourceMetadataUrl, const std::shared_ptr<AbortSignal>& signal) {
-        m_signal = signal;
         const Json existing = state.value("tokens", Json());
         if (!existing.is_object() || !existing.contains("refresh_token") || !existing["refresh_token"].is_string()) {
             return std::unexpected(signIn());
         }
-        auto discovered = discover(serverUrl, state, settings, resourceMetadataUrl);
+        auto discovered = discoverServer(serverUrl, state, settings, resourceMetadataUrl, signal);
         if (!discovered) {
             return std::unexpected(discovered.error());
         }
-        auto resource = selectResource(serverUrl, discovered->value("resourceMetadata", Json()));
+        auto resource = resourceFor(serverUrl, *discovered);
         if (!resource) {
             return std::unexpected(resource.error());
         }
-        const Json client = clientOf(state, settings);
+        const Json client = clientFor(state, settings);
         if (client.is_null()) {
             return std::unexpected(signIn());
         }
-        auto tokens = tokenRequest(*discovered, client, *resource, existing["refresh_token"].get<std::string>());
+        const std::string refreshToken = existing["refresh_token"].get<std::string>();
+        auto tokens = requestTokens(*discovered, client, *resource, {{"grant_type", "refresh_token"}, {"refresh_token", refreshToken}}, signal);
         if (!tokens) {
             return failed(tokens.error());
         }
+        // A server that does not rotate the refresh token keeps the old one valid.
         Json merged = Json::object({{"refresh_token", existing["refresh_token"]}});
         for (const auto& entry : tokens->items()) {
             merged[entry.key()] = entry.value();
         }
-        if (!merged.contains("scope") && existing.contains("scope")) {
-            merged["scope"] = existing["scope"];
+        return withTokens(std::move(state), merged, existing.contains("scope") ? std::optional<std::string>(existing["scope"].get<std::string>()) : std::nullopt);
+    }
+
+    /**
+     * `{authorizationServerUrl, authorizationServerMetadata?, resourceMetadata?}` for the server: the cached discovery in
+     * `state["discovery"]`, a configured `authServerMetadataUrl`, or metadata discovery (stored into `state` when it ran).
+     */
+    Result<Json> discoverServer(const std::string& serverUrl, Json& state, const Json& settings, const std::optional<std::string>& resourceMetadataUrl, const std::shared_ptr<AbortSignal>& signal) {
+        m_signal = signal;
+        return discover(serverUrl, state, settings, resourceMetadataUrl);
+    }
+
+    /** The resource indicator for token requests: the protected resource's identifier when it covers the server URL. */
+    Result<std::optional<std::string>> resourceFor(const std::string& serverUrl, const Json& discovered) const {
+        return selectResource(serverUrl, discovered.value("resourceMetadata", Json()));
+    }
+
+    /** The configured client (`clientId`, `clientSecret`), else the one registered in `state`; null when there is none. */
+    Json clientFor(const Json& state, const Json& settings) const {
+        return clientOf(state, settings);
+    }
+
+    /**
+     * Sends a token request with `params` (grant type and its arguments) for `client` to the token endpoint of the
+     * discovered authorization server, adding the resource indicator and the client's authentication. The parsed token
+     * response `{access_token, token_type, expires_in?, scope?, refresh_token?, id_token?}`, or the OAuth error as
+     * "oauth:<code>".
+     */
+    Result<Json> requestTokens(const Json& discovered, const Json& client, const std::optional<std::string>& resource, const std::vector<std::pair<std::string, std::string>>& params, const std::shared_ptr<AbortSignal>& signal) {
+        m_signal = signal;
+        return tokenRequest(discovered, client, resource, params);
+    }
+
+    /** `state` with `tokens` saved: a scope the response lacks defaults to `defaultScope`, and the expiry time follows `expires_in`. */
+    Json withTokens(Json state, Json tokens, const std::optional<std::string>& defaultScope) const {
+        if (!tokens.contains("scope") && defaultScope && !defaultScope->empty()) {
+            tokens["scope"] = *defaultScope;
         }
-        state["tokens"] = merged;
-        if (merged.contains("expires_in") && merged["expires_in"].is_number()) {
-            state["tokensExpireAt"] = m_clock.nowMs() + static_cast<std::int64_t>(merged["expires_in"].get<double>() * 1000.0);
+        state["tokens"] = tokens;
+        if (tokens.contains("expires_in") && tokens["expires_in"].is_number()) {
+            state["tokensExpireAt"] = m_clock.nowMs() + static_cast<std::int64_t>(tokens["expires_in"].get<double>() * 1000.0);
         } else {
             state.erase("tokensExpireAt");
         }
@@ -266,7 +303,7 @@ private:
         return stored.is_object() && stored.contains("client_id") && stored["client_id"].is_string() ? stored : Json();
     }
 
-    Result<Json> tokenRequest(const Json& discovered, const Json& client, const std::optional<std::string>& resource, const std::string& refreshToken) {
+    Result<Json> tokenRequest(const Json& discovered, const Json& client, const std::optional<std::string>& resource, const std::vector<std::pair<std::string, std::string>>& grant) {
         const Json metadata = discovered.value("authorizationServerMetadata", Json());
         std::string endpoint;
         if (metadata.is_object() && metadata.contains("token_endpoint")) {
@@ -285,7 +322,7 @@ private:
         if (auto secure = secureEndpoint(*url); !secure) {
             return std::unexpected(secure.error());
         }
-        std::vector<std::pair<std::string, std::string>> params{{"grant_type", "refresh_token"}, {"refresh_token", refreshToken}};
+        std::vector<std::pair<std::string, std::string>> params = grant;
         if (resource) {
             params.emplace_back("resource", *resource);
         }

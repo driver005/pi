@@ -386,7 +386,7 @@ private:
         }
         if (usesOauth()) {
             return "MCP server \"" + m_config.name +
-                   "\" requires OAuth sign-in. Sign in with the pi CLI (/mcp), which stores the credentials in mcp-auth.json in the agent directory.";
+                   "\" requires OAuth sign-in. Run \"pi mcp login " + m_config.name + "\" (the credentials are stored in mcp-auth.json in the agent directory).";
         }
         return "MCP server \"" + m_config.name + "\" requires authentication. Set an Authorization header in mcp.json.";
     }

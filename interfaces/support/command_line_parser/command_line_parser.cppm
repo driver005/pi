@@ -27,6 +27,13 @@ public:
         }
         while (index < args.size()) {
             const std::string flag = args[index++];
+            if (!flag.starts_with("-")) {
+                if (line.command != "mcp") {
+                    return std::unexpected(Error{"usage", "Unexpected argument \"" + flag + "\""});
+                }
+                line.arguments.push_back(flag);
+                continue;
+            }
             Result<void> applied;
             if (!m_valueFlags.contains(flag)) {
                 applied = applySwitch(flag, line);
@@ -41,8 +48,13 @@ public:
         }
         if (line.help) {
             line.command.clear();
-        } else if (line.command != "rpc" && line.command != "serve") {
+        } else if (line.command != "rpc" && line.command != "serve" && line.command != "mcp") {
             return std::unexpected(Error{"usage", "Unknown command \"" + line.command + "\""});
+        }
+        if (line.command == "mcp") {
+            if (auto valid = validateMcp(line.arguments); !valid) {
+                return std::unexpected(valid.error());
+            }
         }
         if (line.command == "serve") {
             resolveServe(line);
@@ -51,10 +63,11 @@ public:
     }
 
     std::string usage() const {
-        return "Usage: pi rpc|serve [options]\n"
+        return "Usage: pi rpc|serve|mcp [options]\n"
                "\n"
                "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
+               "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
                "\n"
                "Options:\n"
                "  --cwd <dir>                   Working directory (default: current directory)\n"
@@ -172,6 +185,17 @@ private:
             return std::unexpected(Error{"usage", "--mcp-wait expects a number of milliseconds"});
         }
         startup.mcpStartupWaitMs = milliseconds;
+        return {};
+    }
+
+    Result<void> validateMcp(const std::vector<std::string>& arguments) const {
+        const std::string usage = "Usage: pi mcp list | login <server> | logout <server>";
+        if (arguments.empty() || (arguments[0] != "list" && arguments[0] != "login" && arguments[0] != "logout")) {
+            return std::unexpected(Error{"usage", usage});
+        }
+        if (arguments.size() != (arguments[0] == "list" ? 1U : 2U)) {
+            return std::unexpected(Error{"usage", usage});
+        }
         return {};
     }
 

@@ -61,6 +61,53 @@ public:
         return print(*url);
     }
 
+    /** Percent-encodes everything but the unreserved characters (RFC 3986), for query parameters and form bodies. */
+    std::string encode(std::string_view text) const {
+        std::string out;
+        for (const char c : text) {
+            const auto byte = static_cast<unsigned char>(c);
+            if (std::isalnum(byte) != 0 || c == '-' || c == '_' || c == '.' || c == '~') {
+                out.push_back(c);
+            } else {
+                out += std::format("%{:02X}", byte);
+            }
+        }
+        return out;
+    }
+
+    /** Decodes percent-escapes and, in query strings, '+' as a space; malformed escapes stay as written. */
+    std::string decode(std::string_view text, bool plusIsSpace = true) const {
+        std::string out;
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            if (text[i] == '+' && plusIsSpace) {
+                out.push_back(' ');
+            } else if (text[i] == '%' && i + 2 < text.size() + 0 && std::isxdigit(static_cast<unsigned char>(text[i + 1])) != 0 &&
+                       std::isxdigit(static_cast<unsigned char>(text[i + 2])) != 0) {
+                out.push_back(static_cast<char>(std::stoi(std::string(text.substr(i + 1, 2)), nullptr, 16)));
+                i += 2;
+            } else {
+                out.push_back(text[i]);
+            }
+        }
+        return out;
+    }
+
+    /** The parameters of a query string (`a=1&b=two`), decoded, in order. */
+    std::vector<std::pair<std::string, std::string>> parseQuery(std::string_view query) const {
+        std::vector<std::pair<std::string, std::string>> out;
+        std::size_t start = 0;
+        while (start <= query.size()) {
+            const std::size_t end = std::min(query.find('&', start), query.size());
+            const std::string_view pair = query.substr(start, end - start);
+            if (!pair.empty()) {
+                const std::size_t equals = pair.find('=');
+                out.emplace_back(decode(pair.substr(0, equals)), equals == std::string_view::npos ? std::string() : decode(pair.substr(equals + 1)));
+            }
+            start = end + 1;
+        }
+        return out;
+    }
+
     /** `loopback` hosts may use http for OAuth endpoints. */
     bool loopback(const ParsedUrl& url) const {
         return url.host == "localhost" || url.host == "127.0.0.1" || url.host == "[::1]";
