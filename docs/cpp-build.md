@@ -16,6 +16,13 @@ bazel build //app/pi:pi               # the executable
 
 `tools/ts_delta_golden.mts` does the same for the Delta code of `packages/chord`: `apply` (244 cases incl. rejections), op and wire validation, the stateful path-dictionary `encoder()`/`decoder()` over multi-batch streams, and `diffRevisions` (204 revision pairs, incl. the 4096-operation cap). The C++ applier, validator, encoder, decoder and differ reproduce every vector exactly. One deliberate difference: TS aligns array elements by object identity when a caller reuses containers between revisions; C++ values have no identity, so containers never anchor and the output equals TS for revisions that crossed a serialisation boundary. Regenerate with `node --experimental-strip-types tools/ts_delta_golden.mts src/testing/ts_golden/ts_delta_golden.json`.
 
+`tools/ts_crosscheck/run.sh` is a manual end-to-end check (needs `npm install --ignore-scripts` and a built `bazel-bin/app/pi/pi`; not part of `bazel test`). It bundles the TS sources with esbuild (`source` export condition, protocol/client aliased to their `src`) and:
+
+1. drives a real `pi serve --faux` (both `--session-tree` and the durable default) with the TS `packages/client` over the Unix transport: hello, service catalogue, `pi.session-directory` subscription (Delta updates decoded by the TS chord decoder), `create`/`attach`, `pi.transcript` subscription, `prompt` + `waitForPrompt`, subscription to every session service, and, for the durable backend, a server restart followed by re-attach with the transcript intact;
+2. copies the C++-written `session.sqlite` through the TS `SqliteStorage` (`openNodeSqliteStorage`: the TS migrations accept the file, the TS reader returns the C++ entries, tasks and documents) into a new file written by TS, then starts the C++ server over that file as a session directory, reads its transcript through the TS client and continues the conversation with a new prompt.
+
+No wire or storage discrepancy was found. A hand-made TS file lacking the `pi.agent` document yields `no_model` for prompts (the TS worker creates that document at session creation, so this is expected).
+
 ## `pi rpc`
 
 Headless JSONL server: one JSON command per line on stdin, one JSON line per response or event on stdout (LF framing). Command and event shapes follow `packages/coding-agent/src/modes/rpc/rpc-types.ts`.
@@ -87,7 +94,7 @@ PI_FAUX_REPLIES='["pong"]' pi serve --faux --server-dir /tmp/pi-server --server-
 - `MemoryStorage` (`src/durable/memory_storage`): the reference implementation; also an `IStagedStorage` (validate/apply in two steps).
 - `JsonlStorage` (`src/durable/jsonl_storage`): `main.jsonl` commit markers plus `doc-<id>.jsonl` / `task-<id>.jsonl` sidecars, rebuilt into a memory store on open, with torn-tail and unconfirmed-record recovery and sidecar reclamation. Same on-disk format as the TS implementation (format 1).
 
-- `SqliteStorage` (`src/durable/sqlite_storage`) over `ISqlDatabase` (`interfaces/durable/i_sql_database`; `SqliteDatabase` in `src/durable/sqlite_database` binds the system libsqlite3, WAL journal, immediate transactions). The schema and row encoding are those of the TS SQLite storage (`SqliteMigrations`), so the two implementations are meant to open each other's `session.sqlite` (not yet cross-checked against a file written by the TS server). Reads are SQL queries, not an in-memory copy.
+- `SqliteStorage` (`src/durable/sqlite_storage`) over `ISqlDatabase` (`interfaces/durable/i_sql_database`; `SqliteDatabase` in `src/durable/sqlite_database` binds the system libsqlite3, WAL journal, immediate transactions). The schema and row encoding are those of the TS SQLite storage (`SqliteMigrations`), so the two implementations open each other's `session.sqlite` (cross-checked by `tools/ts_crosscheck/run.sh`). Reads are SQL queries, not an in-memory copy.
 
 All three pass the ported conformance suite (`src/testing/storage_conformance`); the harness restart-recovery test also runs over a SQLite file. The registry's `sqlite3` module downloads from sqlite.org, which the dev sandbox cannot reach, so `//third_party:sqlite3` links the system library (`libsqlite3-dev`); switch it to the registry module where the download works.
 
