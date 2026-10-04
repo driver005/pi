@@ -19,12 +19,13 @@ export import pi.support.oauth_device_login;
 export import pi.support.oauth_device_poller;
 export import pi.support.oauth_token_mapper;
 export import pi.support.provider_login_specs;
+export import pi.support.radius_gateway;
 export import pi.types.login_interaction;
 
 /**
  * Signs in to a subscription provider and stores the credential in the credential store, in the shape the provider's refresh
  * keeps: Anthropic (browser or copy code), OpenAI Codex (browser or device code), Sign in with ChatGPT, OpenRouter (an API
- * key), xAI and Kimi Code (device code) and GitHub Copilot (device code, then the Copilot token through the provider's flow).
+ * key), xAI and Kimi Code (device code) and GitHub Copilot (device code, then the Copilot token through the provider's flow), Meta (device code, then the API key minted through the provider's flow) and Radius (browser with the gateway's discovered endpoint, or device code).
  * Sign-ins that follow the standard shapes are OauthBrowserLogin and OauthDeviceLogin over the descriptions of
  * ProviderLoginSpecs; the Codex device flow, which uses its own endpoints, and the Copilot token exchange are here. Port of the
  * login functions of packages/ai/src/auth/oauth.
@@ -44,6 +45,11 @@ public:
           m_poller(clock, sleeper),
           m_browser(http, crypto, base64, std::move(callbacks)),
           m_device(http, m_poller) {}
+
+    /** The Radius gateway origin the Radius sign-in uses (normalized, see RadiusGateway); without it the default gateway. */
+    void setRadiusGateway(std::string gateway) {
+        m_radiusGateway = std::move(gateway);
+    }
 
     /** Adds the sign-ins plugins registered (method "plugin"); built-in providers keep theirs. */
     void setPlugins(IPluginOauth* plugins) {
@@ -109,10 +115,17 @@ private:
         if (method == "device_code") {
             return device(provider, interaction);
         }
-        const auto spec = m_specs.browser(provider);
+        auto spec = m_specs.browser(provider);
         const auto mapper = mapperFor(provider);
         if (!spec || !mapper) {
             return std::unexpected(Error{"unknown_provider", "No browser sign-in is available for \"" + provider + "\""});
+        }
+        if (provider == "radius") {
+            auto endpoint = radiusAuthorizationEndpoint(interaction.signal);
+            if (!endpoint) {
+                return std::unexpected(endpoint.error());
+            }
+            spec->authorizeUrl = *endpoint;
         }
         std::vector<OauthBrowserLogin::Param> extra;
         if (provider == "openai") {
@@ -126,7 +139,7 @@ private:
         if (provider == "openai-codex") {
             return codexDevice(interaction);
         }
-        const auto spec = m_specs.device(provider, m_kimiHost);
+        const auto spec = m_specs.device(provider, m_kimiHost, radiusGateway());
         if (!spec) {
             return std::unexpected(Error{"unknown_provider", "No device sign-in is available for \"" + provider + "\""});
         }
@@ -137,11 +150,55 @@ private:
         if (provider == "github-copilot") {
             return copilot(*tokens, interaction);
         }
+        if (provider == "meta") {
+            return meta(*tokens, interaction);
+        }
         const auto mapper = mapperFor(provider);
         if (!mapper) {
             return std::unexpected(Error{"unknown_provider", "No token mapping is available for \"" + provider + "\""});
         }
         return mapper->credentialFrom(*tokens, Credential{}, spec->clientId);
+    }
+
+    /** The identity token is the credential's `refresh`; the provider's flow mints the API key from it. */
+    Result<Credential> meta(const Json& tokens, const LoginInteraction& interaction) {
+        const auto flow = m_flows.find("meta");
+        if (flow == m_flows.end() || flow->second == nullptr) {
+            return std::unexpected(Error{"oauth", "Meta sign-in needs the provider's OAuth flow"});
+        }
+        if (interaction.progress) {
+            interaction.progress("Enabling Meta Model API access...");
+        }
+        Credential identity;
+        identity.type = CredentialType::OAuth;
+        identity.refresh = tokens["access_token"].get<std::string>();
+        return flow->second->refresh(identity, interaction.signal);
+    }
+
+    std::string radiusGateway() const {
+        return m_radiusGateway.empty() ? RadiusGateway().normalize(RadiusGateway().defaultGateway()) : m_radiusGateway;
+    }
+
+    /** The browser authorization endpoint the Radius gateway announces at /v1/oauth. */
+    Result<std::string> radiusAuthorizationEndpoint(const std::shared_ptr<AbortSignal>& signal) {
+        const std::string gateway = radiusGateway();
+        HttpRequest request;
+        request.url = gateway + "/v1/oauth";
+        request.headers = {{"Accept", "application/json"}};
+        request.timeout = std::chrono::seconds(30);
+        request.signal = signal;
+        const auto response = m_http.send(request);
+        if (!response) {
+            return std::unexpected(Error{"oauth", "Could not load Radius OAuth config from " + gateway + ": " + response.error().message});
+        }
+        if (response->status < 200 || response->status >= 300) {
+            return std::unexpected(Error{"oauth", "Could not load Radius OAuth config from " + gateway + ": " + std::to_string(response->status) + " " + response->body});
+        }
+        const Json body = Json::parse(response->body, nullptr, false);
+        if (!body.is_object() || !body.contains("authorizationEndpoint") || !body["authorizationEndpoint"].is_string()) {
+            return std::unexpected(Error{"oauth", "Invalid Radius OAuth config from " + gateway});
+        }
+        return body["authorizationEndpoint"].get<std::string>();
     }
 
     /** The GitHub access token is the credential's `refresh`; the provider's flow turns it into a Copilot token. */
@@ -278,6 +335,9 @@ private:
     }
 
     std::optional<OauthTokenMapper> mapperFor(const std::string& provider) const {
+        if (provider == "radius") {
+            return OauthTokenMapper(BuiltinOauthSpecs().radius(radiusGateway()), m_clock, m_base64);
+        }
         for (OauthRefreshSpec& spec : BuiltinOauthSpecs().all(m_kimiHost)) {
             if (spec.providerId == provider) {
                 return OauthTokenMapper(std::move(spec), m_clock, m_base64);
@@ -308,6 +368,7 @@ private:
     const IClock& m_clock;
     std::map<std::string, IOauthFlow*> m_flows;
     std::string m_kimiHost;
+    std::string m_radiusGateway;
     ProviderLoginSpecs m_specs;
     IPluginOauth* m_plugins = nullptr;
     OauthDevicePoller m_poller;

@@ -19,6 +19,8 @@ export struct OauthRefreshSpec {
     bool keepRefreshWhenMissing = false;
     /** The grant's scope must include this one; the scopes are stored with the credential. */
     std::string requiredScope;
+    /** Stores the `scope` string of the token response with the credential (Radius). */
+    bool keepScope = false;
     /** Stores the ChatGPT account id from the access token as "accountId". */
     bool accountIdFromJwt = false;
     /** Authenticate with an Authorization: Bearer header instead of an API key. */

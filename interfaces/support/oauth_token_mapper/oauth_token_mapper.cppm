@@ -83,6 +83,9 @@ public:
             }
             out.extra["scopes"] = std::move(scopes);
         }
+        if (m_spec.keepScope && !stringIn(body, "scope").empty()) {
+            out.extra["scope"] = stringIn(body, "scope");
+        }
         if (m_spec.accountIdFromJwt) {
             const auto id = accountId(access);
             if (!id) {

@@ -9,6 +9,7 @@ import pi.ai.bedrock_provider;
 import pi.ai.chat_completions_provider;
 import pi.ai.faux_provider;
 import pi.ai.github_copilot_oauth_flow;
+import pi.ai.meta_oauth_flow;
 import pi.ai.google_adc_auth;
 import pi.ai.google_provider;
 import pi.ai.google_vertex_provider;
@@ -23,6 +24,7 @@ import pi.ai.provider_registry;
 import pi.ai.responses_provider;
 import pi.platform_services;
 import pi.support.builtin_oauth_specs;
+import pi.support.radius_gateway;
 
 /**
  * The model side of the application: credential and models.json stores under the agent directory,
@@ -41,6 +43,7 @@ public:
           m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(), platform.base64()),
           m_flows(buildFlows()),
           m_copilot(platform.http()),
+          m_meta(platform.http(), platform.clock()),
           m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir, PiUserAgent().value(platform.system())}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
         m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
             platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
@@ -92,6 +95,11 @@ public:
         return flowMap();
     }
 
+    /** The Radius gateway origin: PI_RADIUS_GATEWAY, else the default gateway. */
+    std::string radiusGateway() const {
+        return RadiusGateway().gatewayUrl(m_platform.environment());
+    }
+
     /** The Kimi OAuth host override from the environment (KIMI_CODE_OAUTH_HOST or KIMI_OAUTH_HOST); empty for the default. */
     std::string kimiHost() const {
         std::string host = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
@@ -105,6 +113,7 @@ private:
             flows.push_back(std::make_unique<OauthRefreshFlow>(std::move(spec), m_platform.http(), m_platform.clock(),
                                                                m_platform.base64()));
         }
+        flows.push_back(std::make_unique<OauthRefreshFlow>(BuiltinOauthSpecs().radius(radiusGateway()), m_platform.http(), m_platform.clock(), m_platform.base64()));
         return flows;
     }
 
@@ -114,6 +123,7 @@ private:
             flows[flow->providerId()] = flow.get();
         }
         flows["github-copilot"] = &m_copilot;
+        flows["meta"] = &m_meta;
         return flows;
     }
 
@@ -144,6 +154,7 @@ private:
     GoogleAdcAuth m_adc;
     std::vector<std::unique_ptr<OauthRefreshFlow>> m_flows;
     GithubCopilotOauthFlow m_copilot;
+    MetaOauthFlow m_meta;
     ProviderRegistry m_providers;
     std::shared_ptr<FauxProvider> m_faux;
     ModelRuntime m_runtime;

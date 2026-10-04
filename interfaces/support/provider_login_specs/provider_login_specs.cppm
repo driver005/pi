@@ -11,14 +11,15 @@ export import pi.types.device_login_spec;
 /**
  * How each subscription provider signs in: the method ids a provider offers ("browser", "copy_code", "device_code"; the first
  * is the default) and the browser and device descriptions of the flows that follow the standard shapes. Constants from the
- * TypeScript oauth modules in packages/ai/src/auth/oauth. Not ported: the Meta and Radius sign-ins, GitHub Enterprise for
+ * TypeScript oauth modules in packages/ai/src/auth/oauth. Meta is a device flow whose identity token is traded for an API key
+ * (ProviderLogin); Radius signs in at its gateway (`radiusGateway`, the normalized origin). Not ported: GitHub Enterprise for
  * Copilot (github.com only).
  */
 export class ProviderLoginSpecs {
 public:
     /** Provider ids that can sign in, in the order they are listed. */
     std::vector<std::string> providers() const {
-        return {"anthropic", "openai-codex", "openai", "xai", "kimi-coding", "openrouter", "github-copilot"};
+        return {"anthropic", "openai-codex", "openai", "xai", "kimi-coding", "openrouter", "github-copilot", "meta", "radius"};
     }
 
     std::vector<std::string> methods(const std::string& provider) const {
@@ -31,8 +32,11 @@ public:
         if (provider == "openai" || provider == "openrouter") {
             return {"browser"};
         }
-        if (provider == "xai" || provider == "kimi-coding" || provider == "github-copilot") {
+        if (provider == "xai" || provider == "kimi-coding" || provider == "github-copilot" || provider == "meta") {
             return {"device_code"};
+        }
+        if (provider == "radius") {
+            return {"browser", "device_code"};
         }
         return {};
     }
@@ -76,6 +80,17 @@ public:
             spec.providerName = "ChatGPT";
             return spec;
         }
+        if (provider == "radius") {
+            // The authorization endpoint is discovered at the gateway when the sign-in starts (ProviderLogin fills it in).
+            spec.clientId = "pi-gateway";
+            spec.scope = "gateway offline_access";
+            spec.redirectHost = "127.0.0.1";
+            spec.port = 1456;
+            spec.path = "/oauth/callback";
+            spec.authorizeParams = {{"handoff", "url"}};
+            spec.providerName = "Radius";
+            return spec;
+        }
         if (provider == "openrouter") {
             spec.authorizeUrl = "https://openrouter.ai/auth";
             spec.redirectHost = "127.0.0.1";
@@ -92,9 +107,27 @@ public:
         return std::nullopt;
     }
 
-    /** `kimiHost` overrides the Kimi OAuth host (KIMI_CODE_OAUTH_HOST / KIMI_OAUTH_HOST). */
-    std::optional<DeviceLoginSpec> device(const std::string& provider, const std::string& kimiHost = "") const {
+    /** `kimiHost` overrides the Kimi OAuth host (KIMI_CODE_OAUTH_HOST / KIMI_OAUTH_HOST); `radiusGateway` is the Radius origin. */
+    std::optional<DeviceLoginSpec> device(const std::string& provider, const std::string& kimiHost = "", const std::string& radiusGateway = "") const {
         DeviceLoginSpec spec;
+        if (provider == "meta") {
+            spec.name = "Meta";
+            spec.deviceUrl = "https://auth.meta.com/oidc/device/authorization/";
+            spec.tokenUrl = "https://auth.meta.com/oidc/device/token/";
+            spec.clientId = "1031625952748946";
+            spec.preferCompleteUri = true;
+            spec.defaultExpiresSeconds = 15 * 60;
+            return spec;
+        }
+        if (provider == "radius") {
+            spec.name = "Radius";
+            spec.deviceUrl = radiusGateway + "/v1/oauth/device";
+            spec.tokenUrl = radiusGateway + "/v1/oauth/token";
+            spec.clientId = "pi-gateway";
+            spec.scope = "gateway offline_access";
+            spec.waitBeforeFirstPoll = false;
+            return spec;
+        }
         if (provider == "xai") {
             spec.name = "xAI";
             spec.deviceUrl = "https://auth.x.ai/oauth2/device/code";

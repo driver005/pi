@@ -36,6 +36,7 @@ public:
         ModelServices& models = m_services.models();
         PlatformServices& platform = m_services.platform();
         ProviderLogin login(models.credentials(), m_http, platform.crypto(), platform.base64(), platform.clock(), m_sleeper, m_callbacks, models.flows(), models.kimiHost());
+        login.setRadiusGateway(models.radiusGateway());
         const std::string& subcommand = line.arguments[0];
         ToolRegistry tools;
         HookBus hooks;

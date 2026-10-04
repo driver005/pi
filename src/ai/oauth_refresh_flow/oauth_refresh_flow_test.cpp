@@ -148,3 +148,16 @@ TEST_F(OauthRefreshFlowTest, ToAuthUsesAnApiKeyOrABearerHeader) {
     EXPECT_FALSE(OauthRefreshFlow(spec("openrouter"), m_http, m_clock, m_base64).isSubscription());
     EXPECT_EQ(anthropic.providerId(), "anthropic");
 }
+
+TEST_F(OauthRefreshFlowTest, RadiusRefreshesAtItsGatewayAndKeepsTheScope) {
+    m_http.enqueue(reply(Json{{"access_token", "new-access"}, {"refresh_token", "new-refresh"}, {"expires_in", 3600}, {"scope", "gateway offline_access"}}));
+    const auto result = refresh(BuiltinOauthSpecs().radius("https://gw.example"), oauth("old-refresh"));
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(m_http.requests()[0].url, "https://gw.example/v1/oauth/token");
+    EXPECT_NE(m_http.requests()[0].body.find("client_id=pi-gateway"), std::string::npos);
+    EXPECT_NE(m_http.requests()[0].body.find("refresh_token=old-refresh"), std::string::npos);
+    EXPECT_EQ(result->access, "new-access");
+    EXPECT_EQ(result->extra["scope"], "gateway offline_access");
+    EXPECT_DOUBLE_EQ(result->expires, 1'000'000 + 3'600'000 - 60'000);
+    EXPECT_FALSE(OauthRefreshFlow(BuiltinOauthSpecs().radius("https://gw.example"), m_http, m_clock, m_base64).isSubscription());
+}

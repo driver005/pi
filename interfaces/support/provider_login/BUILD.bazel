@@ -17,6 +17,7 @@ pi_support(
         "//interfaces/support/oauth_device_poller",
         "//interfaces/support/oauth_token_mapper",
         "//interfaces/support/provider_login_specs",
+        "//interfaces/support/radius_gateway",
         "//interfaces/types/login_interaction",
     ],
     test_deps = [

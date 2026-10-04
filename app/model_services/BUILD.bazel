@@ -21,8 +21,11 @@ pi_module(
         "//src/ai/google_provider",
         "//src/ai/google_vertex_provider",
         "//src/ai/file_models_store",
+        "//src/ai/meta_oauth_flow",
         "//src/ai/mistral_provider",
+
         "//interfaces/support/builtin_oauth_specs",
+        "//interfaces/support/radius_gateway",
         "//src/ai/model_runtime",
         "//src/ai/oauth_refresh_flow",
         "//src/ai/pi_messages_provider",

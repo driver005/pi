@@ -6,7 +6,7 @@ export import pi.types.oauth_refresh_spec;
 /**
  * Refresh settings of the subscription providers whose tokens are exchanged with a plain token
  * endpoint: Anthropic (Claude Pro/Max), OpenAI Codex, Sign in with ChatGPT, xAI, Kimi Code and
- * OpenRouter (long-lived key). Constants from the TypeScript oauth modules in packages/ai/src/auth.
+ * OpenRouter (long-lived key); Radius is built for a gateway. Constants from the TypeScript oauth modules in packages/ai/src/auth.
  */
 export class BuiltinOauthSpecs {
 public:
@@ -63,5 +63,18 @@ public:
         openRouter.passthrough = true;
 
         return {anthropic, codex, chatgpt, xai, kimi, openRouter};
+    }
+
+    /** The Radius gateway's OAuth (client "pi-gateway"): `gateway` is the normalized origin, see RadiusGateway. */
+    OauthRefreshSpec radius(const std::string& gateway) const {
+        OauthRefreshSpec spec;
+        spec.providerId = "radius";
+        spec.name = "Radius";
+        spec.isSubscription = false;
+        spec.tokenUrl = gateway + "/v1/oauth/token";
+        spec.clientId = "pi-gateway";
+        spec.expiryMarginMs = 60 * 1000;
+        spec.keepScope = true;
+        return spec;
     }
 };
