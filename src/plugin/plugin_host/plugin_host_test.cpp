@@ -712,6 +712,10 @@ TEST_F(PluginHostStreamTest, WithoutAClockStreamProvidersCannotBeRegistered) {
     EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
 }
 
+std::string g_oauthProvider;
+std::vector<int> g_uiResults;
+std::string g_prompted;
+std::string g_refreshInput;
 std::string g_commandArgs;
 std::string g_eventData;
 std::string g_eventChannel;
@@ -856,4 +860,111 @@ TEST_F(PluginHostCommandsTest, TheEventBusReachesSubscribers) {
     EXPECT_EQ(Json::parse(take(g_host->event_emit(g_host->host, view(channel), view(data))))["ok"], true);
     EXPECT_EQ(g_eventChannel, "chan");
     EXPECT_EQ(g_eventData, data);
+}
+
+class PluginHostOauthTest : public PluginHostTest {
+protected:
+    void provideOauthPlugin(const std::string& path, const std::string& provider) {
+        g_oauthProvider = provider;
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            PiOauthLoginFn login = [](void*, PiOauthUi* ui, const PiAbort*) {
+                const std::string url = "https://acme.test/login";
+                const std::string instructions = "go there";
+                g_uiResults.push_back(g_host->oauth_auth(g_host->host, ui, view(url), view(instructions)));
+                const std::string message = "waiting";
+                g_uiResults.push_back(g_host->oauth_progress(g_host->host, ui, view(message)));
+                const std::string code = "Code:";
+                g_uiResults.push_back(g_host->oauth_device_code(g_host->host, ui, view(code), view(url)));
+                const std::string asked = "Paste the code";
+                g_prompted = take(g_host->oauth_prompt(g_host->host, ui, view(asked)));
+                return text(Json{{"access", "a"}, {"refresh", "r"}, {"expires", 123}, {"extra", "kept"}}.dump());
+            };
+            PiOauthRefreshFn refresh = [](void*, PiString credential, const PiAbort*) {
+                g_refreshInput.assign(credential.data, credential.size);
+                return text(Json{{"access", "a2"}, {"refresh", "r"}, {"expires", 456}}.dump());
+            };
+            const std::string options = R"({"name":"Acme","subscription":true})";
+            g_lastReply = take(host->register_oauth(host->host, view(g_oauthProvider), view(options), login, refresh, nullptr));
+            return 0;
+        };
+        PiPluginShutdownFn shutdown = []() { ++g_shutdowns; };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)},
+                                   {"pi_plugin_init", reinterpret_cast<void*>(init)},
+                                   {"pi_plugin_shutdown", reinterpret_cast<void*>(shutdown)}});
+    }
+};
+
+TEST_F(PluginHostOauthTest, ASignInIsRegisteredWithTheRuntimeAndRunsThroughThePlugin) {
+    g_uiResults.clear();
+    g_prompted.clear();
+    provideOauthPlugin("/plugins/o.so", "acme");
+    ASSERT_TRUE(m_host.load({"/plugins/o.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    ASSERT_EQ(m_models.registeredOauthFlows().count("acme"), 1U);
+    EXPECT_EQ(m_host.oauthProviders(), (std::vector<std::pair<std::string, std::string>>{{"acme", "Acme"}}));
+
+    LoginInteraction interaction;
+    std::vector<std::string> shown;
+    interaction.authUrl = [&shown](const std::string& url, const std::string&) { shown.push_back(url); };
+    interaction.progress = [&shown](const std::string& message) { shown.push_back(message); };
+    interaction.deviceCode = [&shown](const std::string& code, const std::string&, std::optional<std::int64_t>, std::optional<std::int64_t>) { shown.push_back(code); };
+    interaction.manualCode = [](const std::string&) -> std::optional<std::string> { return "pasted"; };
+    const auto credential = m_host.oauthLogin("acme", interaction);
+    ASSERT_TRUE(credential.has_value());
+    EXPECT_EQ(shown, (std::vector<std::string>{"https://acme.test/login", "waiting", "Code:"}));
+    EXPECT_EQ(g_uiResults, (std::vector<int>{0, 0, 0}));
+    EXPECT_EQ(Json::parse(g_prompted)["value"], "pasted");
+    EXPECT_EQ(credential->access, "a");
+    EXPECT_EQ(credential->extra["extra"], "kept");
+
+    IOauthFlow* flow = m_models.registeredOauthFlows().at("acme");
+    EXPECT_TRUE(flow->isSubscription());
+    EXPECT_EQ(flow->name(), "Acme");
+    const auto refreshed = flow->refresh(*credential, nullptr);
+    ASSERT_TRUE(refreshed.has_value());
+    EXPECT_EQ(refreshed->access, "a2");
+    EXPECT_EQ(Json::parse(g_refreshInput)["extra"], "kept");
+    EXPECT_EQ(flow->toAuth(*refreshed).apiKey, "a2");
+
+    EXPECT_EQ(m_host.oauthLogin("other", interaction).error().code, "unknown_provider");
+}
+
+TEST_F(PluginHostOauthTest, ASignInWithoutAPromptHandlerAnswersNullAndCancelledSignInsReportIt) {
+    g_uiResults.clear();
+    g_prompted.clear();
+    provideOauthPlugin("/plugins/o.so", "acme");
+    ASSERT_TRUE(m_host.load({"/plugins/o.so"}).empty());
+    LoginInteraction interaction;
+    interaction.signal = std::make_shared<AbortSignal>();
+    interaction.signal->abort();
+    interaction.authUrl = [](const std::string&, const std::string&) {};
+    ASSERT_TRUE(m_host.oauthLogin("acme", interaction).has_value());
+    EXPECT_EQ(g_uiResults.front(), 1) << "an aborted sign-in tells the plugin";
+    EXPECT_TRUE(Json::parse(g_prompted)["value"].is_null());
+}
+
+TEST_F(PluginHostOauthTest, OnlyOnePluginSignsInToAProviderAndTheFlowEndsWithThePlugin) {
+    provideOauthPlugin("/plugins/o.so", "acme");
+    provideOauthPlugin("/plugins/p.so", "acme");
+    ASSERT_TRUE(m_host.load({"/plugins/o.so", "/plugins/p.so"}).empty());
+    EXPECT_NE(Json::parse(g_lastReply)["error"].get<std::string>().find("already has an OAuth sign-in"), std::string::npos);
+    EXPECT_EQ(m_models.registeredOauthFlows().size(), 1U);
+    m_host.shutdown();
+    EXPECT_TRUE(m_models.registeredOauthFlows().empty());
+    EXPECT_TRUE(m_host.oauthProviders().empty());
+}
+
+TEST_F(PluginHostOauthTest, RegisteringNeedsAModelRegistryAndValidArguments) {
+    PluginHost bare(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, nullptr, nullptr);
+    provideOauthPlugin("/plugins/o.so", "acme");
+    ASSERT_TRUE(bare.load({"/plugins/o.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
+    bare.shutdown();
+
+    provideOauthPlugin("/plugins/q.so", "");
+    ASSERT_TRUE(m_host.load({"/plugins/q.so"}).empty());
+    EXPECT_TRUE(Json::parse(g_lastReply).contains("error"));
+    EXPECT_TRUE(m_models.registeredOauthFlows().empty());
 }

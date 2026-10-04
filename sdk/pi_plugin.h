@@ -75,6 +75,22 @@ typedef PiOwnedString (*PiRouteFn)(void* user_data, PiString request_json, const
  */
 typedef PiOwnedString (*PiCommandFn)(void* user_data, PiString args, const PiAbort* abort);
 
+/* The person signing in during a PiOauthLoginFn; valid until that function returns. Talk to it with PiHostApi.oauth_*. */
+typedef struct PiOauthUi PiOauthUi;
+
+/*
+ * Signs the person in to a provider (`pi auth login <provider>`): shows what to do through `ui` (oauth_auth, oauth_device_code,
+ * oauth_progress, oauth_prompt) and returns the credential {"access":"..","refresh":"..","expires":<epoch ms>, ...} (any other
+ * fields are stored with it and passed back to PiOauthRefreshFn) or {"error":".."}. `abort` is cancelled when the person gives up.
+ */
+typedef PiOwnedString (*PiOauthLoginFn)(void* user_data, PiOauthUi* ui, const PiAbort* abort);
+
+/*
+ * Exchanges the refresh token: credential_json is the stored credential ({"access","refresh","expires",...}); returns the new
+ * one in the same shape or {"error":".."}. It runs under the credential store's lock, so it must not call back into the host.
+ */
+typedef PiOwnedString (*PiOauthRefreshFn)(void* user_data, PiString credential_json, const PiAbort* abort);
+
 /* One response being streamed by a provider's PiStreamFn; valid until that function returns. */
 typedef struct PiStreamSink PiStreamSink;
 
@@ -231,6 +247,28 @@ typedef struct PiHostApi {
 
     /* Emits data on a channel to every subscriber (including the emitting plugin). Returns {"ok":true}. */
     PiOwnedString (*event_emit)(void* host, PiString channel, PiString data_json);
+
+    /*
+     * Registers the OAuth sign-in of a provider (the `oauth` of a TypeScript ProviderConfig): `login` runs for
+     * `pi auth login <provider>` and stores the credential it returns; `refresh` renews it before it expires. The credential's
+     * `access` token is the API key of the provider's requests. options_json: {"name":"Display name","subscription"?:bool}.
+     * The provider must not have a built-in sign-in or one from another plugin. The registration ends with the plugin, which
+     * first waits for running login and refresh calls. Returns {"ok":true} or {"error":".."}. Check `struct_size` covers
+     * `oauth_prompt` before calling these.
+     */
+    PiOwnedString (*register_oauth)(void* host, PiString provider, PiString options_json, PiOauthLoginFn login, PiOauthRefreshFn refresh, void* user_data);
+
+    /* During login: shows the URL to open and what to do there. Returns 0, non-zero when the sign-in was cancelled. */
+    int (*oauth_auth)(void* host, PiOauthUi* ui, PiString url, PiString instructions);
+
+    /* During login: shows the code to enter at the verification URL. Returns 0, non-zero when cancelled. */
+    int (*oauth_device_code)(void* host, PiOauthUi* ui, PiString user_code, PiString verification_uri);
+
+    /* During login: reports progress. Returns 0, non-zero when cancelled. */
+    int (*oauth_progress)(void* host, PiOauthUi* ui, PiString message);
+
+    /* During login: asks the person for text (a pasted code); {"value":"text"} or {"value":null} when nothing was entered. */
+    PiOwnedString (*oauth_prompt)(void* host, PiOauthUi* ui, PiString message);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

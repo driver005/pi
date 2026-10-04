@@ -34,5 +34,6 @@ pi_module(
         "//src/testing/fixed_clock",
         "//src/testing/inline_executor",
         "//src/testing/scripted_process_runner",
+        "//src/testing/stub_oauth_flow",
     ],
 )

@@ -142,6 +142,20 @@ are available in `pi rpc` sessions.
 the emitting thread in subscription order (including the emitter's own) and end with the plugin. All of these were appended to
 `PiHostApi`; a plugin checks that `struct_size` covers `event_emit` (the SDK does).
 
+### Provider sign-in (OAuth)
+
+`register_oauth(provider, options, login, refresh, user_data)` adds an OAuth sign-in to a provider (the `oauth` of a TypeScript
+`ProviderConfig`; the SDK's `Host::registerOauth`, `plugins/hello_oauth` is an example). `options`: `{"name": "Display name",
+"subscription"?: bool}`. `pi auth login <provider>` runs `login(ui, abort)`: it shows what to do through the `oauth_*` functions
+(`oauth_auth` the URL to open, `oauth_device_code` a code to enter, `oauth_progress`, and `oauth_prompt` which asks for a pasted
+code) and returns the credential `{"access", "refresh", "expires": <epoch ms>, ...}`; other fields are stored with it and passed
+back on refresh. `pi auth list` shows plugin providers with the method `plugin`, and plugins are loaded for `list` and `login`
+only (`<agent-dir>/plugins`, `--plugin`). Sessions that load the plugin refresh an expiring credential through `refresh(credential,
+abort)` like the built-in ones (under the credential store's lock, so it must not call back into the host); the `access` token is
+the provider's API key. A provider has one sign-in: built-in providers and providers another plugin signed in cannot be replaced.
+Unloading the plugin waits for a running login or refresh and withdraws the sign-in. Not ported: `modifyModels` (changing the
+provider's models from the credential) and a custom `getApiKey` (the access token is used).
+
 ### Hooks
 
 `subscribe(event, handler)` registers a handler; it returns the result JSON, or nothing for "no opinion". Handlers
@@ -189,7 +203,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the session boundary drafts (`agent_before_settle`, and the `entries` and `continue` results of `before_agent_start`), `session_start` reasons other than the first load, and the new hooks of the table above in `pi serve` sessions (only the hooks listed under `pi serve` below). They can be added as new host API functions or events without breaking ABI version 1 because
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), `modifyModels` and `getApiKey` of provider OAuth, commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the session boundary drafts (`agent_before_settle`, and the `entries` and `continue` results of `before_agent_start`), `session_start` reasons other than the first load, and the new hooks of the table above in `pi serve` sessions (only the hooks listed under `pi serve` below). They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 
 ## Building a plugin

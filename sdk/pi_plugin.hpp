@@ -134,6 +134,58 @@ struct StreamCall {
 /** Streams one response through the sink and ends it with done() or error(). Runs on a thread of its own. */
 using StreamHandler = std::function<void(const StreamCall&, const StreamSink&)>;
 
+/** The person signing in during an OAuth login (see PiOauthLoginFn). Each call returns false once the sign-in was cancelled. */
+class OauthUi {
+public:
+    OauthUi(const PiHostApi* api, PiOauthUi* ui) : m_api(api), m_ui(ui) {}
+
+    /** Shows the URL to open and what to do there. */
+    bool auth(const std::string& url, const std::string& instructions) const {
+        return m_api->oauth_auth(m_api->host, m_ui, PiString{url.data(), url.size()}, PiString{instructions.data(), instructions.size()}) == 0;
+    }
+
+    /** Shows the code to enter at the verification URL. */
+    bool deviceCode(const std::string& userCode, const std::string& verificationUri) const {
+        return m_api->oauth_device_code(m_api->host, m_ui, PiString{userCode.data(), userCode.size()}, PiString{verificationUri.data(), verificationUri.size()}) == 0;
+    }
+
+    bool progress(const std::string& message) const {
+        return m_api->oauth_progress(m_api->host, m_ui, PiString{message.data(), message.size()}) == 0;
+    }
+
+    /** Asks for text (a pasted code); an empty string when nothing was entered. */
+    std::string prompt(const std::string& message) const {
+        const Json reply = Json::parse(detail_take(m_api->oauth_prompt(m_api->host, m_ui, PiString{message.data(), message.size()})), nullptr, false);
+        return reply.is_object() && reply.contains("value") && reply["value"].is_string() ? reply["value"].get<std::string>() : std::string();
+    }
+
+private:
+    static std::string detail_take(PiOwnedString value) {
+        std::string out = value.data != nullptr ? std::string(value.data, value.size) : std::string();
+        if (value.release != nullptr) {
+            value.release(value.data, value.size);
+        }
+        return out;
+    }
+
+    const PiHostApi* m_api;
+    PiOauthUi* m_ui;
+};
+
+/** One sign-in as the plugin sees it. */
+struct LoginCall {
+    OauthUi ui;
+    const PiAbort* abort = nullptr;
+    const PiHostApi* host = nullptr;
+
+    bool aborted() const { return host != nullptr && host->abort_requested(abort) != 0; }
+};
+
+/** Signs in and returns the credential {access, refresh, expires (epoch ms), ...} or failure("..."). */
+using OauthLoginHandler = std::function<Json(const LoginCall&)>;
+/** Renews a stored credential (same shape in and out) or answers failure("..."). Must not call back into the host. */
+using OauthRefreshHandler = std::function<Json(const Json& credential, const PiAbort* abort)>;
+
 /** A text-only tool result. */
 inline Json text(const std::string& value, bool isError = false) {
     return Json{{"content", Json::array({Json{{"type", "text"}, {"text", value}}})}, {"isError", isError}};
@@ -344,6 +396,33 @@ public:
         detail::take(m_api->event_emit(m_api->host, PiString{channel.data(), channel.size()}, PiString{text.data(), text.size()}));
     }
 
+    /**
+     * Registers the OAuth sign-in of a provider (see PiHostApi.register_oauth); `options`: {"name", "subscription"?}. Returns an
+     * empty string on success, else the host's error message.
+     */
+    std::string registerOauth(const std::string& provider, const Json& options, OauthLoginHandler login, OauthRefreshHandler refresh) {
+        if (!hasOauthApi()) {
+            return "the host does not support register_oauth";
+        }
+        m_oauth.push_back(std::make_unique<OauthEntry>(OauthEntry{std::move(login), std::move(refresh), m_api}));
+        OauthEntry* entry = m_oauth.back().get();
+        const std::string text = options.dump();
+        return Json::parse(
+                   detail::take(m_api->register_oauth(
+                       m_api->host, PiString{provider.data(), provider.size()}, PiString{text.data(), text.size()},
+                       [](void* userData, PiOauthUi* ui, const PiAbort* abort) -> PiOwnedString {
+                           auto* entry = static_cast<OauthEntry*>(userData);
+                           return detail::own(entry->login(LoginCall{OauthUi(entry->host, ui), abort, entry->host}).dump());
+                       },
+                       [](void* userData, PiString credential, const PiAbort* abort) -> PiOwnedString {
+                           auto* entry = static_cast<OauthEntry*>(userData);
+                           return detail::own(entry->refresh(Json::parse(std::string(credential.data, credential.size), nullptr, false), abort).dump());
+                       },
+                       entry)),
+                   nullptr, false)
+            .value("error", "");
+    }
+
     /** Removes a provider this plugin registered. Returns an empty string on success. */
     std::string unregisterProvider(const std::string& name) const {
         if (!hasProviderApi()) {
@@ -425,6 +504,12 @@ public:
     }
 
 private:
+    bool hasOauthApi() const {
+        return m_api->struct_size >= offsetof(PiHostApi, oauth_prompt) + sizeof(void*) && m_api->register_oauth != nullptr &&
+               m_api->oauth_auth != nullptr && m_api->oauth_device_code != nullptr && m_api->oauth_progress != nullptr &&
+               m_api->oauth_prompt != nullptr;
+    }
+
     bool hasSessionApi() const {
         return m_api->struct_size >= offsetof(PiHostApi, event_emit) + sizeof(void*) && m_api->session_call != nullptr &&
                m_api->register_command != nullptr && m_api->register_flag != nullptr && m_api->get_flag != nullptr &&
@@ -466,6 +551,12 @@ private:
         const PiHostApi* host;
     };
 
+    struct OauthEntry {
+        OauthLoginHandler login;
+        OauthRefreshHandler refresh;
+        const PiHostApi* host;
+    };
+
     struct CommandEntry {
         CommandHandler handler;
         const PiHostApi* host;
@@ -477,6 +568,7 @@ private:
     std::vector<std::unique_ptr<RouteEntry>> m_routes;
     std::vector<std::unique_ptr<StreamEntry>> m_streams;
     std::vector<std::unique_ptr<CommandEntry>> m_commands;
+    std::vector<std::unique_ptr<OauthEntry>> m_oauth;
     std::vector<std::unique_ptr<EventHandler>> m_events;
 };
 

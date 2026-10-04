@@ -1,6 +1,7 @@
 export module pi.provider.i_model_runtime;
 
 import std;
+export import pi.provider.i_oauth_flow;
 export import pi.provider.i_provider;
 export import pi.types.auth_result;
 export import pi.types.auth_status;
@@ -76,6 +77,14 @@ public:
     virtual Result<void> registerApi(std::shared_ptr<IProvider> provider) = 0;
     /** Removes an implementation added by registerApi; other APIs are left alone. */
     virtual void unregisterApi(const std::string& api) = 0;
+
+    /**
+     * Adds the OAuth flow (refresh and API key derivation) of a plugin provider; the flow must outlive its registration. Fails
+     * when the provider already has a flow, so built-in sign-ins cannot be replaced.
+     */
+    virtual Result<void> registerOauthFlow(const std::string& provider, IOauthFlow& flow) = 0;
+    /** Removes a flow added by registerOauthFlow, if `flow` is still the provider's. */
+    virtual void unregisterOauthFlow(const std::string& provider, const IOauthFlow& flow) = 0;
 
     /**
      * Registers or replaces a virtual model under `definition.provider`, which may also list physical models. Fails when the id

@@ -28,6 +28,8 @@ export struct LoadedPlugin {
     std::vector<std::string> commands;
     std::vector<std::string> flags;
     std::vector<std::uint64_t> eventSubscriptions;
+    /** Providers whose OAuth sign-in the plugin registered. */
+    std::vector<std::string> oauth;
     /** Virtual models (provider, id). */
     std::vector<std::pair<std::string, std::string>> virtualModels;
 };

@@ -10,6 +10,7 @@ export import pi.platform.i_clock;
 export import pi.platform.i_crypto;
 export import pi.platform.i_http_client;
 export import pi.platform.i_sleeper;
+export import pi.plugin.i_plugin_oauth;
 export import pi.provider.i_credential_store;
 export import pi.provider.i_oauth_flow;
 export import pi.support.builtin_oauth_specs;
@@ -44,18 +45,35 @@ public:
           m_browser(http, crypto, base64, std::move(callbacks)),
           m_device(http, m_poller) {}
 
+    /** Adds the sign-ins plugins registered (method "plugin"); built-in providers keep theirs. */
+    void setPlugins(IPluginOauth* plugins) {
+        m_plugins = plugins;
+    }
+
     std::vector<std::string> providers() const {
-        return m_specs.providers();
+        std::vector<std::string> out = m_specs.providers();
+        if (m_plugins != nullptr) {
+            for (const auto& [provider, name] : m_plugins->oauthProviders()) {
+                if (std::ranges::find(out, provider) == out.end()) {
+                    out.push_back(provider);
+                }
+            }
+        }
+        return out;
     }
 
     /** The sign-in methods of a provider, the default first. */
     std::vector<std::string> methods(const std::string& provider) const {
-        return m_specs.methods(provider);
+        std::vector<std::string> built = m_specs.methods(provider);
+        if (built.empty() && isPluginProvider(provider)) {
+            return {"plugin"};
+        }
+        return built;
     }
 
     /** `method` empty selects the provider's default. The credential is stored when the sign-in succeeds. */
     Result<void> login(const std::string& provider, const std::string& method, const LoginInteraction& interaction, std::chrono::milliseconds timeout = OauthBrowserLogin::kDefaultTimeout) {
-        const std::vector<std::string> offered = m_specs.methods(provider);
+        const std::vector<std::string> offered = methods(provider);
         if (offered.empty()) {
             return std::unexpected(Error{"unknown_provider", "No sign-in is available for \"" + provider + "\""});
         }
@@ -63,7 +81,7 @@ public:
         if (std::ranges::find(offered, chosen) == offered.end()) {
             return std::unexpected(Error{"unknown_method", "\"" + provider + "\" does not sign in with \"" + chosen + "\""});
         }
-        auto credential = run(provider, chosen, interaction, timeout);
+        auto credential = chosen == "plugin" && isPluginProvider(provider) && m_specs.methods(provider).empty() ? m_plugins->oauthLogin(provider, interaction) : run(provider, chosen, interaction, timeout);
         if (!credential) {
             return std::unexpected(credential.error());
         }
@@ -79,6 +97,14 @@ public:
     }
 
 private:
+    bool isPluginProvider(const std::string& provider) const {
+        if (m_plugins == nullptr) {
+            return false;
+        }
+        const auto providers = m_plugins->oauthProviders();
+        return std::ranges::any_of(providers, [&provider](const auto& entry) { return entry.first == provider; });
+    }
+
     Result<Credential> run(const std::string& provider, const std::string& method, const LoginInteraction& interaction, std::chrono::milliseconds timeout) {
         if (method == "device_code") {
             return device(provider, interaction);
@@ -283,6 +309,7 @@ private:
     std::map<std::string, IOauthFlow*> m_flows;
     std::string m_kimiHost;
     ProviderLoginSpecs m_specs;
+    IPluginOauth* m_plugins = nullptr;
     OauthDevicePoller m_poller;
     OauthBrowserLogin m_browser;
     OauthDeviceLogin m_device;

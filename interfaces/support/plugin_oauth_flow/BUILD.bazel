@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_oauth_flow",
+    deps = [
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/types/login_interaction",
+    ],
+)

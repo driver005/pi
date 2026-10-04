@@ -8,6 +8,7 @@ pi_support(
         "//interfaces/platform/i_crypto",
         "//interfaces/platform/i_http_client",
         "//interfaces/platform/i_sleeper",
+        "//interfaces/plugin/i_plugin_oauth",
         "//interfaces/provider/i_credential_store",
         "//interfaces/provider/i_oauth_flow",
         "//interfaces/support/builtin_oauth_specs",

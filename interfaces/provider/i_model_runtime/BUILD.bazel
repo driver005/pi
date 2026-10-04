@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_interface")
 pi_interface(
     name = "i_model_runtime",
     deps = [
+        "//interfaces/provider/i_oauth_flow",
         "//interfaces/provider/i_provider",
         "//interfaces/types/auth_result",
         "//interfaces/types/auth_status",

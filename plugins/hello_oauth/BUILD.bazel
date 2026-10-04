@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_oauth.so; load it with `pi auth login hello-oauth --plugin bazel-bin/plugins/hello_oauth/libhello_oauth.so`.
+cc_binary(
+    name = "hello_oauth",
+    srcs = ["hello_oauth.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

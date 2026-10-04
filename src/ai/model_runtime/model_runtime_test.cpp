@@ -12,6 +12,7 @@ import pi.testing.fake_file_system;
 import pi.testing.fixed_clock;
 import pi.testing.inline_executor;
 import pi.testing.scripted_process_runner;
+import pi.testing.stub_oauth_flow;
 
 /** A wire API without deferred support: only the defaults of IProvider apply. */
 class PlainProvider : public IProvider {
@@ -467,4 +468,39 @@ TEST_F(VirtualModelRuntimeTest, ARouterCannotRouteToAVirtualModelAndUnroutedStre
     const AssistantMessage message = run(*m_runtime.find("router", "first"), StreamOptions{});
     EXPECT_EQ(message.stopReason, StopReason::Error);
     EXPECT_NE(message.errorMessage->find("must be routed before streaming"), std::string::npos);
+}
+
+TEST_F(ModelRuntimeTest, APluginsOauthFlowRefreshesItsProvidersCredentialAndEndsOnUnregister) {
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.registerProvider("acme", Json::parse(R"({"baseUrl":"http://acme/v1","api":"faux","models":[{"id":"am"}]})")).has_value());
+    Credential stored;
+    stored.type = CredentialType::OAuth;
+    stored.access = "old";
+    stored.refresh = "r";
+    stored.expires = 1;
+    ASSERT_TRUE(m_credentials.modify("acme", [&](const std::optional<Credential>&) -> Result<std::optional<Credential>> { return std::optional<Credential>(stored); }).has_value());
+
+    const auto without = m_runtime.getAuth("acme", std::nullopt, {});
+    ASSERT_TRUE(without.has_value());
+    EXPECT_FALSE(without->has_value()) << "a stored OAuth credential is useless without a flow";
+
+    StubOauthFlow flow("acme");
+    ASSERT_TRUE(m_runtime.registerOauthFlow("acme", flow).has_value());
+    const auto refreshed = m_runtime.getAuth("acme", std::nullopt, {});
+    ASSERT_TRUE(refreshed.has_value());
+    ASSERT_TRUE(refreshed->has_value());
+    EXPECT_EQ((*refreshed)->auth.apiKey, "fresh-access");
+    EXPECT_EQ(flow.refreshCount(), 1);
+
+    StubOauthFlow other("acme");
+    const auto second = m_runtime.registerOauthFlow("acme", other);
+    ASSERT_FALSE(second.has_value());
+    EXPECT_NE(second.error().message.find("already has an OAuth sign-in"), std::string::npos);
+    m_runtime.unregisterOauthFlow("acme", other);
+    EXPECT_TRUE(m_runtime.getAuth("acme", std::nullopt, {})->has_value()) << "removing a flow that is not the provider's changes nothing";
+
+    m_runtime.unregisterOauthFlow("acme", flow);
+    const auto after = m_runtime.getAuth("acme", std::nullopt, {});
+    ASSERT_TRUE(after.has_value());
+    EXPECT_FALSE(after->has_value());
 }

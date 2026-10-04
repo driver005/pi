@@ -32,14 +32,32 @@ public:
           m_clock(clock),
           m_flows(std::move(oauthFlows)) {}
 
+    /** Adds the flow of a plugin provider; fails when the provider has one already. */
+    Result<void> addFlow(const std::string& provider, IOauthFlow& flow) {
+        const std::lock_guard<std::mutex> lock(m_flowMutex);
+        if (m_flows.contains(provider)) {
+            return std::unexpected(Error{"oauth", "\"" + provider + "\" already has an OAuth sign-in"});
+        }
+        m_flows[provider] = &flow;
+        return {};
+    }
+
+    /** Removes the provider's flow when it is `flow`. */
+    void removeFlow(const std::string& provider, const IOauthFlow& flow) {
+        const std::lock_guard<std::mutex> lock(m_flowMutex);
+        const auto found = m_flows.find(provider);
+        if (found != m_flows.end() && found->second == &flow) {
+            m_flows.erase(found);
+        }
+    }
+
     /**
      * nullopt: the provider has no usable credentials. Error: credentials exist but cannot be
      * used (failed refresh, command failure, missing environment variable).
      */
     Result<std::optional<AuthResult>> resolve(const ProviderDefinition& provider, const Json& providerConfig, const std::optional<std::string>& apiKeyOverride, const Env& envOverride) {
         const bool apiKeyAuth = hasApiKeyAuth(provider, providerConfig);
-        const auto flow = m_flows.find(provider.id);
-        IOauthFlow* oauth = flow == m_flows.end() ? nullptr : flow->second;
+        IOauthFlow* oauth = flowOf(provider.id);
 
         if (apiKeyOverride && apiKeyAuth) {
             Credential synthetic;
@@ -287,6 +305,13 @@ private:
     const EnvKeyTable& m_envKeys;
     ConfigValueResolver& m_config;
     const IClock& m_clock;
+    IOauthFlow* flowOf(const std::string& provider) const {
+        const std::lock_guard<std::mutex> lock(m_flowMutex);
+        const auto found = m_flows.find(provider);
+        return found == m_flows.end() ? nullptr : found->second;
+    }
+
+    mutable std::mutex m_flowMutex;
     std::map<std::string, IOauthFlow*> m_flows;
     HeaderMerger m_headers;
 };

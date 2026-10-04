@@ -362,3 +362,33 @@ TEST_F(CodingSessionHandleTest, APluginCanCancelSwitchingSessions) {
     EXPECT_FALSE(handle->allowSwitch("resume", "/s/a.jsonl"));
     EXPECT_TRUE(handle->allowFork("e1", ForkPosition::Before)) << "only switching was cancelled";
 }
+
+TEST_F(CodingSessionHandleTest, APluginsOauthRefreshesAnExpiredCredentialForItsProvider) {
+    std::filesystem::create_directories(m_dir + "/agent");
+    const Json auth{{"hello-oauth", Json{{"type", "oauth"}, {"access", "old"}, {"refresh", "refresh-x"}, {"expires", 1}, {"account", "x"}}}};
+    std::ofstream(m_dir + "/agent/auth.json") << auth.dump();
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_oauth/libhello_oauth.so"};
+    const auto handle = open(options);
+    EXPECT_TRUE(handle->diagnostics().empty());
+    const auto resolved = m_services->models().models().getAuth("hello-oauth", std::nullopt, {});
+    ASSERT_TRUE(resolved.has_value());
+    ASSERT_TRUE(resolved->has_value());
+    EXPECT_EQ((*resolved)->auth.apiKey, "renewed-refresh-x");
+    const Json stored = Json::parse(std::ifstream(m_dir + "/agent/auth.json"));
+    EXPECT_EQ(stored["hello-oauth"]["access"], "renewed-refresh-x") << "the refreshed credential is stored";
+    EXPECT_EQ(stored["hello-oauth"]["account"], "x");
+}
+
+TEST_F(CodingSessionHandleTest, ThePluginsSignInEndsWithTheSession) {
+    std::filesystem::create_directories(m_dir + "/agent");
+    const Json auth{{"hello-oauth", Json{{"type", "oauth"}, {"access", "old"}, {"refresh", "refresh-x"}, {"expires", 1}}}};
+    std::ofstream(m_dir + "/agent/auth.json") << auth.dump();
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_oauth/libhello_oauth.so"};
+    {
+        const auto handle = open(options);
+    }
+    const auto resolved = m_services->models().models().getAuth("hello-oauth", std::nullopt, {});
+    EXPECT_TRUE(!resolved.has_value() || !resolved->has_value()) << "without the plugin the provider and its sign-in are gone";
+}

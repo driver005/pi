@@ -43,6 +43,7 @@ pi_module(
     ],
     data = [
         "//plugins/hello_commands",
+        "//plugins/hello_oauth",
         "//plugins/hello_router",
         "//plugins/hello_stream",
         "//plugins/hello_tool",

@@ -185,6 +185,23 @@ public:
         m_apis.erase(api);
     }
 
+    Result<void> registerOauthFlow(const std::string& provider, IOauthFlow& flow) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_oauthFlows.contains(provider)) {
+            return std::unexpected(Error{"oauth", "\"" + provider + "\" already has an OAuth sign-in"});
+        }
+        m_oauthFlows[provider] = &flow;
+        return {};
+    }
+
+    void unregisterOauthFlow(const std::string& provider, const IOauthFlow& flow) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_oauthFlows.find(provider);
+        if (found != m_oauthFlows.end() && found->second == &flow) {
+            m_oauthFlows.erase(found);
+        }
+    }
+
     Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
         return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
     }
@@ -203,6 +220,12 @@ public:
     std::map<std::string, Json> registeredProviders() const {
         const std::lock_guard<std::mutex> lock(m_mutex);
         return m_registered;
+    }
+
+    /** The OAuth flows registered through registerOauthFlow and not unregistered since. */
+    std::map<std::string, IOauthFlow*> registeredOauthFlows() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_oauthFlows;
     }
 
     /** The wire APIs registered through registerApi and not unregistered since. */
@@ -229,6 +252,7 @@ private:
     std::set<std::string> m_authenticated;
     std::map<std::string, Json> m_registered;
     std::map<std::string, std::shared_ptr<IProvider>> m_apis;
+    std::map<std::string, IOauthFlow*> m_oauthFlows;
     bool m_rejectProviders = false;
     StreamHandler m_handler;
     FetchDeferredHandler m_fetchDeferred;

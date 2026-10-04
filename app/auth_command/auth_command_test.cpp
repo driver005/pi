@@ -35,6 +35,7 @@ protected:
         result.loginMethod = method;
         result.loginManual = manual;
         result.options.agentDir = m_dir + "/agent";
+        result.options.startup.pluginPaths = m_pluginPaths;
         return result;
     }
 
@@ -55,6 +56,7 @@ protected:
     }
 
     std::string m_dir;
+    std::vector<std::string> m_pluginPaths;
     std::unique_ptr<CodingServices> m_services;
     ScriptedHttpClient m_http;
     RecordingSleeper m_sleeper;
@@ -126,4 +128,33 @@ TEST_F(AuthCommandTest, LogoutForgetsTheCredential) {
     m_out.str("");
     EXPECT_EQ(run({"status"}), 0);
     EXPECT_NE(m_out.str().find("No credentials are stored."), std::string::npos);
+}
+
+TEST_F(AuthCommandTest, PluginProvidersAreListedAndSignInThroughTheirPlugin) {
+    EXPECT_EQ(run({"list"}), 0);
+    EXPECT_EQ(m_out.str().find("hello-oauth"), std::string::npos) << "plugins load only when asked for";
+    m_pluginPaths = {"plugins/hello_oauth/libhello_oauth.so"};
+    m_out.str("");
+    EXPECT_EQ(run({"list"}), 0) << m_err.str();
+    EXPECT_NE(m_out.str().find("hello-oauth\tplugin\n"), std::string::npos);
+
+    m_in.str("abc123\n");
+    m_out.str("");
+    EXPECT_EQ(run({"login", "hello-oauth"}), 0) << m_err.str();
+    EXPECT_NE(m_out.str().find("https://hello.example/login"), std::string::npos);
+    EXPECT_NE(m_out.str().find("Waiting for the code..."), std::string::npos);
+    EXPECT_NE(m_out.str().find("Signed in to \"hello-oauth\"."), std::string::npos);
+    const Json credential = authFile()["hello-oauth"];
+    EXPECT_EQ(credential["type"], "oauth");
+    EXPECT_EQ(credential["access"], "access-abc123");
+    EXPECT_EQ(credential["refresh"], "refresh-abc123");
+    EXPECT_EQ(credential["account"], "abc123") << "the plugin's extra fields are stored with the credential";
+}
+
+TEST_F(AuthCommandTest, APluginSignInThatFailsStoresNothing) {
+    m_pluginPaths = {"plugins/hello_oauth/libhello_oauth.so"};
+    m_in.str("\n");
+    EXPECT_EQ(run({"login", "hello-oauth"}), 1);
+    EXPECT_NE(m_err.str().find("no code entered"), std::string::npos);
+    EXPECT_FALSE(std::filesystem::exists(m_dir + "/agent/auth.json"));
 }

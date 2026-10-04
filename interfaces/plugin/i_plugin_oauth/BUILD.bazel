@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_plugin_oauth",
+    deps = [
+        "//interfaces/types/credential",
+        "//interfaces/types/login_interaction",
+        "//interfaces/types/result",
+    ],
+)

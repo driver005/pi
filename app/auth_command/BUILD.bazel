@@ -6,11 +6,16 @@ pi_module(
         "//app/coding_services",
         "//interfaces/platform/i_http_client",
         "//interfaces/platform/i_sleeper",
+        "//interfaces/support/hook_bus",
+        "//interfaces/support/plugin_discovery",
         "//interfaces/support/provider_login",
         "//interfaces/types/command_line",
+        "//src/plugin/plugin_host",
+        "//src/tools/tool_registry",
     ],
     test_deps = [
         "//src/testing/recording_sleeper",
         "//src/testing/scripted_http_client",
     ],
+    data = ["//plugins/hello_oauth"],
 )

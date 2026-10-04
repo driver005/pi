@@ -68,6 +68,28 @@ public:
     std::string m_seenRefresh;
 };
 
+class FakePluginOauth : public IPluginOauth {
+public:
+    std::vector<std::pair<std::string, std::string>> oauthProviders() const override {
+        return {{"acme", "Acme"}, {"anthropic", "Not the built-in one"}};
+    }
+
+    Result<Credential> oauthLogin(const std::string& provider, const LoginInteraction& interaction) override {
+        if (provider != "acme") {
+            return std::unexpected(Error{"unknown_provider", "no"});
+        }
+        if (interaction.authUrl) {
+            interaction.authUrl("https://acme.test/login", "go");
+        }
+        Credential credential;
+        credential.type = CredentialType::OAuth;
+        credential.access = "acme-access";
+        credential.refresh = "acme-refresh";
+        credential.expires = 7000;
+        return credential;
+    }
+};
+
 class ProviderLoginTest : public testing::Test {
 protected:
     ProviderLoginTest()
@@ -223,4 +245,26 @@ TEST_F(ProviderLoginTest, AFailedSignInStoresNothingAndLogoutForgetsTheCredentia
     ASSERT_TRUE(m_login.login("anthropic", "", m_interaction).has_value());
     ASSERT_TRUE(m_login.logout("anthropic").has_value());
     EXPECT_FALSE((*m_credentials.read("anthropic")).has_value());
+}
+
+TEST_F(ProviderLoginTest, PluginProvidersSignInThroughTheirPlugin) {
+    FakePluginOauth plugins;
+    EXPECT_TRUE(m_login.methods("acme").empty()) << "without plugins nobody signs in to it";
+    m_login.setPlugins(&plugins);
+    EXPECT_EQ(m_login.methods("acme"), std::vector<std::string>{"plugin"});
+    EXPECT_EQ(m_login.methods("anthropic"), (std::vector<std::string>{"browser", "copy_code"})) << "a built-in provider keeps its sign-in";
+    const std::vector<std::string> providers = m_login.providers();
+    EXPECT_EQ(std::ranges::count(providers, "acme"), 1);
+    EXPECT_EQ(std::ranges::count(providers, "anthropic"), 1);
+
+    ASSERT_TRUE(m_login.login("acme", "", m_interaction).has_value());
+    EXPECT_EQ(m_urls, std::vector<std::string>{"https://acme.test/login"});
+    const Credential credential = stored("acme");
+    EXPECT_EQ(credential.access, "acme-access");
+    EXPECT_EQ(credential.refresh, "acme-refresh");
+    EXPECT_EQ(credential.expires, 7000);
+
+    const auto wrongMethod = m_login.login("acme", "browser", m_interaction);
+    ASSERT_FALSE(wrongMethod.has_value());
+    EXPECT_EQ(wrongMethod.error().code, "unknown_method");
 }

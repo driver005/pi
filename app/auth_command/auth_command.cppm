@@ -4,6 +4,10 @@ import std;
 export import pi.coding_services;
 export import pi.platform.i_http_client;
 export import pi.platform.i_sleeper;
+import pi.plugin.plugin_host;
+import pi.support.hook_bus;
+import pi.support.plugin_discovery;
+import pi.tools.tool_registry;
 export import pi.support.provider_login;
 export import pi.types.command_line;
 
@@ -13,7 +17,9 @@ export import pi.types.command_line;
  * authorization URL or the device code and waits for the browser at the loopback callback (`--manual` asks for the pasted code
  * instead, which is also the fallback when a port the flow shares with other tools is taken), then stores the credential in
  * `<agent-dir>/auth.json`, which sessions refresh as it expires; `--method` picks one of the provider's methods. `logout` forgets
- * the credential, `status` lists the stored ones and `list` the providers that can sign in. Returns the process exit code.
+ * the credential, `status` lists the stored ones and `list` the providers that can sign in. Plugins (<agent-dir>/plugins and
+ * `--plugin`) are loaded for `list` and `login`, so providers whose plugin registered an OAuth sign-in (register_oauth) appear and
+ * sign in with method "plugin". Returns the process exit code.
  */
 export class AuthCommand {
 public:
@@ -31,6 +37,13 @@ public:
         PlatformServices& platform = m_services.platform();
         ProviderLogin login(models.credentials(), m_http, platform.crypto(), platform.base64(), platform.clock(), m_sleeper, m_callbacks, models.flows(), models.kimiHost());
         const std::string& subcommand = line.arguments[0];
+        ToolRegistry tools;
+        HookBus hooks;
+        PluginHost plugins(platform.libraries(), tools, hooks, platform.processes(), platform.logger(), PluginContext{line.options.cwd, line.options.agentDir}, &models.models(), nullptr, &platform.clock());
+        if ((subcommand == "list" || subcommand == "login") && !line.options.startup.noPlugins) {
+            loadPlugins(plugins, line);
+            login.setPlugins(&plugins);
+        }
         if (subcommand == "list") {
             return list(login);
         }
@@ -44,6 +57,16 @@ public:
     }
 
 private:
+    /** The plugins of <agent-dir>/plugins and --plugin; problems are warnings. */
+    void loadPlugins(PluginHost& plugins, const CommandLine& line) {
+        PluginDiscovery discovery(m_services.platform().files());
+        std::vector<std::string> paths = discovery.discover(line.options.agentDir + "/plugins");
+        paths.insert(paths.end(), line.options.startup.pluginPaths.begin(), line.options.startup.pluginPaths.end());
+        for (const Error& error : plugins.load(paths)) {
+            m_err << "pi: plugin: " << error.message << "\n";
+        }
+    }
+
     int list(const ProviderLogin& login) {
         for (const std::string& provider : login.providers()) {
             std::string methods;

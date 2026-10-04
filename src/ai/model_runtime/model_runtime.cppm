@@ -290,6 +290,14 @@ public:
         }
     }
 
+    Result<void> registerOauthFlow(const std::string& provider, IOauthFlow& flow) override {
+        return m_auth.addFlow(provider, flow);
+    }
+
+    void unregisterOauthFlow(const std::string& provider, const IOauthFlow& flow) override {
+        m_auth.removeFlow(provider, flow);
+    }
+
     Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
         return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
     }

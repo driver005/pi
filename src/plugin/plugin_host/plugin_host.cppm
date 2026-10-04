@@ -16,7 +16,9 @@ export import pi.plugin.i_hook_bus;
 export import pi.mcp.i_mcp_server_registrar;
 export import pi.plugin.i_plugin_commands;
 export import pi.plugin.i_plugin_host;
+export import pi.plugin.i_plugin_oauth;
 export import pi.plugin.i_plugin_session_bridge;
+export import pi.support.plugin_oauth_flow;
 export import pi.support.plugin_provider;
 export import pi.provider.i_model_runtime;
 export import pi.support.event_bus;
@@ -34,7 +36,7 @@ export import pi.types.plugin_context;
  * `host` pointer names its LoadedPlugin, so the tools and subscriptions it registers can be
  * attributed to it and removed when it is unloaded.
  */
-export class PluginHost : public IPluginHost, public IPluginCommands {
+export class PluginHost : public IPluginHost, public IPluginCommands, public IPluginOauth {
 public:
     /**
      * `models` (optional) is where plugins register providers and `mcp` where they register MCP servers; `clock` stamps the
@@ -130,6 +132,28 @@ public:
         }
         m_flagValues[name] = !value || *value == "true";
         return {};
+    }
+
+    std::vector<std::pair<std::string, std::string>> oauthProviders() const override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        std::vector<std::pair<std::string, std::string>> out;
+        for (const auto& [provider, flow] : m_oauth) {
+            out.emplace_back(provider, flow->name());
+        }
+        return out;
+    }
+
+    Result<Credential> oauthLogin(const std::string& provider, const LoginInteraction& interaction) override {
+        std::shared_ptr<PluginOauthFlow> flow;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto found = m_oauth.find(provider);
+            if (found == m_oauth.end()) {
+                return std::unexpected(Error{"unknown_provider", "No plugin signs in to \"" + provider + "\""});
+            }
+            flow = found->second;
+        }
+        return flow->login(interaction);
     }
 
     std::vector<std::string> loaded() const override {
@@ -281,12 +305,48 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->eventEmit(std::string(channel.data, channel.size), std::string(data.data, data.size));
         };
+        api.register_oauth = [](void* host, PiString provider, PiString options, PiOauthLoginFn login, PiOauthRefreshFn refresh, void* userData) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerOauth(*plugin, std::string(provider.data, provider.size), std::string(options.data, options.size), login, refresh, userData);
+        };
+        api.oauth_auth = [](void*, PiOauthUi* ui, PiString url, PiString instructions) {
+            const auto* interaction = reinterpret_cast<const LoginInteraction*>(ui);
+            if (interaction->authUrl) {
+                interaction->authUrl(std::string(url.data, url.size), std::string(instructions.data, instructions.size));
+            }
+            return interaction->signal && interaction->signal->aborted() ? 1 : 0;
+        };
+        api.oauth_device_code = [](void*, PiOauthUi* ui, PiString userCode, PiString verificationUri) {
+            const auto* interaction = reinterpret_cast<const LoginInteraction*>(ui);
+            if (interaction->deviceCode) {
+                interaction->deviceCode(std::string(userCode.data, userCode.size), std::string(verificationUri.data, verificationUri.size), std::nullopt, std::nullopt);
+            }
+            return interaction->signal && interaction->signal->aborted() ? 1 : 0;
+        };
+        api.oauth_progress = [](void*, PiOauthUi* ui, PiString message) {
+            const auto* interaction = reinterpret_cast<const LoginInteraction*>(ui);
+            if (interaction->progress) {
+                interaction->progress(std::string(message.data, message.size));
+            }
+            return interaction->signal && interaction->signal->aborted() ? 1 : 0;
+        };
+        api.oauth_prompt = [](void* host, PiOauthUi* ui, PiString message) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            const auto* interaction = reinterpret_cast<const LoginInteraction*>(ui);
+            std::optional<std::string> answer;
+            if (interaction->manualCode) {
+                answer = interaction->manualCode(std::string(message.data, message.size));
+            }
+            return static_cast<PluginHost*>(plugin->owner)->owned(Json{{"value", answer ? Json(*answer) : Json(nullptr)}});
+        };
         api.stream_emit = [](PiStreamSink* sink, PiString event) {
             return reinterpret_cast<PluginStreamTranslator*>(sink)->emit(std::string(event.data, event.size)) ? 0 : 1;
         };
     }
 
     void unload(LoadedPlugin& plugin) {
+        // Sign-ins run the plugin's code too.
+        dropOauth(plugin);
         // Streams run the plugin's code: end them before it shuts down.
         for (const auto& [name, api] : plugin.streamProviders) {
             dropStreamApi(api);
@@ -391,6 +451,77 @@ private:
             params = Json::object();
         }
         return owned(bridge->call(method, params, reinterpret_cast<const AbortSignal*>(abort)));
+    }
+
+    PiOwnedString registerOauth(LoadedPlugin& plugin, const std::string& provider, const std::string& optionsText, PiOauthLoginFn login, PiOauthRefreshFn refresh, void* userData) {
+        if (m_models == nullptr) {
+            return owned(Json{{"error", "this host has no model registry"}});
+        }
+        const Json options = Json::parse(optionsText, nullptr, false);
+        if (provider.empty() || login == nullptr || refresh == nullptr || !options.is_object()) {
+            return owned(Json{{"error", "register_oauth needs a provider, login and refresh functions and a JSON object of options"}});
+        }
+        const std::string name = options.contains("name") && options["name"].is_string() ? options["name"].get<std::string>() : provider;
+        const bool subscription = options.value("subscription", false);
+        auto flow = std::make_shared<PluginOauthFlow>(
+            provider, name, subscription,
+            [this, login, userData](const LoginInteraction& interaction) -> Result<Json> {
+                PiOwnedString raw = login(userData, reinterpret_cast<PiOauthUi*>(const_cast<LoginInteraction*>(&interaction)), reinterpret_cast<const PiAbort*>(interaction.signal.get()));
+                return parseAnswer(raw);
+            },
+            [this, refresh, userData](const Json& credential, const std::shared_ptr<AbortSignal>& signal) -> Result<Json> {
+                const std::string text = credential.dump(-1, ' ', false, Json::error_handler_t::replace);
+                PiOwnedString raw = refresh(userData, PiString{text.data(), text.size()}, reinterpret_cast<const PiAbort*>(signal.get()));
+                return parseAnswer(raw);
+            });
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_oauth.contains(provider)) {
+                return owned(Json{{"error", "\"" + provider + "\" already has an OAuth sign-in"}});
+            }
+        }
+        if (const auto added = m_models->registerOauthFlow(provider, *flow); !added) {
+            return owned(Json{{"error", added.error().message}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_oauth[provider] = std::move(flow);
+        plugin.oauth.push_back(provider);
+        return owned(Json{{"ok", true}});
+    }
+
+    /** The JSON a plugin's login or refresh answered; an empty answer fails. */
+    Result<Json> parseAnswer(PiOwnedString& raw) {
+        const bool empty = raw.data == nullptr || raw.size == 0;
+        const std::string text = takeString(raw);
+        if (empty) {
+            return std::unexpected(Error{"oauth", "the plugin answered nothing"});
+        }
+        Json answer = Json::parse(text, nullptr, false);
+        if (answer.is_discarded()) {
+            return std::unexpected(Error{"oauth", "the plugin answered invalid JSON"});
+        }
+        return answer;
+    }
+
+    /** Ends the plugin's sign-ins: waits for calls in progress, then withdraws the flows. */
+    void dropOauth(LoadedPlugin& plugin) {
+        for (const std::string& provider : plugin.oauth) {
+            std::shared_ptr<PluginOauthFlow> flow;
+            {
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                const auto found = m_oauth.find(provider);
+                if (found == m_oauth.end()) {
+                    continue;
+                }
+                flow = found->second;
+                m_oauth.erase(found);
+            }
+            if (m_models != nullptr) {
+                m_models->unregisterOauthFlow(provider, *flow);
+            }
+            flow->close();
+        }
+        plugin.oauth.clear();
     }
 
     PiOwnedString registerCommand(LoadedPlugin& plugin, const std::string& name, const std::string& optionsText, PiCommandFn handler, void* userData) {
@@ -842,6 +973,7 @@ private:
     /** Stream-handler providers by API name. */
     std::map<std::string, std::shared_ptr<PluginProvider>> m_streamProviders;
     IPluginSessionBridge* m_bridge = nullptr;
+    std::map<std::string, std::shared_ptr<PluginOauthFlow>> m_oauth;
     std::map<std::string, PluginCommandEntry> m_commands;
     std::map<std::string, PluginFlag> m_flags;
     std::map<std::string, Json> m_flagValues;
