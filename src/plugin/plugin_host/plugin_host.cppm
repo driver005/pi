@@ -8,12 +8,14 @@ module;
 export module pi.plugin.plugin_host;
 
 import std;
+export import pi.platform.i_clock;
 export import pi.platform.i_dynamic_libraries;
 export import pi.platform.i_logger;
 export import pi.platform.i_process_runner;
 export import pi.plugin.i_hook_bus;
 export import pi.mcp.i_mcp_server_registrar;
 export import pi.plugin.i_plugin_host;
+export import pi.support.plugin_provider;
 export import pi.provider.i_model_runtime;
 export import pi.support.message_codec;
 export import pi.support.model_codec;
@@ -30,8 +32,11 @@ export import pi.types.plugin_context;
  */
 export class PluginHost : public IPluginHost {
 public:
-    /** `models` (optional) is where plugins register providers and `mcp` where they register MCP servers; without them those calls fail. */
-    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context, IModelRuntime* models = nullptr, IMcpServerRegistrar* mcp = nullptr)
+    /**
+     * `models` (optional) is where plugins register providers and `mcp` where they register MCP servers; `clock` stamps the
+     * responses of stream-handler providers. Without them those calls fail.
+     */
+    PluginHost(IDynamicLibraries& libraries, IToolRegistry& tools, IHookBus& hooks, IProcessRunner& processes, ILogger& logger, PluginContext context, IModelRuntime* models = nullptr, IMcpServerRegistrar* mcp = nullptr, const IClock* clock = nullptr)
         : m_libraries(libraries),
           m_tools(tools),
           m_hooks(hooks),
@@ -39,7 +44,8 @@ public:
           m_logger(logger),
           m_context(std::move(context)),
           m_models(models),
-          m_mcp(mcp) {}
+          m_mcp(mcp),
+          m_clock(clock) {}
 
     ~PluginHost() override {
         shutdown();
@@ -176,9 +182,21 @@ private:
             auto* plugin = static_cast<LoadedPlugin*>(host);
             return static_cast<PluginHost*>(plugin->owner)->listModels();
         };
+        api.register_stream_provider = [](void* host, PiString name, PiString config, PiStreamFn stream, void* userData) {
+            auto* plugin = static_cast<LoadedPlugin*>(host);
+            return static_cast<PluginHost*>(plugin->owner)->registerStreamProvider(*plugin, std::string(name.data, name.size), std::string(config.data, config.size), stream, userData);
+        };
+        api.stream_emit = [](PiStreamSink* sink, PiString event) {
+            return reinterpret_cast<PluginStreamTranslator*>(sink)->emit(std::string(event.data, event.size)) ? 0 : 1;
+        };
     }
 
     void unload(LoadedPlugin& plugin) {
+        // Streams run the plugin's code: end them before it shuts down.
+        for (const auto& [name, api] : plugin.streamProviders) {
+            dropStreamApi(api);
+        }
+        plugin.streamProviders.clear();
         if (plugin.shutdown != nullptr) {
             plugin.shutdown();
         }
@@ -242,14 +260,85 @@ private:
     }
 
     PiOwnedString unregisterProvider(LoadedPlugin& plugin, const std::string& name) {
-        const std::lock_guard<std::mutex> lock(m_mutex);
-        const auto found = std::ranges::find(plugin.providers, name);
-        if (m_models == nullptr || found == plugin.providers.end()) {
-            return owned(Json{{"error", "provider \"" + name + "\" was not registered by this plugin"}});
+        std::optional<std::string> api;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto found = std::ranges::find(plugin.providers, name);
+            if (m_models == nullptr || found == plugin.providers.end()) {
+                return owned(Json{{"error", "provider \"" + name + "\" was not registered by this plugin"}});
+            }
+            plugin.providers.erase(found);
+            api = takeStreamApi(plugin, name);
         }
-        plugin.providers.erase(found);
         m_models->unregisterProvider(name);
+        if (api) {
+            dropStreamApi(*api);
+        }
         return owned(Json{{"ok", true}});
+    }
+
+    PiOwnedString registerStreamProvider(LoadedPlugin& plugin, const std::string& name, const std::string& configText, PiStreamFn stream, void* userData) {
+        if (m_models == nullptr || m_clock == nullptr) {
+            return owned(Json{{"error", "this host has no model registry"}});
+        }
+        const Json config = Json::parse(configText, nullptr, false);
+        if (name.empty() || stream == nullptr || !config.is_object() || !config.contains("api") || !config["api"].is_string() || config["api"].get<std::string>().empty()) {
+            return owned(Json{{"error", "register_stream_provider needs a provider name, a stream function and a JSON object naming its \"api\""}});
+        }
+        const std::string api = config["api"].get<std::string>();
+        // A plugin registering the same provider again replaces its earlier stream function.
+        std::optional<std::string> previous;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            previous = takeStreamApi(plugin, name);
+        }
+        if (previous) {
+            dropStreamApi(*previous);
+        }
+        auto provider = std::make_shared<PluginProvider>(api, stream, userData, *m_clock);
+        if (auto added = m_models->registerApi(provider); !added) {
+            return owned(Json{{"error", added.error().message}});
+        }
+        if (auto registered = m_models->registerProvider(name, config); !registered) {
+            m_models->unregisterApi(api);
+            return owned(Json{{"error", registered.error().message}});
+        }
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_streamProviders[api] = provider;
+        plugin.streamProviders.emplace_back(name, api);
+        if (std::ranges::find(plugin.providers, name) == plugin.providers.end()) {
+            plugin.providers.push_back(name);
+        }
+        return owned(Json{{"ok", true}});
+    }
+
+    /** Forgets that `plugin` provides `name` with a stream function and returns its API; the caller holds m_mutex. */
+    std::optional<std::string> takeStreamApi(LoadedPlugin& plugin, const std::string& name) {
+        const auto found = std::ranges::find_if(plugin.streamProviders, [&name](const std::pair<std::string, std::string>& entry) { return entry.first == name; });
+        if (found == plugin.streamProviders.end()) {
+            return std::nullopt;
+        }
+        std::string api = found->second;
+        plugin.streamProviders.erase(found);
+        return api;
+    }
+
+    /** Withdraws the API of a stream provider and ends its running streams (waits for them: call without locks held). */
+    void dropStreamApi(const std::string& api) {
+        std::shared_ptr<PluginProvider> provider;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            const auto found = m_streamProviders.find(api);
+            if (found == m_streamProviders.end()) {
+                return;
+            }
+            provider = std::move(found->second);
+            m_streamProviders.erase(found);
+        }
+        if (m_models != nullptr) {
+            m_models->unregisterApi(api);
+        }
+        provider->shutdown();
     }
 
     PiOwnedString registerMcpServer(LoadedPlugin& plugin, const std::string& name, const std::string& configText) {
@@ -537,6 +626,9 @@ private:
     ThinkingLevelResolver m_levels;
     IModelRuntime* m_models;
     IMcpServerRegistrar* m_mcp;
+    const IClock* m_clock;
     mutable std::mutex m_mutex;
+    /** Stream-handler providers by API name. */
+    std::map<std::string, std::shared_ptr<PluginProvider>> m_streamProviders;
     std::vector<std::unique_ptr<LoadedPlugin>> m_plugins;
 };

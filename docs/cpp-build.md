@@ -160,4 +160,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-plugin commands, UI APIs and stream-handler providers; the Meta and Radius sign-ins; the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); HTML export.
+plugin commands and UI APIs, plugin provider OAuth; the Meta and Radius sign-ins; the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); HTML export.

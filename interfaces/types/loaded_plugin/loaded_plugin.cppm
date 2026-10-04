@@ -22,6 +22,8 @@ export struct LoadedPlugin {
     std::vector<std::uint64_t> subscriptions;
     std::vector<std::string> providers;
     std::vector<std::string> mcpServers;
+    /** Stream-handler providers (provider name, API name); the names are also in `providers`. */
+    std::vector<std::pair<std::string, std::string>> streamProviders;
     /** Virtual models (provider, id). */
     std::vector<std::pair<std::string, std::string>> virtualModels;
 };

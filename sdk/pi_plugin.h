@@ -69,6 +69,19 @@ typedef PiOwnedString (*PiHookFn)(void* user_data, PiString event, PiString payl
  */
 typedef PiOwnedString (*PiRouteFn)(void* user_data, PiString request_json, const PiAbort* abort);
 
+/* One response being streamed by a provider's PiStreamFn; valid until that function returns. */
+typedef struct PiStreamSink PiStreamSink;
+
+/*
+ * Streams one response of a stream-handler provider (see register_stream_provider). Runs on a thread of its own until it
+ * returns; it reports the response through PiHostApi.stream_emit(sink, event_json) and must end it with a "done" or "error"
+ * event. request_json is {"model":<catalog entry>, "messages":[...the normalized transcript: leading system messages carry the
+ * prompt and the tools...], "options":{"apiKey"?, "headers"?:{..}, "temperature"?, "maxTokens"?, "reasoning"?:"off|minimal|low|
+ * medium|high|xhigh", "sessionId"?, "toolChoice"?, "cacheRetention"?, "metadata"?, "samplingParams"?, "timeoutMs"?}}. `abort`
+ * is cancelled with the request; stop producing then (stream_emit also reports it).
+ */
+typedef void (*PiStreamFn)(void* user_data, PiString request_json, const PiAbort* abort, PiStreamSink* sink);
+
 typedef struct PiHostApi {
     uint32_t abi_version;
     uint32_t struct_size;
@@ -141,6 +154,31 @@ typedef struct PiHostApi {
 
     /* The physical models whose provider has credentials: [{"provider","id","name","reasoning","input","contextWindow","maxTokens"}]. */
     PiOwnedString (*list_models)(void* host);
+
+    /*
+     * Registers a provider that streams its responses itself (the `streamSimple` provider of TypeScript extensions).
+     * config_json is as for register_provider and must name the wire API its models speak, `"api": "<name>"`, which must not
+     * be implemented already (built-in APIs cannot be replaced); the usual provider fields apply: models, and an "apiKey"
+     * (any value, e.g. "none", for a provider without credentials; the key reaches `stream` in options). `stream` runs once
+     * per request. The registration ends with unregister_provider or when the plugin is unloaded, which first cancels the
+     * running streams and waits for them to return. Returns {"ok":true} or {"error":"..."}. Check `struct_size` covers
+     * `stream_emit` before calling these.
+     */
+    PiOwnedString (*register_stream_provider)(void* host, PiString name, PiString config_json, PiStreamFn stream, void* user_data);
+
+    /*
+     * Reports one event of the response being streamed; returns 0, or non-zero when the response is over (cancelled, or
+     * ended by an earlier event or an invalid one) and the function should return. Events, each a JSON object:
+     *   {"type":"text_delta","delta":"..."}                          appends to the current text block
+     *   {"type":"thinking_delta","delta":"..."}                      appends to the current reasoning block
+     *   {"type":"tool_call","id":"..","name":"..","arguments":{..}}  a complete tool call
+     *   {"type":"usage","input":n,"output":n,"cacheRead"?:n,"cacheWrite"?:n}   the response's token counts (cost is computed)
+     *   {"type":"response","id"?:"..","model"?:".."}                 the provider's response id and the concrete model
+     *   {"type":"done","stopReason"?:"stop"|"length"|"toolUse"}      the response succeeded (default "stop")
+     *   {"type":"error","message":"..","aborted"?:bool}              the response failed
+     * Consecutive deltas of one kind form one block. Call it from the thread running `stream` only.
+     */
+    int (*stream_emit)(PiStreamSink* sink, PiString event_json);
 } PiHostApi;
 
 typedef uint32_t (*PiPluginAbiVersionFn)(void);

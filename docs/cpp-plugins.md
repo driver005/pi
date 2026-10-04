@@ -29,7 +29,7 @@ void     pi_plugin_shutdown(void);              /* optional */
 Data crosses the boundary as UTF-8 JSON in `PiString` (borrowed for the call) or `PiOwnedString` (the producer
 allocates, the consumer calls `release` when set). Callbacks may run on any host thread, concurrently; they must
 not throw across the boundary. The host API offers `log`, `register_tool`, `subscribe`, `exec` (run a program, with
-cancellation), `abort_requested`, `get_context` (`cwd`, `agentDir`), `register_provider`, `unregister_provider`, `register_mcp_server`, `unregister_mcp_server`, `register_virtual_model`, `unregister_virtual_model` and `list_models`.
+cancellation), `abort_requested`, `get_context` (`cwd`, `agentDir`), `register_provider`, `unregister_provider`, `register_mcp_server`, `unregister_mcp_server`, `register_virtual_model`, `unregister_virtual_model`, `list_models`, `register_stream_provider` and `stream_emit`.
 
 ### Tools
 
@@ -47,6 +47,39 @@ it overrides settings of an existing provider. The registration ends when the pl
 `unregister_provider`), which restores overridden built-in providers. The two functions were added to the end of
 `PiHostApi`; a plugin checks `struct_size` before calling them (the SDK's `Host::registerProvider` does). Hosts without a
 model registry answer `{"error":...}`. `plugins/hello_provider` is an example.
+
+### Stream-handler providers
+
+`register_stream_provider(name, config, stream, user_data)` is the `streamSimple` provider of TypeScript extensions: the plugin
+produces the responses itself instead of the host calling an HTTP API. `config` is a `register_provider` entry that must name
+its wire API, `"api": "<name>"` (its models speak it), and carry an `apiKey` (any value, such as `"none"`, for a provider
+without credentials; the key reaches the plugin in the request options). The API name must not be implemented already, so
+built-in APIs cannot be replaced and two plugins cannot share a name. The registration ends with `unregister_provider` or when
+the plugin unloads.
+
+The host runs `stream(user_data, request_json, abort, sink)` once per request on a thread of its own. `request_json` is
+`{"model":<catalog entry>,"messages":[...],"options":{"apiKey"?,"headers"?,"temperature"?,"maxTokens"?,"reasoning"?,"sessionId"?,"toolChoice"?,"cacheRetention"?,"metadata"?,"samplingParams"?,"timeoutMs"?}}`;
+`messages` is the normalized transcript in the JSON of session entries, where the leading system messages carry the system
+prompt and the tool definitions. The function reports the response with `stream_emit(sink, event_json)` and ends it with a
+`done` or `error` event:
+
+- `{"type":"text_delta","delta":".."}` and `{"type":"thinking_delta","delta":".."}`: consecutive deltas of one kind form one block;
+- `{"type":"tool_call","id":"..","name":"..","arguments":{..}}`: a complete tool call (stop reason `toolUse` unless `done` says otherwise);
+- `{"type":"usage","input":n,"output":n,"cacheRead"?:n,"cacheWrite"?:n}`: token counts; the cost comes from the model's prices;
+- `{"type":"response","id"?:"..","model"?:".."}`: the provider's response id and the concrete model;
+- `{"type":"done","stopReason"?:"stop"|"length"|"toolUse"}` and `{"type":"error","message":"..","aborted"?:bool}`.
+
+The host builds the assistant message and the stream events with their `partial` snapshots from these (`PluginStreamTranslator`),
+so plugins write deltas, not snapshots. `stream_emit` returns non-zero once the response is over: the request was cancelled
+(`abort_requested(abort)` says the same), an earlier event ended it, or the event was invalid (the stream then ends with an
+error naming the problem). A function that returns without a final event ends the response with an error, or `aborted` when
+it was cancelled, so readers never wait forever. Unloading a plugin first cancels its running streams and waits for the
+functions to return; do not call `unregister_provider` for a provider from inside its own stream function. The SDK wraps this
+as `Host::registerStreamProvider(name, config, handler)` with a `pi::StreamSink` (`text`, `thinking`, `toolCall`, `usage`,
+`response`, `done`, `error`); `plugins/hello_stream` is an example. `struct_size` must cover `stream_emit`.
+
+Not carried over from the TypeScript handlers: `onPayload`/`onResponse` of the request options (no payload to inspect), and
+the OAuth login of a provider (`oauth` in the config).
 
 ### MCP servers
 
@@ -116,7 +149,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth (declarative providers work), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
 between extensions. They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 

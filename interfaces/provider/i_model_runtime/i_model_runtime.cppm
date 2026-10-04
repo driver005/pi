@@ -70,6 +70,14 @@ public:
     virtual void unregisterProvider(const std::string& providerId) = 0;
 
     /**
+     * Adds the wire-API implementation of `provider->api()` for models of plugin providers (their `api` names it). Fails when
+     * that API is implemented already, so built-in APIs cannot be replaced and two plugins cannot share a name.
+     */
+    virtual Result<void> registerApi(std::shared_ptr<IProvider> provider) = 0;
+    /** Removes an implementation added by registerApi; other APIs are left alone. */
+    virtual void unregisterApi(const std::string& api) = 0;
+
+    /**
      * Registers or replaces a virtual model under `definition.provider`, which may also list physical models. Fails when the id
      * is a physical model of that provider. A provider with only virtual models needs no credentials.
      */

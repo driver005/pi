@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_stream_runs",
+    deps = ["//interfaces/support/abort_signal"],
+)

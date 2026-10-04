@@ -217,6 +217,29 @@ TEST_F(CodingSessionHandleTest, BrokenPluginsAreDiagnostics) {
     EXPECT_NE(diagnostics[0].message.find("Plugin: /definitely/not/a/plugin.so"), std::string::npos);
 }
 
+TEST_F(CodingSessionHandleTest, APluginsStreamProviderAnswersPromptsAndCallsTools) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_stream/libhello_stream.so"};
+    options.model = "hello-stream/echo";
+    const auto handle = open(options);
+    EXPECT_TRUE(handle->diagnostics().empty());
+    EXPECT_EQ(handle->session().model().provider, "hello-stream");
+    ASSERT_TRUE(handle->session().prompt("hi there", PromptOptions{}).has_value());
+    handle->session().waitForIdle();
+    EXPECT_EQ(handle->session().lastAssistantText(), "You said: hi there");
+
+    ASSERT_TRUE(handle->session().prompt("call ls .", PromptOptions{}).has_value());
+    handle->session().waitForIdle();
+    bool listed = false;
+    for (const AgentMessage& message : handle->session().messages()) {
+        if (const auto* result = std::get_if<ToolResultMessage>(&message)) {
+            listed = result->toolName == "ls";
+        }
+    }
+    EXPECT_TRUE(listed) << "the plugin's tool call ran the ls tool";
+    EXPECT_EQ(handle->session().lastAssistantText(), "The tool answered.");
+}
+
 TEST_F(CodingSessionHandleTest, APluginsVirtualModelCanBeSelectedAndRoutesToThePhysicalModel) {
     CodingStartupOptions options;
     options.pluginPaths = {"plugins/hello_router/libhello_router.so"};

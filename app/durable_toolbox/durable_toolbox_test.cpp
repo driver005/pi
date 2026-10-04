@@ -63,6 +63,20 @@ TEST_F(DurableToolboxTest, PluginsFromTheCommandLineContributeTools) {
     EXPECT_TRUE(names(*open(disabled)).empty());
 }
 
+TEST_F(DurableToolboxTest, StreamProvidersOfPluginsReachTheModelRuntimeAndLeaveWithTheToolbox) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_stream/libhello_stream.so"};
+    startup.noMcp = true;
+    {
+        const auto toolbox = open(startup);
+        EXPECT_TRUE(toolbox->diagnostics().empty());
+        const auto model = m_services->models().models().find("hello-stream", "echo");
+        ASSERT_TRUE(model.has_value());
+        EXPECT_EQ(model->api, "hello-stream-api");
+    }
+    EXPECT_FALSE(m_services->models().models().find("hello-stream", "echo").has_value());
+}
+
 TEST_F(DurableToolboxTest, ProjectPluginsLoadOnlyWhenTheProjectIsTrusted) {
     std::filesystem::create_directories(m_cwd + "/.pi/plugins");
     std::filesystem::copy_file("plugins/hello_tool/libhello_tool.so", m_cwd + "/.pi/plugins/libhello_tool.so");

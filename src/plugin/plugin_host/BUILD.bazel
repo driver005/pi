@@ -4,6 +4,7 @@ pi_module(
     name = "plugin_host",
     deps = [
         "//interfaces/mcp/i_mcp_server_registrar",
+        "//interfaces/platform/i_clock",
         "//interfaces/platform/i_dynamic_libraries",
         "//interfaces/platform/i_logger",
         "//interfaces/platform/i_process_runner",
@@ -12,6 +13,7 @@ pi_module(
         "//interfaces/provider/i_model_runtime",
         "//interfaces/support/message_codec",
         "//interfaces/support/model_codec",
+        "//interfaces/support/plugin_provider",
         "//interfaces/support/plugin_tool_factory",
         "//interfaces/support/thinking_level_resolver",
         "//interfaces/tool/i_tool_registry",
@@ -24,8 +26,12 @@ pi_module(
         "//src/base/posix_dynamic_libraries",
         "//src/testing/fake_dynamic_libraries",
         "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
         "//src/testing/scripted_process_runner",
         "//src/tools/tool_registry",
     ],
-    data = ["//plugins/hello_tool"],
+    data = [
+        "//plugins/hello_stream",
+        "//plugins/hello_tool",
+    ],
 )

@@ -9,6 +9,7 @@ import pi.plugin.plugin_host;
 import pi.support.hook_bus;
 import pi.testing.fake_dynamic_libraries;
 import pi.testing.fake_model_runtime;
+import pi.testing.fixed_clock;
 import pi.testing.scripted_process_runner;
 import pi.tools.tool_registry;
 
@@ -569,4 +570,144 @@ TEST_F(PluginHostMcpTest, APluginUnregistersItsOwnServerOnly) {
     const std::string mine = "jira";
     EXPECT_EQ(Json::parse(take(g_host->unregister_mcp_server(g_host->host, view(mine))))["ok"], true);
     EXPECT_TRUE(m_servers.m_servers.empty());
+}
+
+class PluginHostStreamTest : public PluginHostTest {
+protected:
+    PluginHostStreamTest()
+        : m_streamHost(m_realLibraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models, nullptr, &m_clock) {}
+
+    ~PluginHostStreamTest() override {
+        m_streamHost.shutdown();
+    }
+
+    /** The first user message and the model the provider is asked to stream. */
+    std::shared_ptr<AssistantMessageStream> ask(const std::string& text, std::shared_ptr<AbortSignal> signal = nullptr) {
+        const auto provider = m_models.registeredApis().at("hello-stream-api");
+        Model model;
+        model.id = "echo";
+        model.provider = "hello-stream";
+        model.api = "hello-stream-api";
+        TranscriptContext context;
+        UserMessage user;
+        TextContent block;
+        block.text = text;
+        user.content = std::vector<UserContentBlock>{block};
+        context.messages.push_back(user);
+        StreamOptions options;
+        options.signal = std::move(signal);
+        return provider->stream(model, context, options);
+    }
+
+    /** A plugin that registers a stream provider with the config in `g_providerConfig`. */
+    void provideStreamPlugin(const std::string& path) {
+        PiPluginAbiVersionFn version = []() { return PI_PLUGIN_ABI_VERSION; };
+        PiPluginInitFn init = [](const PiHostApi* host) {
+            g_host = host;
+            const std::string name = "stream-proxy";
+            PiStreamFn stream = [](void*, PiString, const PiAbort*, PiStreamSink* sink) {
+                const std::string done = R"({"type":"done"})";
+                g_host->stream_emit(sink, view(done));
+            };
+            g_lastReply = take(host->register_stream_provider(host->host, view(name), view(g_providerConfig), stream, nullptr));
+            return 0;
+        };
+        m_libraries.provide(path, {{"pi_plugin_abi_version", reinterpret_cast<void*>(version)}, {"pi_plugin_init", reinterpret_cast<void*>(init)}});
+    }
+
+    FixedClock m_clock;
+    PosixDynamicLibraries m_realLibraries;
+    PluginHost m_streamHost;
+};
+
+TEST_F(PluginHostStreamTest, TheExampleStreamProviderAnswersRequestsThroughTheSink) {
+    ASSERT_TRUE(m_streamHost.load({"plugins/hello_stream/libhello_stream.so"}).empty());
+    EXPECT_EQ(m_models.registeredProviders().at("hello-stream")["api"], "hello-stream-api");
+    EXPECT_EQ(m_models.registeredApis().count("hello-stream-api"), 1U);
+
+    const auto reply = ask("hello world")->result();
+    ASSERT_TRUE(reply.has_value());
+    EXPECT_EQ(reply->stopReason, StopReason::Stop);
+    ASSERT_EQ(reply->content.size(), 2U);
+    EXPECT_EQ(std::get<ThinkingContent>(reply->content[0]).thinking, "echoing");
+    EXPECT_EQ(std::get<TextContent>(reply->content[1]).text, "You said: hello world ");
+    EXPECT_EQ(reply->usage.input, 10);
+    EXPECT_EQ(reply->responseId, "echo-1");
+
+    const auto call = ask("call read notes.txt")->result();
+    ASSERT_TRUE(call.has_value());
+    EXPECT_EQ(call->stopReason, StopReason::ToolUse);
+    const ToolCall& tool = std::get<ToolCall>(call->content[0]);
+    EXPECT_EQ(tool.name, "read");
+    EXPECT_EQ(tool.arguments["input"], "notes.txt");
+
+    const auto failed = ask("fail")->result();
+    ASSERT_TRUE(failed.has_value());
+    EXPECT_EQ(failed->stopReason, StopReason::Error);
+    EXPECT_EQ(failed->errorMessage, "the echo model failed");
+}
+
+TEST_F(PluginHostStreamTest, UnloadingCancelsRunningStreamsAndWithdrawsTheProvider) {
+    ASSERT_TRUE(m_streamHost.load({"plugins/hello_stream/libhello_stream.so"}).empty());
+    const auto slow = ask("slow");
+    const auto first = slow->next();
+    ASSERT_TRUE(first.has_value());
+    m_streamHost.shutdown();
+    EXPECT_EQ(slow->result()->stopReason, StopReason::Aborted);
+    EXPECT_TRUE(m_models.registeredApis().empty());
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostStreamTest, TheRequestsSignalCancelsAStream) {
+    ASSERT_TRUE(m_streamHost.load({"plugins/hello_stream/libhello_stream.so"}).empty());
+    const auto signal = std::make_shared<AbortSignal>();
+    const auto slow = ask("slow", signal);
+    ASSERT_TRUE(slow->next().has_value());
+    signal->abort();
+    EXPECT_EQ(slow->result()->stopReason, StopReason::Aborted);
+}
+
+TEST_F(PluginHostStreamTest, BadRegistrationsAreReportedToThePlugin) {
+    PluginHost host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models, nullptr, &m_clock);
+    provideStreamPlugin("/plugins/s.so");
+    g_providerConfig = R"({"apiKey":"none"})";
+    EXPECT_TRUE(host.load({"/plugins/s.so"}).empty());
+    EXPECT_TRUE(Json::parse(g_lastReply).contains("error")) << "no api named";
+    host.shutdown();
+    g_providerConfig = R"({"api":"stream-api","apiKey":"none","models":[{"id":"m"}]})";
+    EXPECT_TRUE(host.load({"/plugins/s.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["ok"], true);
+    EXPECT_EQ(m_models.registeredApis().count("stream-api"), 1U);
+    EXPECT_EQ(m_models.registeredProviders().count("stream-proxy"), 1U);
+
+    PluginHost other(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models, nullptr, &m_clock);
+    EXPECT_TRUE(other.load({"/plugins/s.so"}).empty());
+    EXPECT_NE(Json::parse(g_lastReply)["error"].get<std::string>().find("already implemented"), std::string::npos);
+
+    g_providerConfig = R"({"api":"stream-api","apiKey":"none"})";
+    host.shutdown();
+    EXPECT_TRUE(m_models.registeredApis().empty());
+}
+
+TEST_F(PluginHostStreamTest, RegisteringAgainReplacesAndUnregisteringWithdrawsTheApi) {
+    PluginHost host(m_libraries, m_registry, m_bus, m_runner, m_logger, PluginContext{"/work", "/agent"}, &m_models, nullptr, &m_clock);
+    provideStreamPlugin("/plugins/s.so");
+    g_providerConfig = R"({"api":"stream-api","apiKey":"none","models":[{"id":"m"}]})";
+    ASSERT_TRUE(host.load({"/plugins/s.so"}).empty());
+    const std::string name = "stream-proxy";
+    const std::string api = "stream-api";
+    const std::string config = g_providerConfig;
+    PiStreamFn stream = [](void*, PiString, const PiAbort*, PiStreamSink*) {};
+    EXPECT_EQ(Json::parse(take(g_host->register_stream_provider(g_host->host, view(name), view(config), stream, nullptr)))["ok"], true);
+    EXPECT_EQ(m_models.registeredApis().count("stream-api"), 1U);
+    EXPECT_EQ(Json::parse(take(g_host->unregister_provider(g_host->host, view(name))))["ok"], true);
+    EXPECT_TRUE(m_models.registeredApis().empty());
+    EXPECT_TRUE(m_models.registeredProviders().empty());
+}
+
+TEST_F(PluginHostStreamTest, WithoutAClockStreamProvidersCannotBeRegistered) {
+    provideStreamPlugin("/plugins/s.so");
+    g_providerConfig = R"({"api":"stream-api","apiKey":"none"})";
+    EXPECT_TRUE(m_host.load({"/plugins/s.so"}).empty());
+    EXPECT_EQ(Json::parse(g_lastReply)["error"], "this host has no model registry");
 }

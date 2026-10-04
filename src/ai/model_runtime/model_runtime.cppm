@@ -272,6 +272,24 @@ public:
         buildProviders(m_baseModels, m_modelsJson);
     }
 
+    Result<void> registerApi(std::shared_ptr<IProvider> provider) override {
+        const std::string api = provider->api();
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_providers.find(api) != nullptr) {
+            return std::unexpected(Error{"provider", "The API \"" + api + "\" is already implemented"});
+        }
+        m_providers.registerProvider(std::move(provider));
+        m_pluginApis.insert(api);
+        return {};
+    }
+
+    void unregisterApi(const std::string& api) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_pluginApis.erase(api) != 0) {
+            m_providers.unregisterProvider(api);
+        }
+    }
+
     Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
         return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
     }
@@ -556,6 +574,8 @@ private:
     mutable std::mutex m_mutex;
     std::map<std::string, ProviderState> m_states;
     std::map<std::string, Json> m_registered;
+    /** APIs added through registerApi (plugins), the only ones unregisterApi removes. */
+    std::set<std::string> m_pluginApis;
     std::map<std::string, std::string> m_runtimeKeys;
     Json m_modelsJson = Json::object();
     ModelMap m_baseModels;

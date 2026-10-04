@@ -170,6 +170,21 @@ public:
         m_registered.erase(providerId);
     }
 
+    Result<void> registerApi(std::shared_ptr<IProvider> provider) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const std::string api = provider->api();
+        if (m_apis.contains(api)) {
+            return std::unexpected(Error{"provider", "The API \"" + api + "\" is already implemented"});
+        }
+        m_apis[api] = std::move(provider);
+        return {};
+    }
+
+    void unregisterApi(const std::string& api) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_apis.erase(api);
+    }
+
     Result<void> registerVirtualModel(VirtualModelDefinition definition) override {
         return m_virtual.add(std::move(definition), [this](const std::string& provider, const std::string& id) { return physicalModel(provider, id).has_value(); });
     }
@@ -190,6 +205,12 @@ public:
         return m_registered;
     }
 
+    /** The wire APIs registered through registerApi and not unregistered since. */
+    std::map<std::string, std::shared_ptr<IProvider>> registeredApis() const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_apis;
+    }
+
     /** Makes registerProvider fail. */
     void rejectProviders() {
         const std::lock_guard<std::mutex> lock(m_mutex);
@@ -207,6 +228,7 @@ private:
     std::vector<Model> m_models;
     std::set<std::string> m_authenticated;
     std::map<std::string, Json> m_registered;
+    std::map<std::string, std::shared_ptr<IProvider>> m_apis;
     bool m_rejectProviders = false;
     StreamHandler m_handler;
     FetchDeferredHandler m_fetchDeferred;

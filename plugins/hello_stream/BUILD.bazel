@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_stream.so; load it with `pi serve --plugin bazel-bin/plugins/hello_stream/libhello_stream.so`.
+cc_binary(
+    name = "hello_stream",
+    srcs = ["hello_stream.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

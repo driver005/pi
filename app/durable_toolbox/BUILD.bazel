@@ -29,6 +29,7 @@ pi_module(
         "//plugins/hello_mcp",
         "//plugins/hello_provider",
         "//plugins/hello_router",
+        "//plugins/hello_stream",
         "//plugins/hello_tool",
     ],
 )

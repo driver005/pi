@@ -48,7 +48,7 @@ public:
           m_resources(resourceOptions(options), m_settings, services.platform().files()),
           m_queue(services.platform().files()),
           m_pluginDiscovery(services.platform().files()),
-          m_plugins(services.platform().libraries(), m_tools, m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{request.cwd, request.agentDir}, &services.models().models()),
+          m_plugins(services.platform().libraries(), m_tools, m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{request.cwd, request.agentDir}, &services.models().models(), nullptr, &services.platform().clock()),
           m_bash(services.platform().processes(), services.platform().files(), services.platform().crypto(), services.platform().environment()),
           m_configValues(services.platform().environment(), services.platform().processes()),
           m_mcpConfigs(services.platform().files()),

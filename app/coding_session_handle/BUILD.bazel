@@ -40,6 +40,7 @@ pi_module(
     ],
     data = [
         "//plugins/hello_router",
+        "//plugins/hello_stream",
         "//plugins/hello_tool",
     ],
 )

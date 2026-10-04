@@ -39,7 +39,7 @@ public:
           m_cwd(std::move(cwd)),
           m_agentDir(std::move(agentDir)),
           m_pluginDiscovery(services.platform().files()),
-          m_plugins(services.platform().libraries(), m_tools, *m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{m_cwd, m_agentDir}, &services.models().models(), this),
+          m_plugins(services.platform().libraries(), m_tools, *m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{m_cwd, m_agentDir}, &services.models().models(), this, &services.platform().clock()),
           m_configValues(services.platform().environment(), services.platform().processes()),
           m_mcpConfigs(services.platform().files()),
           m_mcpNamer(services.platform().crypto()),

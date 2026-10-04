@@ -303,6 +303,20 @@ TEST_F(ModelRuntimeTest, ProvidersWithoutDeferredSupportRefuseCleanly) {
     EXPECT_EQ(cancelled.error().message, "Provider openai does not support deferred responses");
 }
 
+TEST_F(ModelRuntimeTest, PluginApisAreAddedOnceAndOnlyTheirsAreRemoved) {
+    EXPECT_TRUE(m_runtime.registerApi(std::make_shared<PlainProvider>()).has_value());
+    EXPECT_NE(m_providers.find("plain"), nullptr);
+    const auto again = m_runtime.registerApi(std::make_shared<PlainProvider>());
+    ASSERT_FALSE(again.has_value());
+    EXPECT_EQ(again.error().message, "The API \"plain\" is already implemented");
+    EXPECT_FALSE(m_runtime.registerApi(m_faux).has_value()) << "a built-in API cannot be replaced";
+    m_runtime.unregisterApi("faux");
+    EXPECT_NE(m_providers.find("faux"), nullptr) << "built-in APIs stay";
+    m_runtime.unregisterApi("plain");
+    EXPECT_EQ(m_providers.find("plain"), nullptr);
+    EXPECT_TRUE(m_runtime.registerApi(std::make_shared<PlainProvider>()).has_value());
+}
+
 class VirtualModelRuntimeTest : public ModelRuntimeTest {
 protected:
     VirtualModelDefinition definition(const std::string& provider, const std::string& id, const std::string& target) {
