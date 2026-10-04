@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "sqlite_database",
+    deps = [
+        "//interfaces/durable/i_sql_database",
+        "//interfaces/types/sqlite_options",
+        "//third_party:sqlite3",
+    ],
+)

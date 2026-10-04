@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "copilot_headers",
+    deps = [
+        "//interfaces/types/http_headers",
+        "//interfaces/types/message",
+    ],
+)

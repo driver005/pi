@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "memory_models_store",
+    deps = ["//interfaces/provider/i_models_store"],
+)

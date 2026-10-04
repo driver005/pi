@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "oauth_browser_login",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/platform/i_callback_server",
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/support/oauth_token_mapper",
+        "//interfaces/support/url_parser",
+        "//interfaces/types/browser_login_spec",
+        "//interfaces/types/login_interaction",
+    ],
+    test_deps = [
+        "//interfaces/support/builtin_oauth_specs",
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+    ],
+)

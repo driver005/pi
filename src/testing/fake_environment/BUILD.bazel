@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_environment",
+    deps = ["//interfaces/platform/i_environment"],
+)

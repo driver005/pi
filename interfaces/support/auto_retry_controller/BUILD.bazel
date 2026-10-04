@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "auto_retry_controller",
+    deps = [
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/assistant_call_retrier",
+        "//interfaces/support/assistant_error_classifier",
+        "//interfaces/support/overflow_detector",
+        "//interfaces/support/recovery_attempt_omitter",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/assistant_retry_policy",
+    ],
+    test_deps = [
+        "//src/testing/fake_settings_manager",
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

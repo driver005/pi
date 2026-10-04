@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "service_registration",
+    deps = [
+        "//interfaces/types/provider_instance",
+        "//interfaces/types/provider_subscriber",
+    ],
+)

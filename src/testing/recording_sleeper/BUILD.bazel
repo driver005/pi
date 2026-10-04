@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "recording_sleeper",
+    deps = ["//interfaces/platform/i_sleeper"],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "recording_session_sink",
+    deps = ["//interfaces/session/i_session_event_sink"],
+)

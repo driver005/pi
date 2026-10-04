@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "sqlite_storage",
+    deps = [
+        "//interfaces/durable/i_sql_database",
+        "//interfaces/durable/i_storage",
+        "//interfaces/support/delta_applier",
+        "//interfaces/support/sqlite_migrations",
+        "//interfaces/types/document_action",
+        "//interfaces/types/fork_parent",
+    ],
+    test_deps = [
+        "//src/durable/sqlite_database",
+        "//src/testing/storage_conformance",
+    ],
+)

@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "builtin_tasks",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/support/compaction_task_definition",
+        "//interfaces/support/generation_task_definition",
+        "//interfaces/support/tool_task_definition",
+    ],
+    test_deps = [
+        "//interfaces/support/registry",
+    ],
+)

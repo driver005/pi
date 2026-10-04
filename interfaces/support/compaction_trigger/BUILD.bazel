@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "compaction_trigger",
+    deps = [
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/iso_timestamp",
+        "//interfaces/support/overflow_detector",
+        "//interfaces/types/compaction_check",
+        "//interfaces/types/compaction_decision",
+    ],
+)

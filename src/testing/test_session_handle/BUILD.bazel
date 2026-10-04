@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "test_session_handle",
+    deps = [
+        "//interfaces/agent/i_agent_factory",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/session/i_session_runtime_handle",
+        "//interfaces/types/session_runtime_request",
+        "//src/ai/faux_provider",
+        "//src/base/boring_crypto",
+        "//src/base/posix_process_runner",
+        "//src/base/system_environment",
+        "//src/session/agent_session",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fake_resource_loader",
+        "//src/testing/fake_settings_manager",
+        "//src/tools/tool_registry",
+    ],
+)

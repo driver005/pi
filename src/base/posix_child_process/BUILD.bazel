@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_child_process",
+    deps = [
+        "//interfaces/platform/i_child_process",
+        "//interfaces/types/process_request",
+    ],
+)

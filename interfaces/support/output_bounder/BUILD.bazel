@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "output_bounder",
+    deps = [
+        "//interfaces/types/output_limits",
+        "//interfaces/types/output_slice",
+    ],
+)

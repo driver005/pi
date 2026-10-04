@@ -1,0 +1,26 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "branch_navigator",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/branch_summarizer",
+        "//interfaces/support/plugin_session_events",
+        "//interfaces/support/session_context_refresher",
+        "//interfaces/support/summarization_retry_reporter",
+        "//interfaces/types/agent_loop_config",
+        "//interfaces/types/forkable_message",
+        "//interfaces/types/navigate_tree_options",
+        "//interfaces/types/navigate_tree_result",
+        "//interfaces/types/routed_selection",
+    ],
+    test_deps = [
+        "//interfaces/support/hook_bus",
+        "//src/testing/fake_settings_manager",
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

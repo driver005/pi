@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_byte_connection",
+    deps = [
+        "//interfaces/server/i_socket_connection",
+        "//interfaces/types/result",
+    ],
+)

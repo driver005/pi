@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "chat_completions_stream_reader",
+    deps = [
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/types/chat_completions_compat",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/sse_event",
+    ],
+)

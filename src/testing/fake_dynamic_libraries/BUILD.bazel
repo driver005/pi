@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_dynamic_libraries",
+    deps = ["//interfaces/platform/i_dynamic_libraries"],
+)

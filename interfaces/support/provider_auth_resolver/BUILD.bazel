@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "provider_auth_resolver",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/env_key_table",
+        "//interfaces/support/header_merger",
+        "//interfaces/types/auth_result",
+        "//interfaces/types/json",
+        "//interfaces/types/provider_definition",
+    ],
+    test_deps = [
+        "//src/ai/memory_credential_store",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_process_runner",
+        "//src/testing/stub_oauth_flow",
+    ],
+)

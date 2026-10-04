@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "coding_application_options",
+    deps = [
+        "//interfaces/types/coding_startup_options",
+        "//interfaces/types/session_start_mode",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_run_state",
+    deps = ["//interfaces/support/abort_signal", "//interfaces/types/agent_context", "//interfaces/types/agent_message", "//interfaces/types/agent_loop_config", "//interfaces/types/agent_turn_context", "//interfaces/types/agent_event_sink", ],
+)

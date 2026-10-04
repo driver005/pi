@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "context_reader",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/support/durable_session",
+        "//interfaces/types/context_bounds",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/durable/memory_storage",
+    ],
+)

@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "file_credential_store",
+    deps = [
+        "//interfaces/platform/i_file_lock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/credential_codec",
+    ],
+    test_deps = [
+        "//src/base/posix_file_lock",
+        "//src/base/posix_file_system",
+        "//src/testing/fake_environment",
+        "//src/testing/scripted_process_runner",
+    ],
+)

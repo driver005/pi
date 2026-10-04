@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "resolved_agent",
+    deps = [
+        "//interfaces/durable/i_conversation_agent",
+        "//interfaces/types/extension",
+    ],
+)

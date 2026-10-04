@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_file_lock",
+    deps = [
+        "//interfaces/platform/i_file_lock",
+        "//interfaces/types/result",
+    ],
+)

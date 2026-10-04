@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "tree_preparation",
+    deps = ["//interfaces/types/session_entry"],
+)

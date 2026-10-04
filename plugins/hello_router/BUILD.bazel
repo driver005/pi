@@ -1,0 +1,14 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# Built as libhello_router.so; load it with `pi serve --plugin bazel-bin/plugins/hello_router/libhello_router.so`.
+cc_binary(
+    name = "hello_router",
+    srcs = ["hello_router.cpp"],
+    linkshared = True,
+    deps = [
+        "//sdk:pi_plugin_abi",
+        "//sdk:pi_plugin_sdk",
+        "//third_party:json",
+    ],
+    visibility = ["//visibility:public"],
+)

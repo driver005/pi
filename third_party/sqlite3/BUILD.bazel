@@ -1,0 +1,8 @@
+# The system SQLite (libsqlite3-dev). The Bazel Central Registry's sqlite3 module downloads from
+# sqlite.org, which the dev sandbox cannot reach; switch this to the module when it can.
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "sqlite3",
+    linkopts = ["-lsqlite3"],
+)

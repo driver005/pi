@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_models_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/support/conversation",
+        "//interfaces/support/replicated_state",
+        "//interfaces/support/thinking_level_resolver",
+    ],
+    test_deps = [
+        "//src/testing/durable_harness_fixture",
+    ],
+)

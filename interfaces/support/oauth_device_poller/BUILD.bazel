@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "oauth_device_poller",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/device_poll_result",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/testing/fixed_clock",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_message",
+    deps = ["//interfaces/types/assistant_message", "//interfaces/types/custom_message", "//interfaces/types/system_message", "//interfaces/types/tool_result_message", "//interfaces/types/user_message"],
+)

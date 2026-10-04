@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "server_connection",
+    deps = [
+        "//interfaces/server/i_byte_connection",
+        "//interfaces/server/i_byte_connection_handler",
+        "//interfaces/server/i_server_presentation",
+        "//interfaces/support/protocol_message_decoder",
+        "//interfaces/support/service_state_encoder",
+        "//interfaces/support/service_wire",
+        "//interfaces/types/active_request",
+        "//interfaces/types/connection_stage",
+        "//interfaces/types/pending_subscription",
+        "//interfaces/types/server_connection_options",
+        "//interfaces/types/session_attachment",
+    ],
+    test_deps = [
+        "//src/base/thread_pool",
+        "//src/testing/fake_byte_connection",
+        "//src/testing/scripted_server_host",
+        "//src/testing/sequential_id_generator",
+    ],
+)

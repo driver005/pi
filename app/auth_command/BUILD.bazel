@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "auth_command",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/provider_login",
+        "//interfaces/types/command_line",
+    ],
+    test_deps = [
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+    ],
+)

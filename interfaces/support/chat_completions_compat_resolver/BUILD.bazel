@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "chat_completions_compat_resolver",
+    deps = [
+        "//interfaces/types/model",
+        "//interfaces/types/chat_completions_compat",
+    ],
+)

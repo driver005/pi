@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_discovery",
+    deps = ["//interfaces/platform/i_file_system"],
+    test_deps = ["//src/testing/fake_file_system"],
+)

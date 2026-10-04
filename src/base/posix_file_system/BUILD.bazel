@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_file_system",
+    deps = ["//interfaces/platform/i_file_system"],
+)

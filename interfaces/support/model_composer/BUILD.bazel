@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "model_composer",
+    deps = [
+        "//interfaces/support/model_codec",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+    ],
+)

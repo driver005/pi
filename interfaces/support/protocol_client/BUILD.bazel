@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "protocol_client",
+    deps = [
+        "//interfaces/client/i_client_transport",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/protocol_codec",
+        "//interfaces/support/protocol_message_decoder",
+        "//interfaces/support/service_state_decoder",
+        "//interfaces/support/service_wire",
+        "//interfaces/types/client_subscription",
+        "//interfaces/types/client_subscription_state",
+        "//interfaces/types/pending_client_request",
+    ],
+    test_deps = ["//src/testing/fake_client_transport"],
+)

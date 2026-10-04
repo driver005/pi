@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "remote_catalog_client",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/provider/i_models_store",
+        "//interfaces/support/header_merger",
+        "//interfaces/support/http_date_parser",
+        "//interfaces/support/json_writer",
+    ],
+    test_deps = [
+        "//src/ai/memory_models_store",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+    ],
+)

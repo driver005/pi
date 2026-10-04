@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fixed_clock",
+    deps = ["//interfaces/platform/i_clock"],
+)

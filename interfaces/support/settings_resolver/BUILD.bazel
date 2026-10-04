@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "settings_resolver",
+    deps = [
+        "//interfaces/types/harness_run_settings",
+        "//interfaces/types/resolved_settings",
+    ],
+)

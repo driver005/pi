@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "submission_handle",
+    deps = [
+        "//interfaces/durable/i_submission",
+        "//interfaces/durable/i_submissions",
+    ],
+)

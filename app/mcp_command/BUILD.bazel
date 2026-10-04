@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "mcp_command",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/mcp_config_loader",
+        "//interfaces/support/mcp_oauth_sign_in",
+        "//interfaces/types/command_line",
+        "//src/session/settings_manager",
+    ],
+    test_deps = [
+        "//src/testing/scripted_http_client",
+    ],
+)

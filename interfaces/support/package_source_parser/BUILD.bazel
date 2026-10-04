@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "package_source_parser",
+    deps = [
+        "//interfaces/support/git_source_parser",
+        "//interfaces/support/path_resolver",
+        "//interfaces/types/package_source",
+    ],
+)

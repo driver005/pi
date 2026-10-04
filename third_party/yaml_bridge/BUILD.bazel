@@ -1,0 +1,13 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# Built with exceptions on purpose (see yaml_bridge.h); never add -fno-exceptions here.
+cc_library(
+    name = "yaml_bridge",
+    srcs = ["yaml_bridge.cpp"],
+    hdrs = ["yaml_bridge.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//third_party:json",
+        "//third_party:yaml",
+    ],
+)

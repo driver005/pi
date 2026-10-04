@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "harness_options",
+    deps = [
+        "//interfaces/durable/i_execution_env",
+        "//interfaces/durable/i_registry_reader",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/support/transaction",
+        "//interfaces/types/error",
+        "//interfaces/types/harness_run_settings",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

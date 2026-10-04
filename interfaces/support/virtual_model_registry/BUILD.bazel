@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "virtual_model_registry",
+    deps = [
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/support/virtual_model_names",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/virtual_model_definition",
+        "//interfaces/types/virtual_resolve_request",
+    ],
+)

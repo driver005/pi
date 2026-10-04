@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "load_prompt_templates_result",
+    deps = [
+        "//interfaces/types/prompt_template",
+        "//interfaces/types/resource_diagnostic",
+    ],
+)

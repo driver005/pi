@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_provider",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/model_codec",
+        "//interfaces/support/plugin_stream_runs",
+        "//interfaces/support/plugin_stream_translator",
+        "//interfaces/support/thinking_level_resolver",
+        "//sdk:pi_plugin_abi",
+    ],
+    test_deps = ["//src/testing/fixed_clock"],
+)

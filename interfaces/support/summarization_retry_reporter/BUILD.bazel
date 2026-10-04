@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "summarization_retry_reporter",
+    deps = [
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/types/retry_callbacks",
+    ],
+    test_deps = ["//src/testing/recording_session_sink"],
+)

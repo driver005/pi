@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "protocol_codec",
+    deps = [
+        "//interfaces/support/cbor_decoder",
+        "//interfaces/support/cbor_encoder",
+        "//interfaces/support/frame_decoder",
+        "//interfaces/support/frame_encoder",
+        "//interfaces/support/protocol_validator",
+    ],
+)

@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "boring_crypto",
+    deps = [
+        "//interfaces/platform/i_crypto",
+        "//third_party:crypto",
+    ],
+)

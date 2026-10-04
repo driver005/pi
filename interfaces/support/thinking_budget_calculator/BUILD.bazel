@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "thinking_budget_calculator",
+    deps = [
+        "//interfaces/types/thinking_budget_plan",
+        "//interfaces/support/token_estimator",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/thinking_level",
+        "//interfaces/types/transcript_context",
+    ],
+)

@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_conversation_host",
+    deps = [
+        "//interfaces/durable/i_conversation_agent",
+        "//interfaces/durable/i_submission",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/transaction",
+        "//interfaces/types/conversation_abort_options",
+        "//interfaces/types/conversation_create_options",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/storage_page",
+        "//interfaces/types/submission_draft",
+    ],
+)

@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "faux_deferred_response",
+    deps = [
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/deferred_handle",
+    ],
+)

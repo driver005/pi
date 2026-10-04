@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_session_catalog",
+    deps = ["//interfaces/server/i_session_catalog"],
+)

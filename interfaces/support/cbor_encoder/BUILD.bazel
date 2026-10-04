@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "cbor_encoder",
+    deps = [
+        "//interfaces/support/utf8_validator",
+        "//interfaces/types/cbor_options",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//interfaces/support/cbor_decoder"],
+    data = ["//src/testing/ts_golden:cbor"],
+)

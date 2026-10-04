@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "document_query",
+    deps = [
+        "//interfaces/types/document_point",
+        "//interfaces/types/json",
+    ],
+)

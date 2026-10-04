@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "tool_registration",
+    deps = [
+        "//interfaces/durable/i_tool_execution_api",
+        "//interfaces/types/json",
+        "//interfaces/types/output_limits",
+        "//interfaces/types/result",
+        "//interfaces/types/tool_execution_result",
+    ],
+)

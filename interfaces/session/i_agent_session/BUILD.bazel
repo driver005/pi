@@ -1,0 +1,31 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_agent_session",
+    deps = [
+        "//interfaces/types/agent_session_event",
+        "//interfaces/types/bash_result",
+        "//interfaces/types/compaction_result",
+        "//interfaces/types/context_usage",
+        "//interfaces/types/forkable_message",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/model_cycle_result",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/navigate_tree_options",
+        "//interfaces/types/navigate_tree_result",
+        "//interfaces/types/prompt_disposition",
+        "//interfaces/types/prompt_options",
+        "//interfaces/types/queue_mode",
+        "//interfaces/types/queued_input",
+        "//interfaces/types/result",
+        "//interfaces/types/scoped_model",
+        "//interfaces/types/send_message_options",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_stats",
+        "//interfaces/types/session_tree_node",
+        "//interfaces/types/slash_command_info",
+        "//interfaces/types/thinking_level",
+        "//interfaces/types/tool_info",
+    ],
+)

@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "delta_applier",
+    deps = [
+        "//interfaces/support/delta_validator",
+        "//interfaces/support/utf16_text",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    data = ["//src/testing/ts_golden:delta"],
+)

@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "model_controller",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/types/model_cycle_result",
+        "//interfaces/types/scoped_model",
+    ],
+    test_deps = [
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fake_settings_manager",
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

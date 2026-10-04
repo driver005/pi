@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "model_requests",
+    deps = [
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/support/virtual_model_names",
+        "//interfaces/types/virtual_resolve_request",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/stream_options",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+    ],
+)

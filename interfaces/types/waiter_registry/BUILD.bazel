@@ -1,0 +1,8 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "waiter_registry",
+    deps = [
+        "//interfaces/types/waiter_slot",
+    ],
+)

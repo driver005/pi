@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "delta_differ",
+    deps = [
+        "//interfaces/support/json_equality",
+        "//interfaces/support/utf16_text",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//interfaces/support/delta_applier",
+    ],
+    data = ["//src/testing/ts_golden:delta"],
+)

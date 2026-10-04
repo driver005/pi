@@ -1,0 +1,32 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "generation_task_definition",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/support/agent_configurator",
+        "//interfaces/support/assistant_entries",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/compaction_planner",
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/inbox_boundary",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/model_requests",
+        "//interfaces/support/progress_publisher",
+        "//interfaces/support/prompt_planner",
+        "//interfaces/support/response_classifier",
+        "//interfaces/support/run_starter",
+        "//interfaces/support/tool_results",
+        "//interfaces/support/tool_task_definition",
+    ],
+    test_deps = [
+        "//interfaces/support/compaction_task_definition",
+        "//interfaces/support/context_reader",
+        "//interfaces/support/submission_admission",
+        "//src/ai/faux_provider",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/task_fixture",
+    ],
+)

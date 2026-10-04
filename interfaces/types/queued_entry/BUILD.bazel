@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "queued_entry",
+    deps = ["//interfaces/types/image_content"],
+)

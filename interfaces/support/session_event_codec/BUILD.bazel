@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_event_codec",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/session_data_codec",
+        "//interfaces/types/agent_session_event",
+        "//interfaces/types/json",
+    ],
+)

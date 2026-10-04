@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "fork_planner",
+    deps = [
+        "//interfaces/durable/i_storage",
+        "//interfaces/support/document_resolver",
+        "//interfaces/types/fork_copy",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/durable/memory_storage",
+    ],
+)

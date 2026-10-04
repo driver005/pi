@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_hook_extension",
+    deps = [
+        "//interfaces/plugin/i_hook_bus",
+        "//interfaces/types/extension",
+    ],
+    test_deps = [
+        "//interfaces/support/hook_bus",
+        "//interfaces/support/tool_bridge",
+        "//src/testing/durable_harness_fixture",
+        "//src/testing/scripted_tool",
+    ],
+)

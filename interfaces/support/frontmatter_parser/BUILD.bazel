@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "frontmatter_parser",
+    deps = [
+        "//interfaces/types/frontmatter_document",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//third_party:yaml_bridge",
+    ],
+)

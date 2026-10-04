@@ -1,0 +1,234 @@
+export module pi.testing.fake_file_system;
+
+import std;
+export import pi.platform.i_file_system;
+
+/** In-memory IFileSystem for tests: paths are plain strings, no symlinks, a fixed home. */
+export class FakeFileSystem : public IFileSystem {
+public:
+    explicit FakeFileSystem(std::string home = "/home/user")
+        : m_home(std::move(home)) {
+        addParents(m_home + "/x");
+    }
+
+    Result<std::string> readFile(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_directories.contains(path)) {
+            return std::unexpected(Error{"EISDIR", "EISDIR: illegal operation on a directory, read"});
+        }
+        const auto found = m_files.find(path);
+        if (found == m_files.end()) {
+            return std::unexpected(notFound(path));
+        }
+        return found->second;
+    }
+
+    Result<std::string> readFilePrefix(const std::string& path, std::size_t maxBytes) override {
+        auto content = readFile(path);
+        if (!content) {
+            return content;
+        }
+        return content->substr(0, maxBytes);
+    }
+
+    Result<void> writeFile(const std::string& path, const std::string& content) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_directories.contains(parentOf(path))) {
+            return std::unexpected(notFound(path));
+        }
+        m_files[path] = content;
+        m_mtimes[path] = m_nowMs;
+        return {};
+    }
+
+    Result<void> writeFilePrivate(const std::string& path, const std::string& content) override {
+        return writeFile(path, content);
+    }
+
+    Result<void> appendFile(const std::string& path, const std::string& content) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_failAppends) {
+            return std::unexpected(Error{"EIO", "EIO: i/o error, append '" + path + "'"});
+        }
+        if (!m_directories.contains(parentOf(path))) {
+            return std::unexpected(notFound(path));
+        }
+        m_files[path] += content;
+        m_mtimes[path] = m_nowMs;
+        return {};
+    }
+
+    Result<void> createDirectories(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_directories.insert(path);
+        addParents(path);
+        return {};
+    }
+
+    Result<void> createPrivateDirectories(const std::string& path) override {
+        return createDirectories(path);
+    }
+
+    Result<void> removeFile(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_files.erase(path) == 0) {
+            return std::unexpected(notFound(path));
+        }
+        m_mtimes.erase(path);
+        return {};
+    }
+
+    Result<void> truncateFile(const std::string& path, std::uint64_t size) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_files.find(path);
+        if (found == m_files.end()) {
+            return std::unexpected(notFound(path));
+        }
+        found->second.resize(static_cast<std::size_t>(size));
+        return {};
+    }
+
+    Result<void> flushFile(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_files.contains(path)) {
+            return std::unexpected(notFound(path));
+        }
+        return {};
+    }
+
+    Result<void> removeTree(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const std::string prefix = path + "/";
+        for (auto it = m_files.begin(); it != m_files.end();) {
+            const bool inside = it->first == path || it->first.starts_with(prefix);
+            if (inside) {
+                m_mtimes.erase(it->first);
+            }
+            it = inside ? m_files.erase(it) : std::next(it);
+        }
+        for (auto it = m_directories.begin(); it != m_directories.end();) {
+            it = (*it == path || it->starts_with(prefix)) ? m_directories.erase(it) : std::next(it);
+        }
+        return {};
+    }
+
+    Result<void> renameFile(const std::string& from, const std::string& to) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_files.find(from);
+        if (found == m_files.end()) {
+            return std::unexpected(notFound(from));
+        }
+        m_files[to] = found->second;
+        m_mtimes[to] = m_nowMs;
+        m_files.erase(from);
+        m_mtimes.erase(from);
+        return {};
+    }
+
+    bool exists(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        return m_files.contains(path) || m_directories.contains(path);
+    }
+
+    bool isReadable(const std::string& path) override {
+        return exists(path);
+    }
+
+    bool isWritable(const std::string& path) override {
+        return exists(path);
+    }
+
+    Result<FileStat> stat(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        FileStat info;
+        if (m_directories.contains(path)) {
+            info.isDirectory = true;
+            info.mtimeMs = m_nowMs;
+            return info;
+        }
+        const auto found = m_files.find(path);
+        if (found == m_files.end()) {
+            return std::unexpected(notFound(path));
+        }
+        info.isFile = true;
+        info.size = found->second.size();
+        info.mtimeMs = m_mtimes[path];
+        return info;
+    }
+
+    Result<std::vector<std::string>> listDirectory(const std::string& path) override {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_directories.contains(path)) {
+            return std::unexpected(notFound(path));
+        }
+        std::set<std::string> names;
+        const std::string prefix = path == "/" ? "/" : path + "/";
+        for (const auto& entry : m_files) {
+            if (entry.first.rfind(prefix, 0) == 0) {
+                names.insert(entry.first.substr(prefix.size(), entry.first.find('/', prefix.size()) -
+                                                                   prefix.size()));
+            }
+        }
+        for (const auto& dir : m_directories) {
+            if (dir != path && dir.rfind(prefix, 0) == 0) {
+                names.insert(dir.substr(prefix.size(), dir.find('/', prefix.size()) - prefix.size()));
+            }
+        }
+        return std::vector<std::string>(names.begin(), names.end());
+    }
+
+    std::string realPath(const std::string& path) override {
+        return path;
+    }
+
+    std::string homeDirectory() override {
+        return m_home;
+    }
+
+    /** Test helper: current content or empty. */
+    std::string content(const std::string& path) const {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        const auto found = m_files.find(path);
+        return found == m_files.end() ? "" : found->second;
+    }
+
+    /** Test helper: makes every append fail with EIO until switched off. */
+    void failAppends(bool fail) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_failAppends = fail;
+    }
+
+    /** Test helper: advances the clock used for mtimes. */
+    void setNowMs(std::int64_t nowMs) {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_nowMs = nowMs;
+    }
+
+private:
+    Error notFound(const std::string& path) const {
+        return Error{"ENOENT", "ENOENT: no such file or directory, '" + path + "'"};
+    }
+
+    std::string parentOf(const std::string& path) const {
+        const auto slash = path.find_last_of('/');
+        if (slash == std::string::npos || slash == 0) {
+            return "/";
+        }
+        return path.substr(0, slash);
+    }
+
+    void addParents(const std::string& path) {
+        std::string parent = parentOf(path);
+        while (parent != "/" && m_directories.insert(parent).second) {
+            parent = parentOf(parent);
+        }
+    }
+
+    mutable std::mutex m_mutex;
+    std::string m_home;
+    std::int64_t m_nowMs = 1700000000000;
+    bool m_failAppends = false;
+    std::map<std::string, std::string> m_files;
+    std::map<std::string, std::int64_t> m_mtimes;
+    std::set<std::string> m_directories{"/"};
+};

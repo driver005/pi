@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "coding_services",
+    deps = [
+        "//app/agent_factory",
+        "//app/model_services",
+        "//app/platform_services",
+        "//app/session_manager_factory",
+        "//interfaces/support/project_trust_probe",
+        "//interfaces/support/project_trust_resolver",
+        "//src/agent/agent_loop",
+        "//src/agent/tool_call_runner",
+        "//src/session/project_trust_store",
+        "//src/session/session_store",
+    ],
+    test_deps = ["//interfaces/types/json"],
+)

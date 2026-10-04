@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "streamable_http_mcp_transport",
+    deps = [
+        "//interfaces/mcp/i_mcp_transport",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/header_merger",
+        "//interfaces/support/mcp_message_codec",
+        "//interfaces/support/sse_parser",
+        "//interfaces/types/mcp_http_exchange",
+        "//interfaces/types/mcp_http_options",
+        "//interfaces/types/mcp_http_worker",
+        "//interfaces/types/mcp_stream_cursor",
+        "//interfaces/types/mcp_stream_outcome",
+    ],
+    test_deps = [
+        "//src/mcp/mcp_client",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+    ],
+)

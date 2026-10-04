@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_result_converter",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/text_truncator",
+        "//interfaces/types/agent_tool_result",
+        "//interfaces/types/json",
+        "//interfaces/types/mcp_call_result",
+    ],
+    test_deps = [
+        "//src/base/boring_crypto",
+        "//src/base/base64_codec",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+    ],
+)

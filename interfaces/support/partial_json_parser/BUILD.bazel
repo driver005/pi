@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "partial_json_parser",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "prompt_planner",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/entry_kinds",
+        "//interfaces/types/error",
+        "//interfaces/types/json",
+        "//interfaces/types/prompt_input",
+        "//interfaces/types/prompt_section",
+        "//interfaces/types/result",
+        "//interfaces/types/tool_registration",
+    ],
+)

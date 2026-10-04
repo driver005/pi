@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "tool_results",
+    deps = [
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/transaction",
+        "//interfaces/support/usage_ledger",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/tool_diagnostic",
+        "//interfaces/types/tool_execution_result",
+    ],
+    test_deps = [
+        "//interfaces/support/durable_session",
+        "//src/durable/memory_storage",
+    ],
+)

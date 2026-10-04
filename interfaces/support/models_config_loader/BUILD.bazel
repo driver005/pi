@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "models_config_loader",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/json_comment_stripper",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

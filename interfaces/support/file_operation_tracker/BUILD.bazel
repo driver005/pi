@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "file_operation_tracker",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/file_lists",
+        "//interfaces/types/file_operations",
+        "//interfaces/types/json",
+    ],
+)

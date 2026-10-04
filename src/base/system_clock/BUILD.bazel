@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "system_clock",
+    deps = ["//interfaces/platform/i_clock"],
+)

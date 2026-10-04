@@ -1,0 +1,32 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "task_scheduler",
+    deps = [
+        "//interfaces/durable/i_registry_reader",
+        "//interfaces/durable/i_storage",
+        "//interfaces/durable/i_task_host",
+        "//interfaces/support/abort_link",
+        "//interfaces/support/durable_session",
+        "//interfaces/support/invocation_runtime",
+        "//interfaces/support/json_equality",
+        "//interfaces/support/json_waiters",
+        "//interfaces/support/task_records",
+        "//interfaces/support/wait_gate",
+        "//interfaces/types/idle_scope",
+        "//interfaces/types/ownership_overlay",
+        "//interfaces/types/ownership_ref",
+        "//interfaces/types/ownership_step",
+        "//interfaces/types/scheduler_callbacks",
+        "//interfaces/types/step_decision",
+        "//interfaces/types/task_inspection",
+        "//interfaces/types/task_invocation",
+        "//interfaces/types/task_node",
+        "//interfaces/types/task_reservation",
+        "//interfaces/types/task_resolution",
+    ],
+    test_deps = [
+        "//interfaces/support/registry",
+        "//src/durable/memory_storage",
+    ],
+)

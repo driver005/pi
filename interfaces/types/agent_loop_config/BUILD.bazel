@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_loop_config",
+    deps = ["//interfaces/provider/i_provider", "//interfaces/types/model", "//interfaces/types/stream_options", "//interfaces/types/agent_message", "//interfaces/types/agent_context", "//interfaces/types/agent_turn_context", "//interfaces/types/agent_turn_action", "//interfaces/types/agent_loop_turn_update", "//interfaces/types/prepare_request_context", "//interfaces/types/before_tool_call_result", "//interfaces/types/after_tool_call_result", "//interfaces/types/tool_call_context", "//interfaces/types/tool_execution_mode", "//interfaces/types/transcript_context", ],
+)

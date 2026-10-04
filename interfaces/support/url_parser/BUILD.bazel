@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "url_parser",
+    deps = [
+        "//interfaces/types/parsed_url",
+        "//interfaces/types/result",
+    ],
+)

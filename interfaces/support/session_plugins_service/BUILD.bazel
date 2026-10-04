@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_plugins_service",
+    deps = ["//interfaces/chord/i_remote_service"],
+)

@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "command_line_parser",
+    deps = [
+        "//interfaces/platform/i_environment",
+        "//interfaces/types/command_line",
+        "//interfaces/types/error",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/testing/fake_environment"],
+)

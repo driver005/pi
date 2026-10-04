@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "hosted_session",
+    deps = [
+        "//interfaces/server/i_routed_session_handle",
+        "//interfaces/types/client_attachment",
+    ],
+)

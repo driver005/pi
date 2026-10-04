@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_event_translator",
+    deps = [
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/delta_differ",
+        "//interfaces/support/json_equality",
+        "//interfaces/types/json",
+    ],
+)

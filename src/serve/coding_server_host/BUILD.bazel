@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "coding_server_host",
+    deps = [
+        "//interfaces/server/i_server_host",
+        "//interfaces/server/i_session_catalog",
+        "//interfaces/server/i_session_opener",
+    ],
+    test_deps = [
+        "//src/testing/fake_session_catalog",
+        "//src/testing/scripted_server_host",
+    ],
+)

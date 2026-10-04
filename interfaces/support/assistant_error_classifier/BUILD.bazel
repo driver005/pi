@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "assistant_error_classifier",
+    deps = ["//interfaces/types/assistant_message"],
+)

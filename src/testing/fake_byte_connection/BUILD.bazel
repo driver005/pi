@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_byte_connection",
+    deps = [
+        "//interfaces/server/i_byte_connection",
+        "//interfaces/server/i_byte_connection_handler",
+        "//interfaces/support/protocol_message_decoder",
+        "//interfaces/types/json",
+    ],
+)

@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "stderr_logger",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_logger",
+    ],
+)

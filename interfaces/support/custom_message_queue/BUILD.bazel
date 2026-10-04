@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "custom_message_queue",
+    deps = [
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/support/session_context_refresher",
+        "//interfaces/support/session_message_persister",
+        "//interfaces/types/agent_message",
+    ],
+    test_deps = [
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

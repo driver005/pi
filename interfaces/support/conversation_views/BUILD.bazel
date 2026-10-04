@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "conversation_views",
+    deps = [
+        "//interfaces/chord/i_replicated_state",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/context_reader",
+        "//interfaces/support/delta_differ",
+        "//interfaces/support/durable_session",
+        "//interfaces/support/replicated_state",
+        "//interfaces/types/doc_address_args",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/service_context",
+        "//interfaces/types/view_observation",
+    ],
+    test_deps = [
+        "//interfaces/support/delta_applier",
+        "//interfaces/support/json_equality",
+        "//src/durable/memory_storage",
+    ],
+)

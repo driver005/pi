@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "server_connection_options",
+    deps = [
+        "//interfaces/platform/i_executor",
+        "//interfaces/server/i_server_host",
+        "//interfaces/support/session_router",
+        "//interfaces/types/error",
+    ],
+)

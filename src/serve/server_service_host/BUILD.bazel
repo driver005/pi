@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "server_service_host",
+    deps = [
+        "//interfaces/support/presentation_plugins_service",
+        "//interfaces/server/i_server_service_host",
+        "//interfaces/server/i_session_catalog",
+        "//interfaces/support/provider_service_attachment",
+        "//interfaces/support/remote_service_provider",
+        "//interfaces/support/session_directory_service",
+        "//interfaces/support/session_management_service",
+    ],
+    test_deps = [
+        "//src/testing/fake_session_catalog",
+    ],
+)

@@ -1,0 +1,29 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "mcp_server_manager",
+    deps = [
+        "//interfaces/mcp/i_mcp_connector",
+        "//interfaces/mcp/i_mcp_server_manager",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/mcp_resource_catalog",
+        "//interfaces/support/mcp_result_converter",
+        "//interfaces/support/mcp_server_config_validator",
+        "//interfaces/support/mcp_tool_namer",
+        "//interfaces/tool/i_tool_registry",
+        "//src/mcp/list_mcp_resource_templates_tool",
+        "//src/mcp/list_mcp_resources_tool",
+        "//src/mcp/mcp_server_connection",
+        "//src/mcp/mcp_tool_adapter",
+        "//src/mcp/read_mcp_resource_tool",
+    ],
+    test_deps = [
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_mcp_connector",
+        "//src/tools/tool_registry",
+    ],
+)

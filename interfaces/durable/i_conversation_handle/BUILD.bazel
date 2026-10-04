@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_conversation_handle",
+    deps = [
+        "//interfaces/durable/i_submission",
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/conversation_abort_options",
+        "//interfaces/types/result",
+        "//interfaces/types/submission_draft",
+    ],
+)

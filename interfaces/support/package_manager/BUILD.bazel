@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "package_manager",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/package_entries",
+        "//interfaces/support/package_resource_collector",
+        "//interfaces/support/package_source_parser",
+        "//interfaces/types/configured_package",
+        "//interfaces/types/package_paths",
+        "//interfaces/types/package_resolution",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/testing/fake_file_system",
+        "//src/testing/fake_settings_manager",
+        "//src/testing/scripted_process_runner",
+    ],
+)

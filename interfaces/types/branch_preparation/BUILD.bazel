@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "branch_preparation",
+    deps = [
+        "//interfaces/types/agent_message",
+        "//interfaces/types/file_operations",
+    ],
+)

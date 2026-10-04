@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "hook_handler",
+    deps = [
+        "//interfaces/durable/i_hook_api",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

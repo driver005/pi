@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "agent_message_codec",
+    deps = [
+        "//interfaces/support/message_codec",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

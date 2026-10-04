@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "presentation_plugins_service",
+    deps = [
+        "//interfaces/chord/i_remote_service",
+        "//interfaces/server/i_session_catalog",
+    ],
+    test_deps = ["//src/testing/fake_session_catalog"],
+)

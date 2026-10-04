@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "tool_registry",
+    deps = ["//interfaces/tool/i_tool_registry"],
+    test_deps = ["//src/testing/scripted_tool"],
+)

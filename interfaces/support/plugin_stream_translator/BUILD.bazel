@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_stream_translator",
+    deps = [
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/cost_calculator",
+        "//interfaces/types/json",
+    ],
+)

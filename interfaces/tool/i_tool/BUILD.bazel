@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_tool",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/agent_tool_result",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/tool",
+        "//interfaces/types/tool_execution_mode",
+    ],
+)

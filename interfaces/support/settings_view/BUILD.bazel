@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "settings_view",
+    deps = [
+        "//interfaces/support/settings_merger",
+        "//interfaces/types/assistant_retry_policy",
+        "//interfaces/types/compaction_settings",
+        "//interfaces/types/json",
+    ],
+)

@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_oauth_sign_in",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/platform/i_callback_server",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/support/mcp_oauth_refresher",
+        "//interfaces/support/mcp_oauth_store",
+        "//interfaces/types/callback_address",
+    ],
+    test_deps = [
+        "//interfaces/support/header_merger",
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_file_system",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+    ],
+)

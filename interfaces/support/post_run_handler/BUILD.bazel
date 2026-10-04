@@ -1,0 +1,26 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "post_run_handler",
+    deps = [
+        "//interfaces/agent/i_agent",
+        "//interfaces/session/i_session_event_sink",
+        "//interfaces/session/i_session_manager",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/auto_retry_controller",
+        "//interfaces/support/compaction_controller",
+        "//interfaces/support/compaction_trigger",
+        "//interfaces/support/compactor",
+        "//interfaces/support/message_entry_locator",
+        "//interfaces/support/recovery_attempt_omitter",
+        "//interfaces/support/session_context_refresher",
+        "//interfaces/support/summary_generator",
+        "//interfaces/types/compaction_check",
+    ],
+    test_deps = [
+        "//src/testing/fake_settings_manager",
+        "//src/testing/recording_session_sink",
+        "//src/testing/session_harness",
+    ],
+)

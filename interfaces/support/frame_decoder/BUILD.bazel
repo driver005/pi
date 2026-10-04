@@ -1,0 +1,7 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "frame_decoder",
+    deps = ["//interfaces/types/result"],
+    test_deps = ["//interfaces/support/frame_encoder"],
+)

@@ -1,0 +1,3 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(name = "mcp_message_codec", deps = ["//interfaces/types/json"])

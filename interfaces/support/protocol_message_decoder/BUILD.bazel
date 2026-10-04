@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "protocol_message_decoder",
+    deps = [
+        "//interfaces/support/frame_decoder",
+        "//interfaces/support/protocol_codec",
+    ],
+)

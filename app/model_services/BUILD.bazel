@@ -1,0 +1,31 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "model_services",
+    deps = [
+        "//app/platform_services",
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/types/json",
+        "//src/ai/anthropic_messages_provider",
+        "//src/ai/azure_responses_provider",
+        "//src/ai/bedrock_provider",
+        "//src/ai/chat_completions_provider",
+        "//src/ai/faux_provider",
+        "//src/ai/codex_provider",
+        "//src/ai/file_credential_store",
+        "//src/ai/github_copilot_oauth_flow",
+        "//src/ai/google_adc_auth",
+        "//src/ai/google_provider",
+        "//src/ai/google_vertex_provider",
+        "//src/ai/file_models_store",
+        "//src/ai/mistral_provider",
+        "//interfaces/support/builtin_oauth_specs",
+        "//src/ai/model_runtime",
+        "//src/ai/oauth_refresh_flow",
+        "//src/ai/pi_messages_provider",
+        "//src/ai/provider_registry",
+        "//src/ai/responses_provider",
+    ],
+)

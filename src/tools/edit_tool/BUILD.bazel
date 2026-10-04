@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "edit_tool",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/path_resolver",
+        "//interfaces/support/tool_result_factory",
+        "//interfaces/tool/i_tool",
+        "//interfaces/support/edit_engine",
+        "//interfaces/support/text_diff",
+        "//interfaces/tool/i_file_mutation_queue",
+    ],
+    test_deps = ["//src/base/posix_file_system", "//src/tools/file_mutation_queue"],
+)

@@ -1,0 +1,622 @@
+{
+ "encode": [
+  {
+   "name": "null",
+   "json": "null",
+   "accepted": true,
+   "cbor": "f6",
+   "frame": "00000001f6"
+  },
+  {
+   "name": "true",
+   "json": "true",
+   "accepted": true,
+   "cbor": "f5",
+   "frame": "00000001f5"
+  },
+  {
+   "name": "false",
+   "json": "false",
+   "accepted": true,
+   "cbor": "f4",
+   "frame": "00000001f4"
+  },
+  {
+   "name": "zero",
+   "json": "0",
+   "accepted": true,
+   "cbor": "00",
+   "frame": "0000000100"
+  },
+  {
+   "name": "small",
+   "json": "23",
+   "accepted": true,
+   "cbor": "17",
+   "frame": "0000000117"
+  },
+  {
+   "name": "one byte",
+   "json": "24",
+   "accepted": true,
+   "cbor": "1818",
+   "frame": "000000021818"
+  },
+  {
+   "name": "byte max",
+   "json": "255",
+   "accepted": true,
+   "cbor": "18ff",
+   "frame": "0000000218ff"
+  },
+  {
+   "name": "two bytes",
+   "json": "256",
+   "accepted": true,
+   "cbor": "190100",
+   "frame": "00000003190100"
+  },
+  {
+   "name": "two bytes max",
+   "json": "65535",
+   "accepted": true,
+   "cbor": "19ffff",
+   "frame": "0000000319ffff"
+  },
+  {
+   "name": "four bytes",
+   "json": "65536",
+   "accepted": true,
+   "cbor": "1a00010000",
+   "frame": "000000051a00010000"
+  },
+  {
+   "name": "four bytes max",
+   "json": "4294967295",
+   "accepted": true,
+   "cbor": "1affffffff",
+   "frame": "000000051affffffff"
+  },
+  {
+   "name": "eight bytes",
+   "json": "4294967296",
+   "accepted": true,
+   "cbor": "1b0000000100000000",
+   "frame": "000000091b0000000100000000"
+  },
+  {
+   "name": "max safe",
+   "json": "9007199254740991",
+   "accepted": true,
+   "cbor": "1b001fffffffffffff",
+   "frame": "000000091b001fffffffffffff"
+  },
+  {
+   "name": "negative one",
+   "json": "-1",
+   "accepted": true,
+   "cbor": "20",
+   "frame": "0000000120"
+  },
+  {
+   "name": "negative 24",
+   "json": "-24",
+   "accepted": true,
+   "cbor": "37",
+   "frame": "0000000137"
+  },
+  {
+   "name": "negative 25",
+   "json": "-25",
+   "accepted": true,
+   "cbor": "3818",
+   "frame": "000000023818"
+  },
+  {
+   "name": "negative 256",
+   "json": "-256",
+   "accepted": true,
+   "cbor": "38ff",
+   "frame": "0000000238ff"
+  },
+  {
+   "name": "negative 257",
+   "json": "-257",
+   "accepted": true,
+   "cbor": "390100",
+   "frame": "00000003390100"
+  },
+  {
+   "name": "negative 65537",
+   "json": "-65537",
+   "accepted": true,
+   "cbor": "3a00010000",
+   "frame": "000000053a00010000"
+  },
+  {
+   "name": "negative four bytes",
+   "json": "-4294967297",
+   "accepted": true,
+   "cbor": "3b0000000100000000",
+   "frame": "000000093b0000000100000000"
+  },
+  {
+   "name": "min safe",
+   "json": "-9007199254740991",
+   "accepted": true,
+   "cbor": "3b001ffffffffffffe",
+   "frame": "000000093b001ffffffffffffe"
+  },
+  {
+   "name": "float half",
+   "json": "0.5",
+   "accepted": true,
+   "cbor": "fb3fe0000000000000",
+   "frame": "00000009fb3fe0000000000000"
+  },
+  {
+   "name": "float",
+   "json": "1.5",
+   "accepted": true,
+   "cbor": "fb3ff8000000000000",
+   "frame": "00000009fb3ff8000000000000"
+  },
+  {
+   "name": "float negative",
+   "json": "-2.25",
+   "accepted": true,
+   "cbor": "fbc002000000000000",
+   "frame": "00000009fbc002000000000000"
+  },
+  {
+   "name": "float tiny",
+   "json": "1e-300",
+   "accepted": true,
+   "cbor": "fb01a56e1fc2f8f359",
+   "frame": "00000009fb01a56e1fc2f8f359"
+  },
+  {
+   "name": "float large",
+   "json": "1.7976931348623157e+308",
+   "accepted": false,
+   "error": "CBOR integers must be safe JavaScript integers"
+  },
+  {
+   "name": "float pi",
+   "json": "3.141592653589793",
+   "accepted": true,
+   "cbor": "fb400921fb54442d18",
+   "frame": "00000009fb400921fb54442d18"
+  },
+  {
+   "name": "float unsafe integer",
+   "json": "1e21",
+   "accepted": false,
+   "error": "CBOR integers must be safe JavaScript integers"
+  },
+  {
+   "name": "deep 65",
+   "json": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+   "accepted": false,
+   "error": "CBOR nesting depth exceeds configured limit of 64"
+  },
+  {
+   "name": "unsafe integer",
+   "json": "9007199254740992",
+   "accepted": false,
+   "error": "CBOR integers must be safe JavaScript integers"
+  },
+  {
+   "name": "empty string",
+   "json": "\"\"",
+   "accepted": true,
+   "cbor": "60",
+   "frame": "0000000160"
+  },
+  {
+   "name": "short string",
+   "json": "\"abc\"",
+   "accepted": true,
+   "cbor": "63616263",
+   "frame": "0000000463616263"
+  },
+  {
+   "name": "24 byte string",
+   "json": "\"xxxxxxxxxxxxxxxxxxxxxxxx\"",
+   "accepted": true,
+   "cbor": "7818787878787878787878787878787878787878787878787878",
+   "frame": "0000001a7818787878787878787878787878787878787878787878787878"
+  },
+  {
+   "name": "300 byte string",
+   "json": "\"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"",
+   "accepted": true,
+   "cbor": "79012c797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979",
+   "frame": "0000012f79012c797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979797979"
+  },
+  {
+   "name": "unicode",
+   "json": "\"h\\u00e9llo \\u4e16\\u754c \\ud83d\\ude00\"",
+   "accepted": true,
+   "cbor": "7268c3a96c6c6f20e4b896e7958c20f09f9880",
+   "frame": "000000137268c3a96c6c6f20e4b896e7958c20f09f9880"
+  },
+  {
+   "name": "control characters",
+   "json": "\"a\\u0000b\\n\\t\\u001f\"",
+   "accepted": true,
+   "cbor": "666100620a091f",
+   "frame": "00000007666100620a091f"
+  },
+  {
+   "name": "empty array",
+   "json": "[]",
+   "accepted": true,
+   "cbor": "80",
+   "frame": "0000000180"
+  },
+  {
+   "name": "array",
+   "json": "[1,-1,0.5,null,true,\"s\"]",
+   "accepted": true,
+   "cbor": "860120fb3fe0000000000000f6f56173",
+   "frame": "00000010860120fb3fe0000000000000f6f56173"
+  },
+  {
+   "name": "array of 24",
+   "json": "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]",
+   "accepted": true,
+   "cbor": "9818000102030405060708090a0b0c0d0e0f1011121314151617",
+   "frame": "0000001a9818000102030405060708090a0b0c0d0e0f1011121314151617"
+  },
+  {
+   "name": "nested arrays",
+   "json": "[[],[[]],[1,[2,[3]]]]",
+   "accepted": true,
+   "cbor": "83808180820182028103",
+   "frame": "0000000a83808180820182028103"
+  },
+  {
+   "name": "empty object",
+   "json": "{}",
+   "accepted": true,
+   "cbor": "a0",
+   "frame": "00000001a0"
+  },
+  {
+   "name": "object",
+   "json": "{\"a\":1,\"b\":[true,false],\"c\":{\"d\":null}}",
+   "accepted": true,
+   "cbor": "a3616101616282f5f46163a16164f6",
+   "frame": "0000000fa3616101616282f5f46163a16164f6"
+  },
+  {
+   "name": "object key order",
+   "json": "{\"z\":1,\"a\":2,\"m\":3}",
+   "accepted": true,
+   "cbor": "a3617a01616102616d03",
+   "frame": "0000000aa3617a01616102616d03"
+  },
+  {
+   "name": "unicode keys",
+   "json": "{\"k\\u00e9y\":1,\"\\u4e16\":2}",
+   "accepted": true,
+   "cbor": "a2646bc3a9790163e4b89602",
+   "frame": "0000000ca2646bc3a9790163e4b89602"
+  },
+  {
+   "name": "deep 64",
+   "json": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+   "accepted": true,
+   "cbor": "8181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818101",
+   "frame": "000000418181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818101"
+  },
+  {
+   "name": "client hello",
+   "json": "{\"type\":\"hello\",\"version\":8}",
+   "accepted": true,
+   "cbor": "a264747970656568656c6c6f6776657273696f6e08",
+   "frame": "00000015a264747970656568656c6c6f6776657273696f6e08"
+  },
+  {
+   "name": "request",
+   "json": "{\"type\":\"request\",\"id\":\"r1\",\"target\":{\"serverId\":\"00000000-0000-4000-8000-000000000001\"},\"call\":{\"serviceId\":\"pi.agent-controller\",\"member\":\"prompt\",\"args\":[{\"message\":\"ping\",\"images\":null}]}}",
+   "accepted": true,
+   "cbor": "a46474797065677265717565737462696462723166746172676574a1687365727665724964782430303030303030302d303030302d343030302d383030302d3030303030303030303030316463616c6ca3697365727669636549647370692e6167656e742d636f6e74726f6c6c6572666d656d6265726670726f6d7074646172677381a2676d6573736167656470696e6766696d61676573f6",
+   "frame": "00000099a46474797065677265717565737462696462723166746172676574a1687365727665724964782430303030303030302d303030302d343030302d383030302d3030303030303030303030316463616c6ca3697365727669636549647370692e6167656e742d636f6e74726f6c6c6572666d656d6265726670726f6d7074646172677381a2676d6573736167656470696e6766696d61676573f6"
+  },
+  {
+   "name": "response ok",
+   "json": "{\"type\":\"response\",\"id\":\"r1\",\"ok\":true,\"result\":{\"accepted\":true,\"operationId\":\"7\",\"error\":null}}",
+   "accepted": true,
+   "cbor": "a4647479706568726573706f6e7365626964627231626f6bf566726573756c74a3686163636570746564f56b6f7065726174696f6e49646137656572726f72f6",
+   "frame": "00000040a4647479706568726573706f6e7365626964627231626f6bf566726573756c74a3686163636570746564f56b6f7065726174696f6e49646137656572726f72f6"
+  },
+  {
+   "name": "response error",
+   "json": "{\"type\":\"response\",\"id\":\"r2\",\"ok\":false,\"error\":{\"code\":\"busy\",\"message\":\"A run is already active\"}}",
+   "accepted": true,
+   "cbor": "a4647479706568726573706f6e7365626964627232626f6bf4656572726f72a264636f64656462757379676d65737361676577412072756e20697320616c726561647920616374697665",
+   "frame": "0000004aa4647479706568726573706f6e7365626964627232626f6bf4656572726f72a264636f64656462757379676d65737361676577412072756e20697320616c726561647920616374697665"
+  },
+  {
+   "name": "service update",
+   "json": "{\"type\":\"service_update\",\"subscriptionId\":\"s1\",\"update\":{\"sequence\":3,\"ops\":[[\"a\",[\"entries\",0,\"text\"],\"abc\"],[\"t\",[\"o\"],2],[\"p\",[\"entries\"],0,1,[{\"id\":1}]],[\"s\",[\"x\"],{\"y\":[1,2]}],[\"d\",[\"z\"]],[\"r\",{\"k\":1}]]}}",
+   "accepted": true,
+   "cbor": "a364747970656e736572766963655f7570646174656e737562736372697074696f6e496462733166757064617465a26873657175656e636503636f7073868361618367656e74726965730064746578746361626383617481616f028561708167656e7472696573000181a162696401836173816178a1617982010282616481617a826172a1616b01",
+   "frame": "00000088a364747970656e736572766963655f7570646174656e737562736372697074696f6e496462733166757064617465a26873657175656e636503636f7073868361618367656e74726965730064746578746361626383617481616f028561708167656e7472696573000181a162696401836173816178a1617982010282616481617a826172a1616b01"
+  }
+ ],
+ "decode": [
+  {
+   "name": "canonical small",
+   "hex": "05",
+   "accepted": true,
+   "json": "5"
+  },
+  {
+   "name": "non-canonical one byte",
+   "hex": "1805",
+   "accepted": true,
+   "json": "5"
+  },
+  {
+   "name": "non-canonical two bytes",
+   "hex": "190005",
+   "accepted": true,
+   "json": "5"
+  },
+  {
+   "name": "non-canonical four bytes",
+   "hex": "1a00000005",
+   "accepted": true,
+   "json": "5"
+  },
+  {
+   "name": "non-canonical eight bytes",
+   "hex": "1b0000000000000005",
+   "accepted": true,
+   "json": "5"
+  },
+  {
+   "name": "max safe",
+   "hex": "1b001fffffffffffff",
+   "accepted": true,
+   "json": "9007199254740991"
+  },
+  {
+   "name": "unsafe integer",
+   "hex": "1b0020000000000000",
+   "accepted": false,
+   "error": "Decoded CBOR integer or length is outside the safe range"
+  },
+  {
+   "name": "negative safe min",
+   "hex": "3b001ffffffffffffe",
+   "accepted": true,
+   "json": "-9007199254740991"
+  },
+  {
+   "name": "negative unsafe",
+   "hex": "3b001fffffffffffff",
+   "accepted": false,
+   "error": "Decoded CBOR integer is outside the safe range"
+  },
+  {
+   "name": "float64 one",
+   "hex": "fb3ff0000000000000",
+   "accepted": true,
+   "json": "1"
+  },
+  {
+   "name": "float64 half",
+   "hex": "fb3fe0000000000000",
+   "accepted": true,
+   "json": "0.5"
+  },
+  {
+   "name": "float64 negative zero",
+   "hex": "fb8000000000000000",
+   "accepted": true,
+   "json": "0"
+  },
+  {
+   "name": "float64 infinity",
+   "hex": "fb7ff0000000000000",
+   "accepted": false,
+   "error": "Decoded CBOR number must be finite"
+  },
+  {
+   "name": "float64 nan",
+   "hex": "fb7ff8000000000000",
+   "accepted": false,
+   "error": "Decoded CBOR number must be finite"
+  },
+  {
+   "name": "float64 unsafe integer",
+   "hex": "fb4340000000000000",
+   "accepted": false,
+   "error": "Decoded CBOR integer is outside the safe range"
+  },
+  {
+   "name": "float16",
+   "hex": "f93c00",
+   "accepted": false,
+   "error": "Unsupported CBOR simple value or floating-point width"
+  },
+  {
+   "name": "float32",
+   "hex": "fa3fc00000",
+   "accepted": false,
+   "error": "Unsupported CBOR simple value or floating-point width"
+  },
+  {
+   "name": "undefined",
+   "hex": "f7",
+   "accepted": false,
+   "error": "Unsupported CBOR simple value or floating-point width"
+  },
+  {
+   "name": "simple 16",
+   "hex": "f0",
+   "accepted": false,
+   "error": "Unsupported CBOR simple value or floating-point width"
+  },
+  {
+   "name": "simple value one byte",
+   "hex": "f820",
+   "accepted": false,
+   "error": "Unsupported CBOR simple value or floating-point width"
+  },
+  {
+   "name": "break",
+   "hex": "ff",
+   "accepted": false,
+   "error": "CBOR break marker is not supported"
+  },
+  {
+   "name": "byte string",
+   "hex": "420102",
+   "accepted": true,
+   "json": "{\"0\":1,\"1\":2}"
+  },
+  {
+   "name": "tag",
+   "hex": "c000",
+   "accepted": false,
+   "error": "CBOR tags are not supported"
+  },
+  {
+   "name": "tag 24",
+   "hex": "d81800",
+   "accepted": false,
+   "error": "CBOR tags are not supported"
+  },
+  {
+   "name": "indefinite text",
+   "hex": "7f6161ff",
+   "accepted": false,
+   "error": "Indefinite-length CBOR text strings are not supported"
+  },
+  {
+   "name": "indefinite array",
+   "hex": "9fff",
+   "accepted": false,
+   "error": "Indefinite-length CBOR arrays are not supported"
+  },
+  {
+   "name": "indefinite map",
+   "hex": "bfff",
+   "accepted": false,
+   "error": "Indefinite-length CBOR maps are not supported"
+  },
+  {
+   "name": "empty text",
+   "hex": "60",
+   "accepted": true,
+   "json": "\"\""
+  },
+  {
+   "name": "text",
+   "hex": "63616263",
+   "accepted": true,
+   "json": "\"abc\""
+  },
+  {
+   "name": "invalid utf-8",
+   "hex": "61ff",
+   "accepted": false,
+   "error": "CBOR text string contains invalid UTF-8"
+  },
+  {
+   "name": "overlong utf-8",
+   "hex": "62c080",
+   "accepted": false,
+   "error": "CBOR text string contains invalid UTF-8"
+  },
+  {
+   "name": "surrogate utf-8",
+   "hex": "63eda080",
+   "accepted": false,
+   "error": "CBOR text string contains invalid UTF-8"
+  },
+  {
+   "name": "array",
+   "hex": "83010203",
+   "accepted": true,
+   "json": "[1,2,3]"
+  },
+  {
+   "name": "map",
+   "hex": "a2616101616202",
+   "accepted": true,
+   "json": "{\"a\":1,\"b\":2}"
+  },
+  {
+   "name": "duplicate keys",
+   "hex": "a2616101616102",
+   "accepted": false,
+   "error": "CBOR map contains a duplicate key"
+  },
+  {
+   "name": "integer key",
+   "hex": "a10101",
+   "accepted": false,
+   "error": "CBOR map keys must be strings"
+  },
+  {
+   "name": "byte string key",
+   "hex": "a1410101",
+   "accepted": false,
+   "error": "CBOR map keys must be strings"
+  },
+  {
+   "name": "truncated array",
+   "hex": "8301",
+   "accepted": false,
+   "error": "Truncated CBOR payload"
+  },
+  {
+   "name": "truncated text",
+   "hex": "6361",
+   "accepted": false,
+   "error": "Truncated CBOR payload"
+  },
+  {
+   "name": "truncated argument",
+   "hex": "19",
+   "accepted": false,
+   "error": "Truncated CBOR payload"
+  },
+  {
+   "name": "trailing data",
+   "hex": "0000",
+   "accepted": false,
+   "error": "CBOR payload contains trailing data"
+  },
+  {
+   "name": "empty input",
+   "hex": "",
+   "accepted": false,
+   "error": "Truncated CBOR payload"
+  },
+  {
+   "name": "reserved additional information",
+   "hex": "1c",
+   "accepted": false,
+   "error": "Malformed CBOR additional information"
+  },
+  {
+   "name": "nested 64",
+   "hex": "8181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818101",
+   "accepted": true,
+   "json": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+  },
+  {
+   "name": "nested 65",
+   "hex": "818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818181818101",
+   "accepted": false,
+   "error": "CBOR nesting depth exceeds configured limit of 64"
+  }
+ ]
+}

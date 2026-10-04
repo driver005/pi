@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "mcp_client",
+    deps = [
+        "//interfaces/mcp/i_mcp_client",
+        "//interfaces/mcp/i_mcp_transport",
+        "//interfaces/support/mcp_message_codec",
+        "//interfaces/support/mcp_result_parser",
+        "//interfaces/types/mcp_client_options",
+        "//interfaces/types/mcp_client_state",
+        "//interfaces/types/mcp_pending_request",
+    ],
+    test_deps = [
+        "//src/testing/scripted_mcp_transport",
+    ],
+)

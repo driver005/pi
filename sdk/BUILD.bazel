@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "pi_plugin_abi",
+    hdrs = ["pi_plugin.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "pi_plugin_sdk",
+    hdrs = ["pi_plugin.hpp"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+    deps = [":pi_plugin_abi"],
+)

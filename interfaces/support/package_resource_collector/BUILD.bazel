@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "package_resource_collector",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/glob_matcher",
+        "//interfaces/support/package_patterns",
+        "//interfaces/types/json",
+        "//interfaces/types/package_filter",
+        "//interfaces/types/package_resources",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

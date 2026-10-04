@@ -1,0 +1,32 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "mcp_connector",
+    deps = [
+        "//interfaces/mcp/i_mcp_connector",
+        "//interfaces/platform/i_child_process_launcher",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/support/config_value_resolver",
+        "//interfaces/support/mcp_oauth_providers",
+        "//interfaces/support/path_resolver",
+        "//interfaces/types/mcp_http_options",
+        "//interfaces/types/mcp_stdio_options",
+        "//src/mcp/mcp_client",
+        "//src/mcp/stdio_mcp_transport",
+        "//src/mcp/streamable_http_mcp_transport",
+    ],
+    test_deps = [
+        "//interfaces/support/header_merger",
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fixed_clock",
+        "//src/testing/fake_file_system",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+        "//src/testing/scripted_process_runner",
+        "//app/child_process_launcher",
+    ],
+)

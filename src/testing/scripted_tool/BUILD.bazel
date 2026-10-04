@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_tool",
+    deps = ["//interfaces/tool/i_tool"],
+)

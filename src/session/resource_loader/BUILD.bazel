@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "resource_loader",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/session/i_resource_loader",
+        "//interfaces/session/i_settings_manager",
+        "//interfaces/support/context_file_loader",
+        "//interfaces/support/path_resolver",
+        "//interfaces/support/prompt_template_loader",
+        "//interfaces/support/skill_loader",
+        "//interfaces/types/resource_loader_options",
+    ],
+    test_deps = [
+        "//src/testing/fake_file_system",
+        "//src/testing/fake_settings_manager",
+    ],
+)

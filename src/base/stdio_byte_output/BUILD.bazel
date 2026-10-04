@@ -1,0 +1,3 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(name = "stdio_byte_output", deps = ["//interfaces/platform/i_byte_output"])

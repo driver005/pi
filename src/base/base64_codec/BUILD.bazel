@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "base64_codec",
+    deps = ["//interfaces/platform/i_base64_codec"],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "after_tool_call_result",
+    deps = ["//interfaces/types/user_content_block", "//interfaces/types/json", "//interfaces/types/usage", ],
+)

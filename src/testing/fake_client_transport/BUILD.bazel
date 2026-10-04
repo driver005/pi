@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_client_transport",
+    deps = [
+        "//interfaces/client/i_client_transport",
+        "//interfaces/support/protocol_codec",
+        "//interfaces/support/protocol_message_decoder",
+    ],
+)

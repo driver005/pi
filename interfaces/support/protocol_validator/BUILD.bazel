@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "protocol_validator",
+    deps = [
+        "//interfaces/support/json_value_checker",
+        "//interfaces/types/json",
+        "//interfaces/types/protocol_side",
+        "//interfaces/types/result",
+    ],
+)

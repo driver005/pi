@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "rpc_command_router",
+    deps = [
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/session/i_agent_session_runtime",
+        "//interfaces/support/message_codec",
+        "//interfaces/support/model_codec",
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/session_data_codec",
+        "//interfaces/support/session_event_codec",
+        "//interfaces/types/json",
+    ],
+    test_deps = [
+        "//app/session_manager_factory",
+        "//src/session/agent_session_runtime",
+        "//src/session/session_store",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/session_harness",
+        "//src/testing/session_runtime_factory",
+    ],
+)

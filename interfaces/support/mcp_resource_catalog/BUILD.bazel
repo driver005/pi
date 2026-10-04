@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_resource_catalog",
+    deps = [
+        "//interfaces/mcp/i_mcp_resource_server",
+        "//interfaces/support/abort_signal",
+        "//interfaces/support/mcp_result_converter",
+        "//interfaces/types/agent_tool_result",
+    ],
+    test_deps = [
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+    ],
+)

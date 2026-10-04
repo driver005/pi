@@ -1,0 +1,16 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "anthropic_request_builder",
+    deps = [
+        "//interfaces/support/message_transformer",
+        "//interfaces/support/thinking_budget_calculator",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/anthropic_thinking_plan",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/transcript_context",
+    ],
+)

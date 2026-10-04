@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "json_value_checker",
+    deps = ["//interfaces/types/json"],
+)

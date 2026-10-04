@@ -1,0 +1,23 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "agent_loop",
+    deps = [
+        "//interfaces/agent/i_agent_loop",
+        "//interfaces/agent/i_tool_call_runner",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_executor",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/agent_run_state",
+        "//interfaces/types/tool_batch_result",
+        "//interfaces/types/tool_call_outcome",
+    ],
+    test_deps = [
+        "//src/agent/tool_call_runner",
+        "//src/ai/faux_provider",
+        "//src/base/thread_pool",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/scripted_tool",
+    ],
+)

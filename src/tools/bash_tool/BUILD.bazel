@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "bash_tool",
+    deps = [
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/support/text_truncator",
+        "//interfaces/support/tool_result_factory",
+        "//interfaces/tool/i_tool",
+        "//interfaces/support/output_accumulator",
+        "//interfaces/support/shell_resolver",
+    ],
+    test_deps = [
+        "//src/base/boring_crypto",
+        "//src/base/posix_file_system",
+        "//src/base/posix_process_runner",
+        "//src/base/system_environment",
+    ],
+)

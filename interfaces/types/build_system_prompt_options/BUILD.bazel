@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "build_system_prompt_options",
+    deps = [
+        "//interfaces/types/context_file",
+        "//interfaces/types/skill",
+    ],
+)

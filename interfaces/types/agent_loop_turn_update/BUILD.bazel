@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_loop_turn_update",
+    deps = ["//interfaces/types/agent_context", "//interfaces/types/agent_message", "//interfaces/types/model", "//interfaces/types/thinking_level", ],
+)

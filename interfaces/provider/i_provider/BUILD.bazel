@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_provider",
+    deps = [
+        "//interfaces/support/event_stream",
+        "//interfaces/types/assistant_message",
+        "//interfaces/types/assistant_message_event",
+        "//interfaces/types/deferred_handle",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/transcript_context",
+    ],
+)

@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "file_models_store",
+    deps = [
+        "//interfaces/platform/i_file_lock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/provider/i_models_store",
+        "//interfaces/support/json_writer",
+    ],
+    test_deps = [
+        "//src/base/posix_file_lock",
+        "//src/base/posix_file_system",
+    ],
+)

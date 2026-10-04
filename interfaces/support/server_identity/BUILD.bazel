@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "server_identity",
+    deps = [
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/base/boring_crypto",
+        "//src/testing/fake_file_system",
+    ],
+)

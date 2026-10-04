@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "served_session_opener",
+    deps = [
+        "//interfaces/platform/i_executor",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/server/i_session_opener",
+        "//interfaces/session/i_session_runtime_factory",
+        "//interfaces/session/i_session_store",
+        "//interfaces/support/served_session",
+    ],
+    test_deps = [
+        "//app/session_manager_factory",
+        "//src/base/thread_pool",
+        "//src/session/session_store",
+        "//src/testing/fake_file_system",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/sequential_id_generator",
+        "//src/testing/session_harness",
+        "//src/testing/session_runtime_factory",
+    ],
+)

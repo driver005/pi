@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_remote_service",
+    deps = [
+        "//interfaces/chord/i_replicated_state",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/service_context",
+    ],
+)

@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "service_state_encoder",
+    deps = [
+        "//interfaces/support/delta_encoder",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//interfaces/support/service_state_decoder",
+    ],
+)

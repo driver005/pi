@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "text_diff",
+    deps = [
+        "//interfaces/types/diff_part",
+        "//interfaces/types/display_diff",
+    ],
+)

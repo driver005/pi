@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "compaction_preparer",
+    deps = [
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/agent_token_estimator",
+        "//interfaces/support/cut_point_finder",
+        "//interfaces/support/file_operation_tracker",
+        "//interfaces/support/session_projector",
+        "//interfaces/types/compaction_preparation",
+    ],
+)

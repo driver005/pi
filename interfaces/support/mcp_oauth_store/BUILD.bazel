@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "mcp_oauth_store",
+    deps = [
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_file_lock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/url_parser",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/base/boring_crypto",
+        "//src/testing/fake_file_system",
+    ],
+)

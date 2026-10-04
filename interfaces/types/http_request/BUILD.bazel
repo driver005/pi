@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "http_request",
+    deps = [
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/http_headers",
+    ],
+)

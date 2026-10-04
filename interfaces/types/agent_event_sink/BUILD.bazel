@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_event_sink",
+    deps = ["//interfaces/types/agent_event", ],
+)

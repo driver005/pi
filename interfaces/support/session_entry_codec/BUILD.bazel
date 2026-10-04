@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_entry_codec",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_header",
+    ],
+)

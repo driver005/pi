@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "fake_file_system",
+    deps = ["//interfaces/platform/i_file_system"],
+)

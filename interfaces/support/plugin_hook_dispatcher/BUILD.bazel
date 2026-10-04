@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_hook_dispatcher",
+    deps = [
+        "//interfaces/plugin/i_hook_bus",
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/after_tool_call_result",
+        "//interfaces/types/agent_message",
+        "//interfaces/types/before_tool_call_result",
+        "//interfaces/types/tool_call_context",
+    ],
+    test_deps = ["//interfaces/support/hook_bus"],
+)

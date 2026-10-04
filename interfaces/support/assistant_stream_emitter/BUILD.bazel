@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "assistant_stream_emitter",
+    deps = [
+        "//interfaces/provider/i_provider",
+        "//interfaces/support/partial_json_parser",
+        "//interfaces/types/assistant_message",
+    ],
+)

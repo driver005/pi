@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "submissions",
+    deps = [
+        "//interfaces/durable/i_submissions",
+        "//interfaces/support/durable_session",
+        "//interfaces/support/inbox_boundary",
+        "//interfaces/support/json_waiters",
+        "//interfaces/support/submission_admission",
+        "//interfaces/support/submission_handle",
+        "//interfaces/types/resolved_settings",
+        "//interfaces/types/submission_draft",
+    ],
+    test_deps = [
+        "//src/durable/memory_storage",
+    ],
+)

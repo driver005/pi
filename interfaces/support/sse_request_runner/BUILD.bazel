@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "sse_request_runner",
+    deps = [
+        "//interfaces/support/assistant_stream_emitter",
+        "//interfaces/support/retrying_http_sender",
+        "//interfaces/support/sse_parser",
+        "//interfaces/types/model",
+        "//interfaces/types/stream_options",
+    ],
+    test_deps = [
+        "//src/testing/fixed_clock",
+        "//src/testing/recording_sleeper",
+        "//src/testing/scripted_http_client",
+    ],
+)

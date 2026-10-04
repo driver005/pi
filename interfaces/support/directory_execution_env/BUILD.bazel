@@ -1,0 +1,8 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "directory_execution_env",
+    deps = [
+        "//interfaces/durable/i_execution_env",
+    ],
+)

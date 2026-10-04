@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_test_support")
+
+pi_test_support(
+    name = "scripted_process_runner",
+    deps = ["//interfaces/platform/i_process_runner"],
+)

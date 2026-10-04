@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "transaction",
+    deps = [
+        "//interfaces/durable/i_transaction_host",
+        "//interfaces/support/delta_differ",
+        "//interfaces/support/document_resolver",
+        "//interfaces/support/fork_planner",
+        "//interfaces/types/doc_address_args",
+        "//interfaces/types/doc_definition",
+        "//interfaces/types/document_entry",
+        "//interfaces/types/document_plan",
+        "//interfaces/types/json",
+        "//interfaces/types/loaded_document",
+        "//interfaces/types/result",
+        "//interfaces/types/task_options",
+        "//interfaces/types/transaction_scope",
+        "//interfaces/types/transaction_task",
+    ],
+    test_deps = [
+        "//src/durable/memory_storage",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "assistant_message_event",
+    deps = ["//interfaces/types/assistant_message", "//interfaces/types/tool_call", "//interfaces/types/stop_reason", ],
+)

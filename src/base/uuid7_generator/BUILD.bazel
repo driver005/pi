@@ -1,0 +1,9 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "uuid7_generator",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_id_generator",
+    ],
+)

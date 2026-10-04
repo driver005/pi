@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_unix_listener",
+    deps = [
+        "//interfaces/server/i_server_listener",
+        "//interfaces/types/unix_listener_options",
+    ],
+    test_deps = [
+        "//src/base/posix_byte_connection",
+    ],
+)

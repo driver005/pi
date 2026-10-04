@@ -1,0 +1,15 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "config_value_resolver",
+    deps = [
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/types/config_value_part",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/scripted_process_runner",
+    ],
+)

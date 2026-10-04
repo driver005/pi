@@ -1,0 +1,21 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "tool_task_definition",
+    deps = [
+        "//interfaces/durable/task_definition",
+        "//interfaces/support/builtin_documents",
+        "//interfaces/support/entry_kinds",
+        "//interfaces/support/live_editor",
+        "//interfaces/support/output_bounder",
+        "//interfaces/support/schema_validator",
+        "//interfaces/support/tool_call_api",
+        "//interfaces/support/tool_results",
+        "//interfaces/types/bounded_content",
+        "//interfaces/types/output_limits",
+        "//interfaces/types/tool_registration",
+    ],
+    test_deps = [
+        "//src/testing/task_fixture",
+    ],
+)

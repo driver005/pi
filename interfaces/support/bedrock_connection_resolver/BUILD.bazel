@@ -1,0 +1,17 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "bedrock_connection_resolver",
+    deps = [
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/ini_parser",
+        "//interfaces/types/bedrock_connection",
+        "//interfaces/types/model",
+        "//interfaces/types/result",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+    ],
+)

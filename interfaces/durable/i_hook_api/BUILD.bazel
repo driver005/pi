@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_hook_api",
+    deps = [
+        "//interfaces/types/doc_address_args",
+        "//interfaces/types/doc_definition",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+)

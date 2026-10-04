@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "branch_selection_resolver",
+    deps = [
+        "//interfaces/support/virtual_model_names",
+        "//interfaces/types/model",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/session_model_ref",
+    ],
+)

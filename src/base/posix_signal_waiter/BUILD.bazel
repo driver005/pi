@@ -1,0 +1,5 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "posix_signal_waiter",
+)

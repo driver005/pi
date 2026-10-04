@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "thinking_level_resolver",
+    deps = [
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/thinking_level",
+    ],
+)

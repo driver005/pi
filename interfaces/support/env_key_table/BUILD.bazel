@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "env_key_table",
+    deps = [
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+    ],
+    test_deps = [
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+    ],
+)

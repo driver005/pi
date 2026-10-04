@@ -1,0 +1,25 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "served_session",
+    deps = [
+        "//interfaces/platform/i_executor",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/provider/i_model_runtime",
+        "//interfaces/server/i_routed_session_handle",
+        "//interfaces/session/i_session_runtime_handle",
+        "//interfaces/support/agent_controller_service",
+        "//interfaces/support/models_service",
+        "//interfaces/support/provider_service_attachment",
+        "//interfaces/support/remote_service_provider",
+        "//interfaces/support/transcript_service",
+    ],
+    test_deps = [
+        "//src/base/thread_pool",
+        "//src/session/session_manager",
+        "//src/testing/fake_model_runtime",
+        "//src/testing/sequential_id_generator",
+        "//src/testing/session_harness",
+        "//src/testing/test_session_handle",
+    ],
+)

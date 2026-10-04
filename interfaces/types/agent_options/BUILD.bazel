@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "agent_options",
+    deps = ["//interfaces/tool/i_tool", "//interfaces/types/agent_loop_config", "//interfaces/types/agent_message", "//interfaces/types/model", "//interfaces/types/queue_mode", "//interfaces/types/thinking_level"],
+)

@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "document_resolver",
+    deps = [
+        "//interfaces/types/doc_address_args",
+        "//interfaces/types/doc_definition",
+        "//interfaces/types/document_address",
+        "//interfaces/types/json",
+        "//interfaces/types/resolved_address",
+        "//interfaces/types/result",
+    ],
+)

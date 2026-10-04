@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "responses_request_builder",
+    deps = [
+        "//interfaces/support/message_transformer",
+        "//interfaces/support/responses_compat_resolver",
+        "//interfaces/support/short_hash",
+        "//interfaces/support/thinking_budget_calculator",
+        "//interfaces/support/thinking_level_resolver",
+        "//interfaces/support/transcript_normalizer",
+        "//interfaces/types/json",
+        "//interfaces/types/model",
+        "//interfaces/types/responses_compat",
+        "//interfaces/types/stream_options",
+        "//interfaces/types/transcript_context",
+    ],
+)

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "package_resources",
+    deps = ["//interfaces/types/package_resource_entry"],
+)

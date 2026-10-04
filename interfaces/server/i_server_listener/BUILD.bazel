@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "i_server_listener",
+    deps = [
+        "//interfaces/server/i_byte_connection",
+        "//interfaces/server/i_byte_connection_handler",
+        "//interfaces/types/result",
+    ],
+)

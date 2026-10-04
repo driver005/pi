@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "resolved_settings",
+    deps = [
+        "//interfaces/types/conversation_compaction_policy",
+        "//interfaces/types/conversation_retry_policy",
+        "//interfaces/types/json",
+    ],
+)

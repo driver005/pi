@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "session_manager_factory",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/session/i_session_manager_factory",
+        "//src/session/session_manager",
+    ],
+    test_deps = ["//src/testing/fake_file_system", "//src/testing/fixed_clock", "//src/testing/sequential_id_generator"],
+)

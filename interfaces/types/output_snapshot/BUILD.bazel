@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "output_snapshot",
+    deps = ["//interfaces/types/truncation_result"],
+)

@@ -1,0 +1,22 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "compactor",
+    deps = [
+        "//interfaces/support/file_operation_tracker",
+        "//interfaces/support/summary_generator",
+        "//interfaces/support/usage_combiner",
+        "//interfaces/types/compaction_preparation",
+        "//interfaces/types/compaction_result",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/summarization_options",
+    ],
+    test_deps = [
+        "//src/ai/faux_provider",
+        "//src/testing/fixed_clock",
+        "//src/testing/inline_executor",
+        "//src/testing/recording_sleeper",
+        "//src/testing/sequential_id_generator",
+    ],
+)
