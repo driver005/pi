@@ -10,7 +10,7 @@ import pi.support.package_manager;
  * `pi install <source> [-l]`, `pi remove <source> [-l]`, `pi update [source]` and `pi list`: packages of skills, prompt templates
  * and plugins (PackageManager). Sources are `git:github.com/user/repo[@ref]`, `https://...` and `ssh://...` URLs and local
  * directories; `-l` uses the project's settings (only for a trusted project) instead of the global ones. Port of the package
- * commands of cli.ts without npm sources. Returns the process exit code.
+ * commands of cli.ts. Returns the process exit code.
  */
 export class PackageCommand {
 public:

@@ -13,7 +13,50 @@ protected:
         m_files.createDirectories("/agent");
     }
 
+    /** A scripted npm: installs write node_modules/<name> with a version and a skill, `view` answers m_latest. */
+    Result<ProcessResult> npm(const ProcessRequest& request) {
+        ProcessResult ok;
+        ok.exitCode = 0;
+        const std::string& verb = request.args.at(0);
+        const auto prefix = std::ranges::find(request.args, "--prefix");
+        if (verb == "view") {
+            ok.output = "\"" + m_latest + "\"\n";
+            return ok;
+        }
+        const std::string root = *(prefix + 1);
+        if (verb == "install") {
+            if (m_npmFails) {
+                ok.exitCode = 1;
+                ok.output = "npm ERR! 404\n";
+                return ok;
+            }
+            const std::string spec = request.args.at(1);
+            const std::size_t at = spec.find('@', spec.starts_with("@") ? 1 : 0);
+            const std::string name = spec.substr(0, at);
+            const std::string version = at == std::string::npos || spec.substr(at + 1) == "latest" ? m_latest : spec.substr(at + 1);
+            m_files.createDirectories(root + "/node_modules/" + name + "/skills/n1");
+            m_files.writeFile(root + "/node_modules/" + name + "/skills/n1/SKILL.md", "x");
+            m_files.writeFile(root + "/node_modules/" + name + "/package.json", "{\"name\":\"" + name + "\",\"version\":\"" + version + "\"}");
+        } else if (verb == "uninstall") {
+            m_files.removeTree(root + "/node_modules/" + request.args.at(1));
+        }
+        return ok;
+    }
+
+    std::vector<std::vector<std::string>> npmCalls() {
+        std::vector<std::vector<std::string>> out;
+        for (const ProcessRequest& request : m_git.requests()) {
+            if (request.command == "npm") {
+                out.push_back(request.args);
+            }
+        }
+        return out;
+    }
+
     Result<ProcessResult> git(const ProcessRequest& request) {
+        if (request.command == "npm") {
+            return npm(request);
+        }
         ProcessResult ok;
         ok.exitCode = 0;
         if (request.args.empty()) {
@@ -52,6 +95,8 @@ protected:
     FakeSettingsManager m_settings;
     ScriptedProcessRunner m_git{[this](const ProcessRequest& request) { return git(request); }};
     bool m_cloneFails = false;
+    bool m_npmFails = false;
+    std::string m_latest = "2.0.0";
     std::string m_head = "aaa\n";
     std::string m_target = "aaa\n";
 };
@@ -84,7 +129,6 @@ TEST_F(PackageManagerTest, FailedCloneLeavesNothingBehind) {
 
 TEST_F(PackageManagerTest, RefusesWhatItCannotInstall) {
     PackageManager packages = manager();
-    EXPECT_FALSE(packages.install("npm:left-pad", false));
     EXPECT_FALSE(packages.install("./missing", false));
     m_settings.setProjectTrusted(false);
     const auto untrusted = packages.install("git:github.com/user/repo", true);
@@ -195,8 +239,92 @@ TEST_F(PackageManagerTest, ResolveWithoutInstallingSkipsMissingPackages) {
     const PackageResolution resolution = packages.resolve(false);
     EXPECT_TRUE(resolution.resources.skills.empty());
     EXPECT_EQ(m_git.calls(), 0);
-    ASSERT_EQ(resolution.warnings.size(), 1u);
-    EXPECT_NE(resolution.warnings[0].find("npm"), std::string::npos);
+    EXPECT_TRUE(resolution.warnings.empty());
+}
+
+TEST_F(PackageManagerTest, InstallsNpmPackagesIntoTheManagedProjectAndRecordsThem) {
+    PackageManager packages = manager();
+    ASSERT_TRUE(packages.install("npm:@acme/tool@1.2.3", false));
+    EXPECT_EQ(npmCalls(), (std::vector<std::vector<std::string>>{{"install", "@acme/tool@1.2.3", "--prefix", "/agent/npm", "--legacy-peer-deps"}}));
+    EXPECT_EQ(m_settings.globalSettings()["packages"], Json::parse(R"(["npm:@acme/tool@1.2.3"])"));
+    const auto listed = packages.list();
+    ASSERT_EQ(listed.size(), 1u);
+    EXPECT_EQ(listed[0].installedPath, "/agent/npm/node_modules/@acme/tool");
+    const PackagePaths paths = packages.load(false);
+    EXPECT_EQ(paths.skills, (std::vector<std::string>{"/agent/npm/node_modules/@acme/tool/skills/n1/SKILL.md"}));
+}
+
+TEST_F(PackageManagerTest, ProjectNpmPackagesNeedATrustedProject) {
+    PackageManager packages = manager();
+    ASSERT_TRUE(packages.install("npm:tool", true));
+    EXPECT_EQ(npmCalls()[0], (std::vector<std::string>{"install", "tool", "--prefix", "/work/.pi/npm", "--legacy-peer-deps"}));
+    m_settings.setProjectTrusted(false);
+    const auto untrusted = packages.install("npm:other", true);
+    ASSERT_FALSE(untrusted);
+    EXPECT_EQ(untrusted.error().code, "untrusted_project");
+    EXPECT_EQ(npmCalls().size(), 1u);
+}
+
+TEST_F(PackageManagerTest, AFailedNpmInstallRecordsNothing) {
+    m_npmFails = true;
+    PackageManager packages = manager();
+    const auto result = packages.install("npm:tool", false);
+    ASSERT_FALSE(result);
+    EXPECT_NE(result.error().message.find("npm ERR! 404"), std::string::npos);
+    EXPECT_TRUE(m_settings.globalSettings()["packages"].is_null());
+}
+
+TEST_F(PackageManagerTest, RemovingAnNpmPackageUninstallsItAndDropsTheEntry) {
+    PackageManager packages = manager();
+    ASSERT_TRUE(packages.install("npm:tool@1.0.0", false));
+    const auto removed = packages.remove("npm:tool@1.0.0", false);
+    ASSERT_TRUE(removed);
+    EXPECT_TRUE(*removed);
+    EXPECT_EQ(npmCalls().back(), (std::vector<std::string>{"uninstall", "tool", "--prefix", "/agent/npm", "--legacy-peer-deps"}));
+    EXPECT_FALSE(m_files.exists("/agent/npm/node_modules/tool"));
+    EXPECT_TRUE(packages.list().empty());
+}
+
+TEST_F(PackageManagerTest, ResolvingInstallsAMissingNpmPackageAndReinstallsAWrongPinnedVersion) {
+    m_settings.setGlobal("packages", Json::parse(R"(["npm:tool@1.0.0"])"));
+    PackageManager packages = manager();
+    EXPECT_TRUE(packages.load(false).skills.empty());
+    EXPECT_TRUE(npmCalls().empty());
+    EXPECT_EQ(packages.load(true).skills.size(), 1u);
+    EXPECT_EQ(npmCalls().size(), 1u);
+    EXPECT_EQ(packages.load(true).skills.size(), 1u);
+    EXPECT_EQ(npmCalls().size(), 1u) << "the pinned version is there";
+
+    m_files.writeFile("/agent/npm/node_modules/tool/package.json", R"({"name":"tool","version":"0.9.0"})");
+    EXPECT_EQ(packages.load(true).skills.size(), 1u);
+    EXPECT_EQ(npmCalls().size(), 2u) << "a wrong version of a pinned package is installed again";
+}
+
+TEST_F(PackageManagerTest, UpdatingNpmPackagesInstallsOnlyNewerVersionsAndLeavesPinnedOnesAlone) {
+    m_settings.setGlobal("packages", Json::parse(R"(["npm:latest-tool", "npm:ranged@^1.0.0", "npm:pinned@1.0.0"])"));
+    PackageManager packages = manager();
+    for (const char* name : {"latest-tool", "ranged", "pinned"}) {
+        m_files.createDirectories(std::string("/agent/npm/node_modules/") + name);
+        m_files.writeFile(std::string("/agent/npm/node_modules/") + name + "/package.json", std::string("{\"version\":\"1.0.0\"}"));
+    }
+    m_latest = "1.0.0";
+    auto updated = packages.update(std::nullopt);
+    ASSERT_TRUE(updated);
+    EXPECT_EQ(updated->size(), 2u);
+    for (const auto& call : npmCalls()) {
+        EXPECT_EQ(call.at(0), "view") << "nothing newer: no install";
+    }
+
+    m_latest = "1.5.0";
+    ASSERT_TRUE(packages.update(std::nullopt));
+    std::vector<std::string> installs;
+    for (const auto& call : npmCalls()) {
+        if (call.at(0) == "install") {
+            installs.push_back(call.at(1));
+        }
+    }
+    EXPECT_EQ(installs, (std::vector<std::string>{"latest-tool@latest", "ranged@^1.0.0"}));
+    EXPECT_EQ(npmCalls()[0].at(1), "latest-tool") << "the registry is asked about the name, or the specification with a version";
 }
 
 TEST_F(PackageManagerTest, AutoloadFalseAdjustsTheUserPackage) {

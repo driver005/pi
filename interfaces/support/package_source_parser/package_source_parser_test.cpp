@@ -34,3 +34,22 @@ TEST_F(PackageSourceParserTest, LocalSourcesAreStoredRelativeToTheScope) {
     EXPECT_EQ(m_parser.settingsForm("/base", "/base"), ".");
     EXPECT_EQ(m_parser.settingsForm("git:github.com/a/b", "/base"), "git:github.com/a/b");
 }
+
+TEST_F(PackageSourceParserTest, NpmSourcesSplitIntoNameAndVersionAndPinOnlyExactVersions) {
+    const PackageSource unversioned = m_parser.parse("npm:@scope/tool");
+    EXPECT_EQ(unversioned.npmName, "@scope/tool");
+    EXPECT_FALSE(unversioned.npmVersion.has_value());
+    EXPECT_FALSE(unversioned.pinned);
+
+    const PackageSource exact = m_parser.parse("npm:tool@1.2.3");
+    EXPECT_EQ(exact.npmName, "tool");
+    EXPECT_EQ(exact.npmVersion, "1.2.3");
+    EXPECT_TRUE(exact.pinned);
+
+    const PackageSource ranged = m_parser.parse("npm:@scope/tool@^1.2.0");
+    EXPECT_EQ(ranged.npmName, "@scope/tool");
+    EXPECT_EQ(ranged.npmVersion, "^1.2.0");
+    EXPECT_FALSE(ranged.pinned);
+    EXPECT_FALSE(m_parser.parse("npm:tool@latest").pinned);
+    EXPECT_TRUE(m_parser.parse("npm:tool@2.0.0-beta.1").pinned);
+}

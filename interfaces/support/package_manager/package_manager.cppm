@@ -8,16 +8,19 @@ export import pi.types.configured_package;
 export import pi.types.package_paths;
 export import pi.types.package_resolution;
 export import pi.types.result;
+import pi.support.npm_command;
 import pi.support.package_entries;
 import pi.support.package_resource_collector;
 import pi.support.package_source_parser;
+import pi.support.semver_comparator;
 
 /**
  * Installs, removes, updates and resolves the packages named by the `packages` list of the global and project settings. A package
  * is a directory (or git repository) offering skills, prompt templates and plugins (see PackageResourceCollector). Git packages
  * are cloned to `<agent dir>/git/<host>/<path>` (project scope: `<cwd>/.pi/git/...`, only for a trusted project), local packages
- * are used where they are (a relative path counts from the agent dir, or from `<cwd>/.pi` for the project), npm packages are not
- * supported (no JavaScript runtime). A package named in both scopes is used from the project; a project entry with
+ * are used where they are (a relative path counts from the agent dir, or from `<cwd>/.pi` for the project), npm packages are
+ * installed by the configured package manager (NpmCommand) under `<agent dir>/npm` (project scope: `<cwd>/.pi/npm`); their skills,
+ * prompt templates and plugins are used, JavaScript extensions are not. A package named in both scopes is used from the project; a project entry with
  * `autoload: false` instead adjusts the user package's resources. Port of the git and settings half of DefaultPackageManager in
  * core/package-manager.ts.
  */
@@ -31,7 +34,8 @@ public:
           m_agentDir(std::move(agentDir)),
           m_parser(files.homeDirectory()),
           m_entries(m_parser),
-          m_collector(files) {}
+          m_collector(files),
+          m_npm(files, processes, settings) {}
 
     std::vector<ConfiguredPackage> list() const {
         std::vector<ConfiguredPackage> out = m_entries.read(packagesOf("user"), "user");
@@ -53,9 +57,10 @@ public:
         const PackageSource parsed = m_parser.parse(source);
         std::string recorded = source;
         if (parsed.type == "npm") {
-            return unsupported(source);
-        }
-        if (parsed.type == "git") {
+            if (auto installed = m_npm.install({parsed.npmSpec}, npmRoot(scope)); !installed) {
+                return installed;
+            }
+        } else if (parsed.type == "git") {
             if (auto installed = installGit(parsed, scope); !installed) {
                 return installed;
             }
@@ -68,7 +73,7 @@ public:
         return record(scope, m_entries.added(packagesOf(scope), recorded, baseDir(scope)));
     }
 
-    /** Deletes a git checkout and drops the entry; true when the settings named the package. */
+    /** Deletes a git checkout or uninstalls an npm package and drops the entry; true when the settings named the package. */
     Result<bool> remove(const std::string& source, bool project) {
         const std::string scope = project ? "project" : "user";
         if (auto access = checkScope(scope); !access) {
@@ -77,9 +82,10 @@ public:
         const PackageSource parsed = m_parser.parse(source);
         std::string recorded = source;
         if (parsed.type == "npm") {
-            return std::unexpected(unsupported(source).error());
-        }
-        if (parsed.type == "git") {
+            if (auto removed = m_npm.uninstall(parsed.npmName, npmRoot(scope)); !removed) {
+                return std::unexpected(removed.error());
+            }
+        } else if (parsed.type == "git") {
             if (auto removed = removeGit(parsed, scope); !removed) {
                 return std::unexpected(removed.error());
             }
@@ -94,8 +100,8 @@ public:
     }
 
     /**
-     * Brings the git packages of both scopes (or the one matching `source`) to the newest commit of their upstream; pinned
-     * packages stay. Returns the sources it looked at. A failing package does not stop the others; the first failure is returned
+     * Brings the git packages of both scopes (or the one matching `source`) to the newest commit of their upstream and the npm
+     * packages to their newest version (the one their specification allows); pinned packages stay. Returns the sources it looked at. A failing package does not stop the others; the first failure is returned
      * once all have run.
      */
     Result<std::vector<std::string>> update(const std::optional<std::string>& source) {
@@ -108,10 +114,10 @@ public:
             }
             matched = true;
             const PackageSource parsed = m_parser.parse(entry.source);
-            if (parsed.type == "local" || (parsed.type == "git" && parsed.pinned)) {
+            if (parsed.type == "local" || parsed.pinned) {
                 continue;
             }
-            const Result<void> done = parsed.type == "npm" ? unsupported(entry.source) : updateGit(parsed, entry.scope);
+            const Result<void> done = parsed.type == "npm" ? updateNpm(parsed, entry.scope) : updateGit(parsed, entry.scope);
             if (done) {
                 updated.push_back(entry.source);
             } else if (!failure) {
@@ -219,8 +225,7 @@ private:
     std::optional<std::string> packageRoot(const ConfiguredPackage& entry, bool installMissing, std::vector<std::string>& warnings) {
         const PackageSource parsed = m_parser.parse(entry.source);
         if (parsed.type == "npm") {
-            warnings.push_back("Package " + entry.source + ": npm packages are not supported");
-            return std::nullopt;
+            return npmPackageRoot(parsed, entry, installMissing, warnings);
         }
         if (parsed.type == "local") {
             const std::string path = m_parser.resolveLocal(parsed.localPath, baseDir(entry.scope));
@@ -253,12 +258,44 @@ private:
         std::string path;
         if (parsed.type == "git") {
             path = gitPath(parsed, scope);
-        } else if (parsed.type == "local") {
-            path = m_parser.resolveLocal(parsed.localPath, baseDir(scope));
+        } else if (parsed.type == "npm") {
+            path = npmPath(parsed, scope);
         } else {
-            return std::nullopt;
+            path = m_parser.resolveLocal(parsed.localPath, baseDir(scope));
         }
         return m_files.exists(path) ? std::optional<std::string>(path) : std::nullopt;
+    }
+
+    /** The installed package; installed first when it is missing, or older than the exact version the entry pins, and `installMissing`. */
+    std::optional<std::string> npmPackageRoot(const PackageSource& source, const ConfiguredPackage& entry, bool installMissing, std::vector<std::string>& warnings) {
+        const std::string path = npmPath(source, entry.scope);
+        const std::optional<std::string> version = m_files.exists(path) ? m_npm.installedVersion(path) : std::nullopt;
+        const bool matches = version && (!source.pinned || version == source.npmVersion);
+        if (matches) {
+            return path;
+        }
+        if (!installMissing) {
+            return m_files.exists(path) ? std::optional<std::string>(path) : std::nullopt;
+        }
+        if (auto installed = m_npm.install({source.npmSpec}, npmRoot(entry.scope)); !installed) {
+            warnings.push_back("Package " + entry.source + ": " + installed.error().message);
+            return std::nullopt;
+        }
+        return path;
+    }
+
+    /** Installs the newest version the specification allows when it is newer than the installed one (or when that cannot be told). */
+    Result<void> updateNpm(const PackageSource& source, const std::string& scope) {
+        const std::optional<std::string> installed = m_npm.installedVersion(npmPath(source, scope));
+        const std::string spec = source.npmVersion ? source.npmSpec : source.npmName + "@latest";
+        if (installed) {
+            const auto latest = m_npm.latestVersion(source.npmVersion ? source.npmSpec : source.npmName, m_cwd);
+            const auto order = latest ? m_semver.compare(*latest, *installed) : std::nullopt;
+            if (order && *order <= 0) {
+                return {};
+            }
+        }
+        return m_npm.install({spec}, npmRoot(scope));
     }
 
     Result<void> installGit(const PackageSource& source, const std::string& scope) {
@@ -399,10 +436,6 @@ private:
         return {};
     }
 
-    Result<void> unsupported(const std::string& source) const {
-        return std::unexpected(Error{"unsupported_source", "npm packages are not supported (no JavaScript runtime): " + source});
-    }
-
     /** Writes the new `packages` list when there is one. */
     Result<void> record(const std::string& scope, const std::optional<Json>& next) {
         if (!next) {
@@ -418,6 +451,14 @@ private:
 
     std::string baseDir(const std::string& scope) const {
         return scope == "project" ? m_cwd + "/.pi" : m_agentDir;
+    }
+
+    std::string npmRoot(const std::string& scope) const {
+        return baseDir(scope) + "/npm";
+    }
+
+    std::string npmPath(const PackageSource& source, const std::string& scope) const {
+        return npmRoot(scope) + "/node_modules/" + source.npmName;
     }
 
     std::string gitRoot(const std::string& scope) const {
@@ -448,4 +489,6 @@ private:
     PackageSourceParser m_parser;
     PackageEntries m_entries;
     PackageResourceCollector m_collector;
+    NpmCommand m_npm;
+    SemverComparator m_semver;
 };

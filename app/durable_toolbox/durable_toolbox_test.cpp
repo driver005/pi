@@ -91,14 +91,15 @@ TEST_F(DurableToolboxTest, PackagePluginsContributeToolsAndBrokenPackagesAreDiag
     std::filesystem::create_directories(m_dir + "/pkg/plugins");
     std::filesystem::copy_file("plugins/hello_tool/libhello_tool.so", m_dir + "/pkg/plugins/libhello_tool.so");
     std::filesystem::create_directories(m_dir + "/agent");
-    std::ofstream(m_dir + "/agent/settings.json") << R"({"packages":["../pkg","npm:unsupported"]})";
+    std::ofstream(m_dir + "/agent/settings.json") << R"({"packages":["../pkg","npm:unsupported"],"npmCommand":["/bin/false"]})";
     m_settings->reload();
     CodingStartupOptions startup;
     startup.noMcp = true;
     const auto toolbox = open(startup);
     EXPECT_EQ(names(*toolbox), std::vector<std::string>{"hello"});
     ASSERT_EQ(toolbox->diagnostics().size(), 1U);
-    EXPECT_NE(toolbox->diagnostics()[0].find("npm packages are not supported"), std::string::npos);
+    EXPECT_NE(toolbox->diagnostics()[0].find("Package npm:unsupported"), std::string::npos);
+    EXPECT_NE(toolbox->diagnostics()[0].find("failed"), std::string::npos);
 }
 
 TEST_F(DurableToolboxTest, BrokenPluginsAreDiagnostics) {

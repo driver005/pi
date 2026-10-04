@@ -5,6 +5,7 @@ pi_support(
     deps = [
         "//interfaces/support/git_source_parser",
         "//interfaces/support/path_resolver",
+        "//interfaces/support/semver_comparator",
         "//interfaces/types/package_source",
     ],
 )

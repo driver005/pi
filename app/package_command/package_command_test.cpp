@@ -46,6 +46,46 @@ protected:
         shell("git -C " + repo + " add -A && git -C " + repo + " -c user.name=t -c user.email=t@t commit -q -m " + version);
     }
 
+    /**
+     * Makes `npm` the program at `command` (npmCommand setting); with an empty command a script that behaves like npm for the
+     * calls pi makes: install and uninstall under --prefix, and `view` answering the version in <agent>/latest.
+     */
+    std::string writeFakeNpm(const std::string& command) {
+        std::string path = command;
+        if (path.empty()) {
+            path = m_dir + "/fake-npm.sh";
+            std::ofstream(path) << R"sh(#!/bin/sh
+dir=$(dirname "$0")
+verb=$1
+shift
+case "$verb" in
+  view) printf '"%s"
+' "$(cat "$dir/latest")";;
+  install)
+    spec=$1; root=
+    while [ $# -gt 0 ]; do [ "$1" = "--prefix" ] && root=$2; shift; done
+    case "$spec" in
+      @*) rest=${spec#@}; name=@${rest%%@*}; version=${rest#*@}; [ "$rest" = "${rest#*@}" ] && version=latest;;
+      *) name=${spec%%@*}; version=${spec#*@}; [ "$spec" = "$version" ] && version=latest;;
+    esac
+    [ "$version" = latest ] && version=$(cat "$dir/latest")
+    mkdir -p "$root/node_modules/$name/skills/greet"
+    printf -- '---
+name: greet
+description: Greets
+---
+Hello
+' > "$root/node_modules/$name/skills/greet/SKILL.md"
+    printf '{"name":"%s","version":"%s"}' "$name" "$version" > "$root/node_modules/$name/package.json";;
+  uninstall) name=$1; root=; while [ $# -gt 0 ]; do [ "$1" = "--prefix" ] && root=$2; shift; done; rm -rf "$root/node_modules/$name";;
+esac
+)sh";
+            std::filesystem::permissions(path, std::filesystem::perms::owner_all);
+        }
+        std::ofstream(m_dir + "/agent/settings.json") << nlohmann::json{{"npmCommand", nlohmann::json::array({path})}}.dump();
+        return path;
+    }
+
     int run(const std::string& command, const std::vector<std::string>& arguments, bool local = false) {
         CommandLine line;
         line.command = command;
@@ -97,6 +137,32 @@ TEST_F(PackageCommandTest, InstallListUpdateAndRemoveAGitPackage) {
     EXPECT_NE(m_err.str().find("No matching package"), std::string::npos);
 }
 
+TEST_F(PackageCommandTest, InstallUpdateAndRemoveAnNpmPackage) {
+    writeFakeNpm("");
+    std::ofstream(m_dir + "/latest") << "1.0.0";
+    ASSERT_EQ(run("install", {"npm:@acme/tool"}), 0) << m_err.str();
+    EXPECT_EQ(m_out.str(), "Installed npm:@acme/tool\n");
+    const std::string package = m_dir + "/agent/npm/node_modules/@acme/tool";
+    EXPECT_NE(read(package + "/package.json").find("1.0.0"), std::string::npos);
+    EXPECT_TRUE(std::filesystem::exists(m_dir + "/agent/npm/package.json"));
+    const auto settings = nlohmann::json::parse(read(m_dir + "/agent/settings.json"));
+    EXPECT_EQ(settings["packages"], nlohmann::json::parse(R"(["npm:@acme/tool"])"));
+    EXPECT_TRUE(settings.contains("npmCommand"));
+
+    ASSERT_EQ(run("list", {}), 0);
+    EXPECT_NE(m_out.str().find(package), std::string::npos);
+
+    std::ofstream(m_dir + "/latest") << "1.1.0";
+    ASSERT_EQ(run("update", {}), 0) << m_err.str();
+    EXPECT_EQ(m_out.str(), "Updated npm:@acme/tool\n");
+    EXPECT_NE(read(package + "/package.json").find("1.1.0"), std::string::npos);
+
+    ASSERT_EQ(run("remove", {"npm:@acme/tool"}), 0) << m_err.str();
+    EXPECT_FALSE(std::filesystem::exists(package));
+    ASSERT_EQ(run("list", {}), 0);
+    EXPECT_EQ(m_out.str(), "No packages installed.\n");
+}
+
 TEST_F(PackageCommandTest, PinnedRefsInstallThatRefAndStayThere) {
     publish("one");
     shell("git -C " + m_dir + "/remote/user/tool tag v1");
@@ -120,7 +186,8 @@ TEST_F(PackageCommandTest, ReportsFailures) {
     EXPECT_EQ(run("install", {"git:example.test/user/missing"}), 1);
     EXPECT_FALSE(m_err.str().empty());
     EXPECT_FALSE(std::filesystem::exists(m_dir + "/agent/git/example.test"));
+    writeFakeNpm("/bin/false");
     EXPECT_EQ(run("install", {"npm:left-pad"}), 1);
-    EXPECT_NE(m_err.str().find("npm packages are not supported"), std::string::npos);
+    EXPECT_NE(m_err.str().find("failed"), std::string::npos);
     EXPECT_EQ(run("update", {"git:example.test/nobody/nothing"}), 1);
 }

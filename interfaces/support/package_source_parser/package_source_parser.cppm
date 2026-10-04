@@ -4,9 +4,10 @@ import std;
 export import pi.types.package_source;
 import pi.support.git_source_parser;
 import pi.support.path_resolver;
+import pi.support.semver_comparator;
 
 /**
- * Tells what a package source string names: `npm:name@version`, a git source (see GitSourceParser; `github:user/repo` is accepted
+ * Tells what a package source string names: `npm:name@version` (pinned when the version is an exact one), a git source (see GitSourceParser; `github:user/repo` is accepted
  * as `git:github.com/user/repo`) or else a local path. Identities decide whether two entries name the same package: `npm:<name>`,
  * `git:<host>/<path>` (any ref) and `local:<absolute path>`.
  */
@@ -21,6 +22,11 @@ public:
         if (trimmed.starts_with("npm:")) {
             out.type = "npm";
             out.npmSpec = trim(trimmed.substr(4));
+            out.npmName = npmName(out.npmSpec);
+            if (out.npmSpec.size() > out.npmName.size() + 1) {
+                out.npmVersion = out.npmSpec.substr(out.npmName.size() + 1);
+                out.pinned = m_semver.isExact(*out.npmVersion);
+            }
             return out;
         }
         const std::string git = trimmed.starts_with("github:") ? "git:github.com/" + trimmed.substr(7) : trimmed;
@@ -74,6 +80,7 @@ private:
         return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
     }
 
+    SemverComparator m_semver;
     GitSourceParser m_git;
     PathResolver m_paths;
 };

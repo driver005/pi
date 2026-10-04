@@ -2,7 +2,7 @@ export module pi.types.package_source;
 
 import std;
 
-/** Where a package comes from: a git repository, a local directory or an npm package (not supported: it needs a JavaScript runtime). */
+/** Where a package comes from: a git repository, a local directory or an npm package. */
 export struct PackageSource {
     /** "git", "local" or "npm". */
     std::string type = "local";
@@ -16,6 +16,8 @@ export struct PackageSource {
     bool pinned = false;
     /** local: the path as written. */
     std::string localPath;
-    /** npm: the specification after `npm:`. */
+    /** npm: the specification after `npm:`, the package name in it and the version part (`1.2.3`, `^1.2`, `latest`), if any. */
     std::string npmSpec;
+    std::string npmName;
+    std::optional<std::string> npmVersion;
 };

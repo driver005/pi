@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "semver_comparator",
+    deps = ["//interfaces/types/semver_version"],
+)
