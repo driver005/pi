@@ -204,3 +204,14 @@ TEST_F(CommandLineParserTest, OtherCommandsTakeNoPositionalArguments) {
     ASSERT_FALSE(line.has_value());
     EXPECT_EQ(line.error().code, "usage");
 }
+
+TEST_F(CommandLineParserTest, ParsesTheExportCommand) {
+    const auto line = parse({"export", "session.jsonl", "out.html", "--theme", "light"});
+    ASSERT_TRUE(line.has_value());
+    EXPECT_EQ(line->command, "export");
+    EXPECT_EQ(line->arguments, (std::vector<std::string>{"session.jsonl", "out.html"}));
+    EXPECT_EQ(line->exportTheme, "light");
+    EXPECT_TRUE(parse({"export", "session.jsonl"})->exportTheme.empty());
+    EXPECT_FALSE(parse({"export"}).has_value());
+    EXPECT_FALSE(parse({"export", "a", "b", "c"}).has_value());
+}

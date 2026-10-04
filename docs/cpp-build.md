@@ -153,6 +153,10 @@ A package is a directory (a git checkout, an installed npm package or a local pa
 
 Not carried over: `output-guard.ts` (taking over a JavaScript process's stdout; the C++ rpc process writes its protocol to stdout only by construction), the stack-trace-to-extension matching of `crash-log.ts`, and `footer-data-provider.ts` (terminal footer data).
 
+## HTML export
+
+`pi export <session.jsonl> [output.html] [--theme dark|light]` and the RPC command `export_html` (`{outputPath?, theme?}` answers `{path}`; `AgentSession::exportHtml`) write a session as one self-contained HTML page, port of `core/export-html`. `HtmlExporter` (support) fills the page template: the theme's CSS variables and the page, card and info colors, the session data as base64 JSON (`SessionExportData`: header, entries, leaf and, for a live session, the system prompt and active tools; a file export has neither) and the inlined `marked` and `highlight.js`; the page's own script draws the conversation and its tree in the browser. The template, the vendored libraries and the resolved colors of the built-in `dark` and `light` themes are in `assets/export_html` and compiled into the binary (`tools/embed_asset.py`, `EmbeddedExportAssets`). The template files are copies of `packages/coding-agent/src/core/export-html`; the colors come from `tools/ts_export_themes.mts` (see its header; it needs `npm install --ignore-scripts`). Placeholders are replaced in one pass, so the `$&`-style replacement patterns of JavaScript's `String.replace` cannot corrupt the page. Not ported: custom themes (only the two built-in ones), pre-rendering of custom tool output through plugin renderers, and the share flow. The exported page was rendered in headless Chromium against the binary for a smoke test.
+
 ## Plugins
 
 Shared libraries loaded through a C ABI replace TypeScript extensions: they add tools and subscribe to hooks (`tool_call`, `tool_result`, `context`, agent events). See [cpp-plugins.md](cpp-plugins.md).
@@ -171,4 +175,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-plugin commands and UI APIs, plugin provider OAuth; the Meta and Radius sign-ins; the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); HTML export.
+UI APIs of plugins (`ctx.ui`, renderers, widgets), plugin commands in `pi serve` sessions, the session boundary drafts of plugins (`agent_before_settle`), the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); the dynamic Radius model catalog; custom HTML export themes; the share flow (`gh gist`); codemode (dropped by decision); the evals runner (see the TypeScript `packages/evals`).

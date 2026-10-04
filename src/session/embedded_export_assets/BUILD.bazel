@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "embedded_export_assets",
+    deps = [
+        "//assets/export_html:export_html_assets",
+        "//interfaces/session/i_export_assets",
+    ],
+    test_deps = ["//interfaces/types/json"],
+)

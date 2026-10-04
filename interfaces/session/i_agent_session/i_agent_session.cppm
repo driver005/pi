@@ -129,6 +129,13 @@ public:
      */
     virtual Result<Json> reportBug(const Json& options) = 0;
 
+    /**
+     * Writes the session as a self-contained HTML page (HtmlExporter) and returns the path: `outputPath` (`~` and relative paths
+     * resolve against the session's cwd), else `pi-session-<session file name>.html` in the cwd. `theme` is `dark` (also for "")
+     * or `light`. Errors: an in-memory session, a session with nothing written yet, an unknown theme, and hosts without export assets.
+     */
+    virtual Result<std::string> exportHtml(const std::optional<std::string>& outputPath, const std::string& theme) = 0;
+
     /** Prompt templates and skills a prompt can invoke by name. */
     virtual std::vector<SlashCommandInfo> slashCommands() const = 0;
 

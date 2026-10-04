@@ -9,6 +9,7 @@ pi_binary(
         "//app/coding_services",
         "//app/crash_recorder",
         "//app/durable_serve",
+        "//app/export_command",
         "//app/mcp_command",
         "//app/package_command",
         "//app/serve_application",

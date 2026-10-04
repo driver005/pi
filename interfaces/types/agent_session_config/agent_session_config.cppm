@@ -1,6 +1,7 @@
 export module pi.types.agent_session_config;
 
 import std;
+export import pi.platform.i_base64_codec;
 export import pi.platform.i_environment;
 export import pi.platform.i_http_client;
 export import pi.platform.i_system_info;
@@ -12,6 +13,7 @@ export import pi.platform.i_sleeper;
 export import pi.plugin.i_hook_bus;
 export import pi.plugin.i_plugin_commands;
 export import pi.provider.i_model_runtime;
+export import pi.session.i_export_assets;
 export import pi.session.i_resource_loader;
 export import pi.session.i_session_manager;
 export import pi.session.i_settings_manager;
@@ -58,6 +60,9 @@ export struct AgentSessionConfig {
     IHttpClient* http = nullptr;
     /** Paths of the plugins that are loaded, for bug reports. */
     std::function<std::vector<std::string>()> plugins = nullptr;
+    /** The HTML export (`exportHtml`): its template files and a base64 codec; without them exporting fails. */
+    const IExportAssets* exportAssets = nullptr;
+    const IBase64Codec* base64 = nullptr;
     /** Plugin commands: `/name args` prompts run them (before the input event) and slashCommands() lists them; null disables them. */
     IPluginCommands* commands = nullptr;
 };

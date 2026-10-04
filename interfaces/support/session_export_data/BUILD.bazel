@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_export_data",
+    deps = [
+        "//interfaces/session/i_session_manager",
+        "//interfaces/types/json",
+    ],
+    test_deps = ["//src/testing/session_harness"],
+)

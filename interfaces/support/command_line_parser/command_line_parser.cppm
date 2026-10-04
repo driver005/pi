@@ -63,6 +63,9 @@ public:
                 return std::unexpected(valid.error());
             }
         }
+        if (line.command == "export" && (line.arguments.empty() || line.arguments.size() > 2)) {
+            return std::unexpected(Error{"usage", "Usage: pi export <session.jsonl> [output.html] [--theme dark|light]"});
+        }
         if (line.command == "auth") {
             if (auto valid = validateAuth(line.arguments); !valid) {
                 return std::unexpected(valid.error());
@@ -75,12 +78,13 @@ public:
     }
 
     std::string usage() const {
-        return "Usage: pi rpc|serve|mcp|auth|install|remove|update|list [options]\n"
+        return "Usage: pi rpc|serve|mcp|auth|export|install|remove|update|list [options]\n"
                "\n"
                "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
                "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
                "auth   pi auth list | status | login <provider> | logout <provider>: sign in to subscription providers.\n"
+               "export  pi export <session.jsonl> [output.html]: write a session as a self-contained HTML page (--theme dark|light).\n"
                "install, remove, update, list   pi install|remove <source> [-l], pi update [source], pi list: manage packages\n"
                "                                (skills, prompt templates and plugins from git repositories and local directories).\n"
                "\n"
@@ -109,6 +113,7 @@ public:
                "  --mcp-wait <ms>               How long startup waits for MCP servers (default 5000)\n"
                "  --trust / --no-trust          Answer the project trust question\n"
                "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
+               "  --theme <name>                export: color theme of the page (dark or light, default dark)\n"
                "  --method <id>                 auth login: sign-in method (browser, copy_code, device_code)\n"
                "  --manual                      auth login: paste the code instead of using the local callback\n"
                "  --local, -l                   install, remove: use the project settings instead of the global ones\n"
@@ -212,6 +217,8 @@ private:
             line.serverId = value;
         } else if (flag == "--method") {
             line.loginMethod = value;
+        } else if (flag == "--theme") {
+            line.exportTheme = value;
         } else if (flag == "--plugin") {
             options.startup.pluginPaths.push_back(expandHome(value));
         } else if (flag == "--mcp-wait") {
@@ -235,7 +242,7 @@ private:
     }
 
     bool takesArguments(const std::string& command) const {
-        return command == "mcp" || command == "auth" || command == "install" || command == "remove" || command == "update" || command == "list";
+        return command == "mcp" || command == "auth" || command == "export" || command == "install" || command == "remove" || command == "update" || command == "list";
     }
 
     Result<void> validatePackages(const CommandLine& line) const {
@@ -335,7 +342,7 @@ private:
                                              "--model",         "--thinking",            "--session",
                                              "--session-dir",   "--tools",               "--system-prompt",
                                              "--append-system-prompt", "--skill",        "--prompt-template",
-                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method"};
+                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method", "--theme"};
     const std::set<std::string> m_switches{"--help", "-h", "--continue", "-c", "--no-session", "--no-tools", "--no-context-files",
                                            "--no-skills", "--no-prompt-templates", "--no-plugins", "--no-mcp", "--trust",
                                            "--no-trust", "--faux", "--session-tree", "--manual", "--local", "-l"};

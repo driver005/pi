@@ -9,6 +9,7 @@ import pi.mcp_connector;
 import pi.mcp_server_manager;
 import pi.plugin.plugin_host;
 import pi.session.agent_session;
+import pi.session.embedded_export_assets;
 import pi.session.resource_loader;
 import pi.session.settings_manager;
 import pi.support.bash_command_executor;
@@ -239,6 +240,8 @@ private:
         config.http = &platform.http();
         config.plugins = [this] { return m_plugins.loaded(); };
         config.commands = &m_plugins;
+        config.exportAssets = &m_exportAssets;
+        config.base64 = &platform.base64();
         m_session = std::make_unique<AgentSession>(std::move(config));
     }
 
@@ -389,6 +392,7 @@ private:
     FileMutationQueue m_queue;
     ToolRegistry m_tools;
     HookBus m_hooks;
+    EmbeddedExportAssets m_exportAssets;
     PluginSessionEvents m_sessionEvents{m_hooks};
     PluginResourceLoader m_pluginResources;
     PluginDiscovery m_pluginDiscovery;

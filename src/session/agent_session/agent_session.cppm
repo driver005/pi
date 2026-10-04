@@ -41,6 +41,9 @@ import pi.support.skill_command_expander;
 import pi.support.summary_generator;
 import pi.support.virtual_model_names;
 import pi.support.error_stream_factory;
+import pi.support.html_exporter;
+import pi.support.path_resolver;
+import pi.support.session_export_data;
 import pi.support.transcript_normalizer;
 
 /**
@@ -494,6 +497,37 @@ public:
         }
         m_loadout->rebuild();
         return {};
+    }
+
+    Result<std::string> exportHtml(const std::optional<std::string>& outputPath, const std::string& theme) override {
+        if (m_config.exportAssets == nullptr || m_config.base64 == nullptr) {
+            return std::unexpected(Error{"unsupported", "HTML export is not available in this host"});
+        }
+        const std::optional<std::string> file = m_config.session.sessionFile();
+        if (!file || !m_config.session.isPersisted()) {
+            return std::unexpected(Error{"export_failed", "Cannot export in-memory session to HTML"});
+        }
+        if (!m_config.files.exists(*file)) {
+            return std::unexpected(Error{"export_failed", "Nothing to export yet - start a conversation first"});
+        }
+        Json tools = Json::array();
+        for (const ToolInfo& tool : allTools()) {
+            if (tool.active) {
+                tools.push_back(Json{{"name", tool.name}, {"description", tool.description}, {"parameters", tool.parameters}});
+            }
+        }
+        const Json data = SessionExportData().build(m_config.session, systemPrompt(), tools);
+        auto html = HtmlExporter(m_config.exportAssets->assets(), *m_config.base64).render(data, theme);
+        if (!html) {
+            return std::unexpected(html.error());
+        }
+        const PathResolver paths(m_config.files.homeDirectory());
+        const std::string name = "pi-session-" + std::filesystem::path(*file).stem().string() + ".html";
+        const std::string target = paths.resolveToCwd(outputPath.value_or(name), m_config.cwd);
+        if (auto written = m_config.files.writeFile(target, *html); !written) {
+            return std::unexpected(written.error());
+        }
+        return target;
     }
 
     Result<Json> reportBug(const Json& options) override {

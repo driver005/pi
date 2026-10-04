@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "html_exporter",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/types/export_assets",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/base/base64_codec"],
+)

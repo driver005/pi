@@ -165,7 +165,9 @@ private:
             return filed ? success(c, "bug_report", *filed) : failure(c, "bug_report", filed.error().message);
         };
         m_handlers["export_html"] = [this](const Json& c) {
-            return failure(c, "export_html", "export_html is not supported by the headless backbone");
+            const std::string path = text(c, "outputPath");
+            const auto written = m_runtime.session().exportHtml(path.empty() ? std::nullopt : std::optional<std::string>(path), text(c, "theme"));
+            return written ? success(c, "export_html", Json{{"path", *written}}) : failure(c, "export_html", written.error().message);
         };
     }
 

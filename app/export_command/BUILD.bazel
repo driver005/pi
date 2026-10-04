@@ -1,0 +1,14 @@
+load("//tools:module.bzl", "pi_module")
+
+pi_module(
+    name = "export_command",
+    deps = [
+        "//app/coding_services",
+        "//interfaces/support/html_exporter",
+        "//interfaces/support/path_resolver",
+        "//interfaces/support/session_export_data",
+        "//interfaces/types/command_line",
+        "//src/session/embedded_export_assets",
+    ],
+    test_deps = ["//interfaces/types/json"],
+)

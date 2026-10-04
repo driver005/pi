@@ -25,6 +25,7 @@ pi_module(
         "//interfaces/types/session_runtime_request",
         "//src/plugin/plugin_host",
         "//src/session/agent_session",
+        "//src/session/embedded_export_assets",
         "//src/session/resource_loader",
         "//src/session/settings_manager",
         "//src/tools/bash_tool",

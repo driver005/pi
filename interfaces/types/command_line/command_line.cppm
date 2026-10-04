@@ -5,9 +5,9 @@ export import pi.types.coding_application_options;
 
 /** A parsed command line: what to run and how the application is configured for it. */
 export struct CommandLine {
-    /** "rpc", "serve", "mcp", "auth", "install", "remove", "update" or "list"; empty when only help was requested. */
+    /** "rpc", "serve", "mcp", "auth", "export", "install", "remove", "update" or "list"; empty when only help was requested. */
     std::string command;
-    /** Positional arguments after the command: `mcp login|logout <server>`, `mcp list`, `auth login|logout <provider>`, `auth list|status`, `install|remove <source>`, `update [source]`. */
+    /** Positional arguments after the command: `mcp login|logout <server>`, `mcp list`, `auth login|logout <provider>`, `auth list|status`, `install|remove <source>`, `update [source]`, `export <session> [output]`. */
     std::vector<std::string> arguments;
     bool help = false;
     CodingApplicationOptions options;
@@ -21,6 +21,8 @@ export struct CommandLine {
     std::string loginMethod;
     /** `auth login`: ask for the code instead of using the loopback callback (--manual). */
     bool loginManual = false;
+    /** `export`: the theme of the page (--theme), empty for the default. */
+    std::string exportTheme;
     /** `install`, `remove`: the project's settings instead of the global ones (-l, --local). */
     bool localPackages = false;
 };

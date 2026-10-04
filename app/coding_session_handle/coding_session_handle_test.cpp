@@ -392,3 +392,52 @@ TEST_F(CodingSessionHandleTest, ThePluginsSignInEndsWithTheSession) {
     const auto resolved = m_services->models().models().getAuth("hello-oauth", std::nullopt, {});
     EXPECT_TRUE(!resolved.has_value() || !resolved->has_value()) << "without the plugin the provider and its sign-in are gone";
 }
+
+TEST_F(CodingSessionHandleTest, ExportsAPersistedSessionAsHtml) {
+    m_services->models().faux()->enqueue(m_services->models().faux()->textResponse("exported answer"));
+    SessionRuntimeRequest request;
+    request.cwd = m_cwd;
+    request.agentDir = m_dir + "/agent";
+    auto manager = m_services->sessions().create(m_cwd, m_dir + "/sessions", std::nullopt, std::nullopt);
+    ASSERT_TRUE(manager.has_value());
+    request.sessionManager = std::move(*manager);
+    CodingSessionHandle handle(std::move(request), *m_services, CodingStartupOptions{});
+    ASSERT_TRUE(handle.session().prompt("hello export", PromptOptions{}).has_value());
+    handle.session().waitForIdle();
+
+    const auto written = handle.session().exportHtml(std::nullopt, "light");
+    ASSERT_TRUE(written.has_value()) << written.error().message;
+    EXPECT_TRUE(written->starts_with(m_cwd + "/pi-session-")) << *written;
+    EXPECT_TRUE(written->ends_with(".html"));
+    std::ifstream in(*written);
+    const std::string html((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_NE(html.find("<title>Session Export</title>"), std::string::npos);
+    EXPECT_NE(html.find("--exportPageBg: #efeeee;"), std::string::npos) << "the light theme";
+    EXPECT_EQ(html.find("{{"), std::string::npos) << "every placeholder was filled";
+    const std::size_t start = html.find("<script id=\"session-data\" type=\"application/json\">") + 50;
+    const std::string encoded = html.substr(start, html.find("</script>", start) - start);
+    const auto decoded = m_services->platform().base64().decode(encoded);
+    ASSERT_TRUE(decoded.has_value());
+    const Json data = Json::parse(*decoded);
+    EXPECT_EQ(data["header"]["cwd"], m_cwd);
+    EXPECT_NE(data["entries"].dump().find("exported answer"), std::string::npos);
+    EXPECT_TRUE(data["tools"].is_array());
+    EXPECT_FALSE(data["systemPrompt"].get<std::string>().empty());
+
+    std::filesystem::create_directories(m_dir + "/out");
+    const auto elsewhere = handle.session().exportHtml(m_dir + "/out/page.html", "");
+    ASSERT_TRUE(elsewhere.has_value()) << elsewhere.error().message;
+    EXPECT_EQ(*elsewhere, m_dir + "/out/page.html");
+    EXPECT_TRUE(std::filesystem::exists(m_dir + "/out/page.html"));
+    const auto relative = handle.session().exportHtml("rel.html", "dark");
+    ASSERT_TRUE(relative.has_value());
+    EXPECT_EQ(*relative, m_cwd + "/rel.html") << "relative paths count from the session's cwd";
+    EXPECT_EQ(handle.session().exportHtml(std::nullopt, "mauve").error().code, "unknown_theme");
+}
+
+TEST_F(CodingSessionHandleTest, InMemorySessionsCannotBeExported) {
+    const auto handle = open({});
+    const auto written = handle->session().exportHtml(std::nullopt, "");
+    ASSERT_FALSE(written.has_value());
+    EXPECT_EQ(written.error().message, "Cannot export in-memory session to HTML");
+}

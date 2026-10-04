@@ -1,0 +1,32 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+# The template, the vendored libraries and the resolved theme colors of the HTML export, compiled into the binary.
+# template.* and the vendored files are copies of packages/coding-agent/src/core/export-html (the TypeScript tree is not a Bazel
+# package); export_themes.json comes from tools/ts_export_themes.mts. Keep them in step when the TypeScript export changes.
+_ASSETS = {
+    "template_html": "template.html",
+    "template_css": "template.css",
+    "template_js": "template.js",
+    "marked_js": "marked.min.js",
+    "highlight_js": "highlight.min.js",
+    "export_themes_json": "export_themes.json",
+}
+
+[
+    genrule(
+        name = "embed_" + symbol,
+        srcs = [file],
+        outs = [symbol + ".cc"],
+        cmd = "$(location //tools:embed_asset) $< $@ " + symbol,
+        tools = ["//tools:embed_asset"],
+    )
+    for symbol, file in _ASSETS.items()
+]
+
+cc_library(
+    name = "export_html_assets",
+    srcs = [symbol + ".cc" for symbol in _ASSETS],
+    hdrs = ["export_html_assets.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
