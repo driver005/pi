@@ -126,6 +126,10 @@ OAuth: HTTP servers without an `Authorization` header or `auth.provider` authent
 
 Resources: while a visible server announces the resources capability, three tools are registered next to its tools, with Codex's names so models use them unchanged: `list_mcp_resources` and `list_mcp_resource_templates` (`server`, `cursor`: one page of one server, or every page of every server with per-server `errors`) and `read_mcp_resource` (`server`, `uri`: text and images for the model, binary resources in temp files). MCP App resources (`ui://`, `profile=mcp-app`), `_meta` and icons are left out of listings. They are withdrawn when no such server remains.
 
+## Provider sign-in (`pi auth`)
+
+`pi auth list | status | login <provider> | logout <provider>` signs in to the subscription providers and stores the credential in `<agent-dir>/auth.json`, in the shape the providers' refresh keeps (the TypeScript CLI reads and refreshes the same entries). `ProviderLogin` (support) dispatches to two generic engines driven by descriptions (`ProviderLoginSpecs`, constants from `packages/ai/src/auth/oauth`): `OauthBrowserLogin` (authorization code with PKCE S256, a loopback callback server on `127.0.0.1`, or a pasted code or redirect URL when `--manual` is given or a port shared with other tools is taken; token request through `OauthTokenMapper`, the same mapping the refresh uses) and `OauthDeviceLogin` (RFC 8628 with the polling rules of `device-code.ts`: 5 s default, `slow_down` +5 s, expiry, clock-drift hint). Methods: Anthropic `browser` (default) or `copy_code`; OpenAI Codex `browser` or `device_code` (own endpoints, handled in `ProviderLogin`); Sign in with ChatGPT `browser` (dynamic client id from the callback, `id_token` and `chatgpt.tokens.use.direct` required, a random device id like the TS CLI); OpenRouter `browser` (the code is exchanged for an API key); xAI and Kimi Code `device_code`; GitHub Copilot `device_code` for github.com (the GitHub token is traded for a Copilot token through the provider's flow). Not ported: the Meta and Radius sign-ins, GitHub Enterprise domains and the Copilot model enablement after login. `--method` picks a method and `--manual` forces the paste prompt on stdin. The provider endpoints are fixed, so there is no offline end-to-end test; the engines are tested against scripted HTTP and callback servers, and `pi auth login <provider> --manual` was run against the binary for the CLI plumbing.
+
 ## Plugins
 
 Shared libraries loaded through a C ABI replace TypeScript extensions: they add tools and subscribe to hooks (`tool_call`, `tool_result`, `context`, agent events). See [cpp-plugins.md](cpp-plugins.md).
@@ -144,4 +148,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-OAuth login flows; plugin commands, UI APIs and stream-handler providers; the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); HTML export; the package manager.
+plugin commands, UI APIs and stream-handler providers; the Meta and Radius sign-ins; the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); HTML export; the package manager.

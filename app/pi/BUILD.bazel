@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_binary")
 pi_binary(
     name = "pi",
     deps = [
+        "//app/auth_command",
         "//app/coding_application",
         "//app/coding_runtime_factory",
         "//app/coding_services",

@@ -1,0 +1,30 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "provider_login",
+    deps = [
+        "//interfaces/platform/i_base64_codec",
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_crypto",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_sleeper",
+        "//interfaces/provider/i_credential_store",
+        "//interfaces/provider/i_oauth_flow",
+        "//interfaces/support/builtin_oauth_specs",
+        "//interfaces/support/oauth_browser_login",
+        "//interfaces/support/oauth_device_login",
+        "//interfaces/support/oauth_device_poller",
+        "//interfaces/support/oauth_token_mapper",
+        "//interfaces/support/provider_login_specs",
+        "//interfaces/types/login_interaction",
+    ],
+    test_deps = [
+        "//src/ai/memory_credential_store",
+        "//src/base/base64_codec",
+        "//src/base/boring_crypto",
+        "//src/testing/fake_environment",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+        "//src/testing/scripted_process_runner",
+    ],
+)

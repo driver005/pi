@@ -28,7 +28,7 @@ public:
         while (index < args.size()) {
             const std::string flag = args[index++];
             if (!flag.starts_with("-")) {
-                if (line.command != "mcp") {
+                if (line.command != "mcp" && line.command != "auth") {
                     return std::unexpected(Error{"usage", "Unexpected argument \"" + flag + "\""});
                 }
                 line.arguments.push_back(flag);
@@ -48,11 +48,16 @@ public:
         }
         if (line.help) {
             line.command.clear();
-        } else if (line.command != "rpc" && line.command != "serve" && line.command != "mcp") {
+        } else if (line.command != "rpc" && line.command != "serve" && line.command != "mcp" && line.command != "auth") {
             return std::unexpected(Error{"usage", "Unknown command \"" + line.command + "\""});
         }
         if (line.command == "mcp") {
             if (auto valid = validateMcp(line.arguments); !valid) {
+                return std::unexpected(valid.error());
+            }
+        }
+        if (line.command == "auth") {
+            if (auto valid = validateAuth(line.arguments); !valid) {
                 return std::unexpected(valid.error());
             }
         }
@@ -63,11 +68,12 @@ public:
     }
 
     std::string usage() const {
-        return "Usage: pi rpc|serve|mcp [options]\n"
+        return "Usage: pi rpc|serve|mcp|auth [options]\n"
                "\n"
                "rpc    Serves JSONL commands on stdin and writes responses and events to stdout.\n"
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
                "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
+               "auth   pi auth list | status | login <provider> | logout <provider>: sign in to subscription providers.\n"
                "\n"
                "Options:\n"
                "  --cwd <dir>                   Working directory (default: current directory)\n"
@@ -94,6 +100,8 @@ public:
                "  --mcp-wait <ms>               How long startup waits for MCP servers (default 5000)\n"
                "  --trust / --no-trust          Answer the project trust question\n"
                "  --faux                        Add the scripted offline provider (PI_FAUX_REPLIES)\n"
+               "  --method <id>                 auth login: sign-in method (browser, copy_code, device_code)\n"
+               "  --manual                      auth login: paste the code instead of using the local callback\n"
                "  --server-dir <dir>            serve: profile and socket directory (default: $PI_SERVER_DIR or ~/.pi/server)\n"
                "  --server-id <uuid>            serve: logical server id (default: $PI_SERVER_ID or the directory's default)\n"
                "  --session-tree                serve: keep sessions as session trees instead of durable (SQLite) sessions\n"
@@ -130,6 +138,8 @@ private:
             options.faux = true;
         } else if (flag == "--session-tree") {
             line.sessionTree = true;
+        } else if (flag == "--manual") {
+            line.loginManual = true;
         } else {
             return std::unexpected(Error{"usage", "Unknown option " + flag});
         }
@@ -166,6 +176,8 @@ private:
             line.serverDir = expandHome(value);
         } else if (flag == "--server-id") {
             line.serverId = value;
+        } else if (flag == "--method") {
+            line.loginMethod = value;
         } else if (flag == "--plugin") {
             options.startup.pluginPaths.push_back(expandHome(value));
         } else if (flag == "--mcp-wait") {
@@ -185,6 +197,18 @@ private:
             return std::unexpected(Error{"usage", "--mcp-wait expects a number of milliseconds"});
         }
         startup.mcpStartupWaitMs = milliseconds;
+        return {};
+    }
+
+    Result<void> validateAuth(const std::vector<std::string>& arguments) const {
+        const std::string usage = "Usage: pi auth list | status | login <provider> | logout <provider>";
+        if (arguments.empty() || (arguments[0] != "list" && arguments[0] != "status" && arguments[0] != "login" && arguments[0] != "logout")) {
+            return std::unexpected(Error{"usage", usage});
+        }
+        const bool takesProvider = arguments[0] == "login" || arguments[0] == "logout";
+        if (arguments.size() != (takesProvider ? 2U : 1U)) {
+            return std::unexpected(Error{"usage", usage});
+        }
         return {};
     }
 
@@ -260,5 +284,5 @@ private:
                                              "--model",         "--thinking",            "--session",
                                              "--session-dir",   "--tools",               "--system-prompt",
                                              "--append-system-prompt", "--skill",        "--prompt-template",
-                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id"};
+                                             "--mcp-wait", "--plugin", "--server-dir", "--server-id", "--method"};
 };

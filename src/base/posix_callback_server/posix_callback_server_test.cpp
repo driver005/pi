@@ -50,7 +50,7 @@ TEST_F(PosixCallbackServerTest, ReceivesTheRedirectOfTheAwaitedSignIn) {
     EXPECT_EQ((*callback)["code"], "abc+1");
     EXPECT_EQ((*callback)["iss"], "https://auth.example.com");
     EXPECT_NE(reply.find("200 OK"), std::string::npos);
-    EXPECT_NE(reply.find("Signed in to the MCP server"), std::string::npos);
+    EXPECT_NE(reply.find("Signed in"), std::string::npos);
 }
 
 TEST_F(PosixCallbackServerTest, OtherPathsAndOtherStatesAreAnsweredAndIgnored) {

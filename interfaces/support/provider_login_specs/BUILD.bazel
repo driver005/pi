@@ -1,0 +1,10 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "provider_login_specs",
+    deps = [
+        "//interfaces/types/browser_login_spec",
+        "//interfaces/types/device_login_spec",
+    ],
+    test_deps = ["//interfaces/support/builtin_oauth_specs"],
+)

@@ -140,6 +140,29 @@ TEST_F(CommandLineParserTest, RejectsMalformedMcpCommands) {
     }
 }
 
+TEST_F(CommandLineParserTest, ParsesTheAuthCommands) {
+    const auto login = parse({"auth", "login", "anthropic", "--method", "copy_code", "--manual", "--agent-dir", "/a"});
+    ASSERT_TRUE(login.has_value()) << login.error().message;
+    EXPECT_EQ(login->command, "auth");
+    EXPECT_EQ(login->arguments, (std::vector<std::string>{"login", "anthropic"}));
+    EXPECT_EQ(login->loginMethod, "copy_code");
+    EXPECT_TRUE(login->loginManual);
+    EXPECT_EQ(login->options.agentDir, "/a");
+    EXPECT_EQ(parse({"auth", "logout", "xai"})->arguments, (std::vector<std::string>{"logout", "xai"}));
+    EXPECT_EQ(parse({"auth", "status"})->arguments, std::vector<std::string>{"status"});
+    EXPECT_EQ(parse({"auth", "list"})->arguments, std::vector<std::string>{"list"});
+    EXPECT_FALSE(parse({"auth", "login", "x"})->loginManual);
+    EXPECT_TRUE(parse({"auth", "login", "x"})->loginMethod.empty());
+}
+
+TEST_F(CommandLineParserTest, RejectsMalformedAuthCommands) {
+    for (const std::vector<std::string>& args : std::vector<std::vector<std::string>>{{"auth"}, {"auth", "login"}, {"auth", "login", "a", "b"}, {"auth", "status", "x"}, {"auth", "frobnicate"}}) {
+        const auto line = parse(args);
+        ASSERT_FALSE(line.has_value());
+        EXPECT_NE(line.error().message.find("Usage: pi auth"), std::string::npos);
+    }
+}
+
 TEST_F(CommandLineParserTest, OtherCommandsTakeNoPositionalArguments) {
     const auto line = parse({"serve", "extra"});
     ASSERT_FALSE(line.has_value());

@@ -147,7 +147,7 @@ private:
             respond(client, 400, errorPage("The sign-in response has no authorization code."));
             return std::nullopt;
         }
-        respond(client, 200, page("Signed in", "Signed in to the MCP server. You may now close this page."));
+        respond(client, 200, page("Signed in", "Signed in. You may now close this page."));
         return parameters;
     }
 

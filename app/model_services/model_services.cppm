@@ -81,14 +81,26 @@ public:
         return m_faux.get();
     }
 
+    /** The credential store under the agent directory (`auth.json`). */
+    ICredentialStore& credentials() {
+        return m_credentials;
+    }
+
+    /** The OAuth flows by provider id: how stored credentials of subscription providers are refreshed. */
+    std::map<std::string, IOauthFlow*> flows() {
+        return flowMap();
+    }
+
+    /** The Kimi OAuth host override from the environment (KIMI_CODE_OAUTH_HOST or KIMI_OAUTH_HOST); empty for the default. */
+    std::string kimiHost() const {
+        std::string host = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
+        return host.empty() ? m_platform.environment().get("KIMI_OAUTH_HOST").value_or("") : host;
+    }
+
 private:
     std::vector<std::unique_ptr<OauthRefreshFlow>> buildFlows() const {
-        std::string kimiHost = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
-        if (kimiHost.empty()) {
-            kimiHost = m_platform.environment().get("KIMI_OAUTH_HOST").value_or("");
-        }
         std::vector<std::unique_ptr<OauthRefreshFlow>> flows;
-        for (auto& spec : BuiltinOauthSpecs().all(kimiHost)) {
+        for (auto& spec : BuiltinOauthSpecs().all(kimiHost())) {
             flows.push_back(std::make_unique<OauthRefreshFlow>(std::move(spec), m_platform.http(), m_platform.clock(),
                                                                m_platform.base64()));
         }

@@ -4,7 +4,9 @@ pi_module(
     name = "model_services",
     deps = [
         "//app/platform_services",
+        "//interfaces/provider/i_credential_store",
         "//interfaces/provider/i_model_runtime",
+        "//interfaces/provider/i_oauth_flow",
         "//interfaces/types/json",
         "//src/ai/anthropic_messages_provider",
         "//src/ai/azure_responses_provider",

@@ -8,6 +8,7 @@ import pi.coding_application;
 import pi.coding_runtime_factory;
 import pi.coding_services;
 import pi.durable_serve;
+import pi.auth_command;
 import pi.mcp_command;
 import pi.serve_application;
 import pi.support.command_line_parser;
@@ -64,6 +65,12 @@ int main(int argc, char** argv) {
         const CodingApplicationOptions& options = line->options;
         CodingServices services(options.agentDir, options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir, options.faux);
         McpCommand command(services, services.platform().http(), []() { return std::unique_ptr<ICallbackServer>(std::make_unique<PosixCallbackServer>()); }, std::cout, std::cerr);
+        return command.run(*line);
+    }
+    if (line->command == "auth") {
+        const CodingApplicationOptions& options = line->options;
+        CodingServices services(options.agentDir, options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir, options.faux);
+        AuthCommand command(services, services.platform().http(), services.platform().sleeper(), []() { return std::unique_ptr<ICallbackServer>(std::make_unique<PosixCallbackServer>()); }, std::cin, std::cout, std::cerr);
         return command.run(*line);
     }
     CodingApplication application(line->options);
