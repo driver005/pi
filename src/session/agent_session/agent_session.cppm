@@ -19,6 +19,7 @@ import pi.support.custom_message_queue;
 import pi.support.model_controller;
 import pi.support.pending_input_tracker;
 import pi.support.plugin_hook_dispatcher;
+import pi.support.plugin_session_events;
 import pi.support.post_run_handler;
 import pi.support.prompt_loadout;
 import pi.support.prompt_template_expander;
@@ -31,12 +32,16 @@ import pi.support.session_message_persister;
 import pi.support.session_stats_calculator;
 import pi.support.skill_command_expander;
 import pi.support.summary_generator;
+import pi.support.transcript_normalizer;
 
 /**
  * IAgentSession over an Agent and a session tree: persists every finished message, keeps the
  * agent's context equal to the tree's projection, retries and compacts as needed and exposes the
- * model, tool, bash and tree operations. The behavior of the TypeScript AgentSession without its
- * extension hooks, which plugins will attach later.
+ * model, tool, bash and tree operations. The behavior of the TypeScript AgentSession; plugins attach
+ * through the hook bus: the agent loop's hook points (PluginHookDispatcher) and the events around the
+ * session (PluginSessionEvents: `input`, `before_agent_start`, `before_provider_request`, compaction and
+ * tree events). Not ported: extension commands and the mutable `systemPromptOptions` of
+ * `before_agent_start` (plugins see the rendered prompt and may replace it for the turn).
  */
 export class AgentSession : public IAgentSession {
 public:
@@ -48,6 +53,7 @@ public:
           m_skills(m_config.files) {
         if (m_config.hooks != nullptr) {
             m_hooks = std::make_unique<PluginHookDispatcher>(*m_config.hooks);
+            m_events = std::make_unique<PluginSessionEvents>(*m_config.hooks);
         }
         createAgent();
         createCollaborators();
@@ -181,9 +187,23 @@ public:
             return std::unexpected(Error{"compacting",
                                          "Cannot submit a prompt while compaction is in progress. Wait for compaction to finish and retry."});
         }
-        const std::string expanded = options.expandPromptTemplates ? expand(text) : text;
+        InputOutcome input;
+        input.text = text;
+        input.images = options.images;
+        if (m_events) {
+            input = m_events->input(text, options.images, options.source, streamingName(options.streamingBehavior));
+            if (input.handled) {
+                if (options.onDisposition) {
+                    options.onDisposition(PromptDisposition::Handled);
+                }
+                return PromptDisposition::Handled;
+            }
+        }
+        PromptOptions effective = options;
+        effective.images = input.images;
+        const std::string expanded = options.expandPromptTemplates ? expand(input.text) : input.text;
         if (isStreaming()) {
-            auto queued = queueWhileStreaming(expanded, options);
+            auto queued = queueWhileStreaming(expanded, effective);
             if (queued && options.onDisposition) {
                 options.onDisposition(PromptDisposition::Queued);
             }
@@ -202,7 +222,7 @@ public:
                 break;
             }
         }
-        std::vector<AgentMessage> messages = buildPromptMessages(expanded, options.images);
+        std::vector<AgentMessage> messages = buildPromptMessages(expanded, effective.images);
         if (options.onDisposition) {
             options.onDisposition(PromptDisposition::Started);
         }
@@ -480,11 +500,11 @@ private:
             options.loopConfig.afterToolCall = [this](const ToolCallContext& context, const std::shared_ptr<AbortSignal>&) {
                 return m_hooks->afterToolCall(context);
             };
-            options.loopConfig.transformContext = [this](const std::vector<AgentMessage>& messages,
-                                                         const std::shared_ptr<AbortSignal>&) {
-                return m_hooks->transformContext(messages);
-            };
         }
+        options.loopConfig.transformContext = [this](const std::vector<AgentMessage>& messages,
+                                                     const std::shared_ptr<AbortSignal>&) {
+            return projectForcedPrompt(m_hooks ? m_hooks->transformContext(messages) : messages);
+        };
         m_agent = m_config.agents.create(std::move(options));
     }
 
@@ -508,10 +528,49 @@ private:
         m_loadout = std::make_unique<PromptLoadout>(*m_agent, session, m_config.tools, m_config.resources,
                                                     m_config.clock, m_config.cwd);
         m_loadout->setToolFilter(m_config.allowedTools, m_config.excludedTools);
+        m_compaction->setEvents(m_events.get());
+        m_navigator->setEvents(m_events.get());
         m_pending = std::make_unique<PendingInputTracker>(m_hub);
         m_custom = std::make_unique<CustomMessageQueue>(session, *m_refresher, m_hub);
         m_persister = std::make_unique<SessionMessagePersister>(session);
         m_postRun = std::make_unique<PostRunHandler>(*m_agent, session, settings, *m_retry, *m_compaction, *m_omitter, m_hub);
+    }
+
+    /**
+     * While a `before_agent_start` plugin replaced the system prompt for the turn, the request carries that text as its
+     * only system message; the tool declarations of the transcript's current system message stay.
+     */
+    std::vector<AgentMessage> projectForcedPrompt(std::vector<AgentMessage> messages) {
+        std::optional<std::string> forced;
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            forced = m_forcedPrompt;
+        }
+        if (!forced) {
+            return messages;
+        }
+        std::vector<Message> system;
+        std::vector<AgentMessage> rest;
+        for (auto& message : messages) {
+            if (const auto* entry = std::get_if<SystemMessage>(&message)) {
+                system.emplace_back(*entry);
+            } else {
+                rest.push_back(std::move(message));
+            }
+        }
+        const auto current = m_transcript.currentSystemMessage(system);
+        SystemMessage head;
+        head.content = *forced;
+        if (current) {
+            head.toolsAdded = current->toolsAdded;
+            head.timestamp = current->timestamp;
+        } else {
+            head.timestamp = m_config.clock.nowMs();
+        }
+        std::vector<AgentMessage> out;
+        out.emplace_back(std::move(head));
+        out.insert(out.end(), std::make_move_iterator(rest.begin()), std::make_move_iterator(rest.end()));
+        return out;
     }
 
     StreamOptions streamOptions() const {
@@ -525,6 +584,9 @@ private:
         options.websocketConnectTimeoutMs = view.websocketConnectTimeoutMs();
         options.transport = view.transport();
         options.thinkingBudgets = view.thinkingBudgets();
+        if (m_events) {
+            options.onPayload = [this](const Json& payload, const Model&) { return m_events->beforeProviderRequest(payload); };
+        }
         return options;
     }
 
@@ -638,6 +700,13 @@ private:
     }
 
     // Prompt flow
+    std::string streamingName(StreamingBehavior behavior) const {
+        if (!isStreaming() || behavior == StreamingBehavior::None) {
+            return "";
+        }
+        return behavior == StreamingBehavior::Steer ? "steer" : "followUp";
+    }
+
     Result<PromptDisposition> queueWhileStreaming(const std::string& text, const PromptOptions& options) {
         if (options.streamingBehavior == StreamingBehavior::None) {
             return std::unexpected(Error{"agent_busy",
@@ -658,10 +727,22 @@ private:
     }
 
     std::vector<AgentMessage> buildPromptMessages(const std::string& text, const std::vector<ImageContent>& images) {
+        AgentStartOutcome start;
+        if (m_events) {
+            start = m_events->beforeAgentStart(text, images, m_loadout->systemPromptText());
+        }
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_forcedPrompt = start.systemPrompt;
+        }
         std::vector<AgentMessage> messages;
         messages.emplace_back(userMessage(text, images));
         for (auto& queued : m_custom->takeNextTurn()) {
             messages.emplace_back(std::move(queued));
+        }
+        for (const Json& added : start.messages) {
+            messages.emplace_back(customMessage(added["customType"].get<std::string>(), added["content"],
+                                                added["display"].get<bool>(), added["details"]));
         }
         BuildSystemPromptOptions options = m_loadout->baseOptions();
         options.selectedTools = m_loadout->activeToolNames();
@@ -694,6 +775,10 @@ private:
         }
         m_bash->flushPending();
         m_custom->flush();
+        {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_forcedPrompt.reset();
+        }
         emitSettled();
         return outcome;
     }
@@ -779,6 +864,8 @@ private:
     SessionEventHub m_hub;
     SessionEventCodec m_eventCodec;
     std::unique_ptr<PluginHookDispatcher> m_hooks;
+    std::unique_ptr<PluginSessionEvents> m_events;
+    TranscriptNormalizer m_transcript;
     SummaryGenerator m_generator;
     Compactor m_compactor;
     BranchSummarizer m_summarizer;
@@ -808,6 +895,7 @@ private:
     std::condition_variable m_idle;
     std::optional<AssistantMessage> m_lastAssistant;
     std::vector<ToolResultMessage> m_lastToolResults;
+    std::optional<std::string> m_forcedPrompt;
 };
 
 // ---------------------------------------------------------------------------

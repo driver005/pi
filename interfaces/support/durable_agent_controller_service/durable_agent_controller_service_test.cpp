@@ -2,6 +2,7 @@
 
 import std;
 import pi.support.durable_agent_controller_service;
+import pi.support.hook_bus;
 import pi.support.wait_gate;
 import pi.testing.durable_harness_fixture;
 
@@ -114,4 +115,98 @@ TEST_F(DurableAgentControllerServiceTest, InvalidRequestsAndUnknownPromptsAreErr
     ASSERT_FALSE(unknown.has_value());
     EXPECT_EQ(unknown.error().code, "operation_not_found");
     EXPECT_FALSE(m_methods.at("waitForPrompt")({Json("zero")}, ServiceContext{}).has_value());
+}
+
+class DurableAgentControllerPluginTest : public ::testing::Test {
+protected:
+    DurableAgentControllerPluginTest() {
+        EXPECT_TRUE(m_fixture.open().has_value());
+        m_service = std::make_unique<DurableAgentControllerService>(m_fixture.harness(), m_fixture.root(), m_bus);
+        m_methods = m_service->methods();
+    }
+
+    Json call(const std::string& method, const Json& argument) {
+        auto result = m_methods.at(method)({argument}, ServiceContext{std::make_shared<AbortSignal>()});
+        EXPECT_TRUE(result.has_value()) << (result ? "" : result.error().message);
+        return result && *result ? **result : Json(nullptr);
+    }
+
+    std::uint64_t on(const std::string& event, const std::function<Json(const Json&)>& handler) {
+        return m_bus->subscribe(event, [handler](const std::string&, const Json& payload) -> Result<Json> { return handler(payload); });
+    }
+
+    std::string firstUserText() {
+        auto context = m_fixture.root()->context();
+        EXPECT_TRUE(context.has_value());
+        const Json content = context->at("messages")[0].at("content");
+        if (content.is_string()) {
+            return content.get<std::string>();
+        }
+        std::string text;
+        for (const Json& block : content) {
+            if (block.value("type", std::string()) == "text") {
+                text += block.value("text", std::string()) + "|";
+            }
+        }
+        return text;
+    }
+
+    std::shared_ptr<HookBus> m_bus = std::make_shared<HookBus>();
+    DurableHarnessFixture m_fixture;
+    std::unique_ptr<DurableAgentControllerService> m_service;
+    std::map<std::string, IRemoteService::Method> m_methods;
+};
+
+TEST_F(DurableAgentControllerPluginTest, AHandledInputIsRejectedAndNothingRuns) {
+    Json seen;
+    on("input", [&seen](const Json& payload) {
+        seen = payload;
+        return Json{{"action", "handled"}};
+    });
+    const Json response = call("prompt", Json{{"message", "swallow"}, {"images", nullptr}});
+    EXPECT_FALSE(response.at("accepted").get<bool>());
+    EXPECT_EQ(response.at("error").at("code"), "input_handled");
+    EXPECT_EQ(seen["text"], "swallow");
+    EXPECT_EQ(seen["source"], "rpc");
+    EXPECT_FALSE(seen.contains("streamingBehavior"));
+    EXPECT_EQ(m_fixture.faux().callCount(), 0);
+}
+
+TEST_F(DurableAgentControllerPluginTest, TransformedInputReplacesTheMessage) {
+    on("input", [](const Json&) { return Json{{"action", "transform"}, {"text", "rewritten"}}; });
+    m_fixture.faux().enqueue(m_fixture.faux().textResponse("ok"));
+    const Json response = call("prompt", Json{{"message", "original"}, {"images", nullptr}});
+    ASSERT_TRUE(response.at("accepted").get<bool>());
+    EXPECT_EQ(call("waitForPrompt", response.at("operationId")).at("status"), "done");
+    EXPECT_EQ(firstUserText(), "rewritten");
+}
+
+TEST_F(DurableAgentControllerPluginTest, StartedPromptsCarryTheMessagesPluginsAdd) {
+    on("before_agent_start", [](const Json& payload) {
+        EXPECT_EQ(payload["prompt"], "go");
+        return Json{{"message", Json{{"customType", "note"}, {"content", "remember this"}}}};
+    });
+    m_fixture.faux().enqueue(m_fixture.faux().textResponse("ok"));
+    const Json response = call("prompt", Json{{"message", "go"}, {"images", nullptr}});
+    ASSERT_TRUE(response.at("accepted").get<bool>());
+    EXPECT_EQ(call("waitForPrompt", response.at("operationId")).at("status"), "done");
+    EXPECT_EQ(firstUserText(), "go|remember this|");
+}
+
+TEST_F(DurableAgentControllerPluginTest, SteeringSeesItsStreamingBehaviorAndSkipsThePromptEvent) {
+    Json seen;
+    bool started = false;
+    on("input", [&seen](const Json& payload) {
+        seen = payload;
+        return Json();
+    });
+    on("before_agent_start", [&started](const Json&) {
+        started = true;
+        return Json();
+    });
+    m_fixture.faux().enqueue(m_fixture.faux().textResponse("ok"));
+    const Json steer = call("steer", Json{{"message", "nudge"}, {"images", nullptr}});
+    ASSERT_TRUE(steer.at("accepted").get<bool>());
+    EXPECT_EQ(seen["streamingBehavior"], "steer");
+    EXPECT_FALSE(started);
 }

@@ -16,6 +16,7 @@ pi_module(
         "//interfaces/support/model_controller",
         "//interfaces/support/pending_input_tracker",
         "//interfaces/support/plugin_hook_dispatcher",
+        "//interfaces/support/plugin_session_events",
         "//interfaces/support/post_run_handler",
         "//interfaces/support/prompt_loadout",
         "//interfaces/support/prompt_template_expander",
@@ -28,6 +29,7 @@ pi_module(
         "//interfaces/support/session_stats_calculator",
         "//interfaces/support/skill_command_expander",
         "//interfaces/support/summary_generator",
+        "//interfaces/support/transcript_normalizer",
         "//interfaces/types/agent_session_config",
     ],
     test_deps = [

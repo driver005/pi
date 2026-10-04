@@ -4,9 +4,12 @@ pi_support(
     name = "durable_agent_controller_service",
     deps = [
         "//interfaces/chord/i_remote_service",
+        "//interfaces/plugin/i_hook_bus",
         "//interfaces/support/harness",
+        "//interfaces/support/plugin_session_events",
     ],
     test_deps = [
+        "//interfaces/support/hook_bus",
         "//interfaces/support/wait_gate",
         "//src/testing/durable_harness_fixture",
     ],

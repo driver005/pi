@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "before_compact_outcome",
+    deps = ["//interfaces/types/compaction_result"],
+)

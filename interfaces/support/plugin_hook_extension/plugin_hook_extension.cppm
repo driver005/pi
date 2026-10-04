@@ -12,7 +12,11 @@ export import pi.types.extension;
  * {toolCallId, toolName, input, content, details, isError} with `{content?, details?, isError?}` results replacing parts of
  * the result; `beforeRequest` -> `context` {messages} with `{messages}` results replacing the request's messages;
  * `afterResponse` -> `message_end` {type, message} and `afterTools` -> `turn_end` {type, message, toolResults}, which are
- * observations. A handler's `terminate` flag is not used: the durable tool task has no equivalent. Without subscribers every
+ * observations; `beforeProviderRequest` -> `before_provider_request` {payload} with any non-null result replacing the
+ * payload; `beforeCompact` -> `session_before_compact` {preparation: {firstKeptEntryId, messagesToSummarize}, branchEntries
+ * (the entries before the cut), customInstructions?, reason, willRetry: false}, where `{cancel}` declines the compaction and
+ * `{compaction: {summary}}` places that summary instead of asking the model (the durable task keeps the cut it chose, so
+ * `firstKeptEntryId` of a plugin's result is ignored). A handler's `terminate` flag is not used: the durable tool task has no equivalent. Without subscribers every
  * hook is a no-op, so the extension is installed unconditionally. The bus is held by shared ownership, so a registry can
  * outlive the plugins (their handlers are unsubscribed when they shut down).
  */
@@ -32,11 +36,16 @@ public:
         HookRegistration generation;
         generation.task = "pi.generation";
         generation.handlers["beforeRequest"] = [self = *this](const Json& payload, IHookApi&) { return self.beforeRequest(payload); };
+        generation.handlers["beforeProviderRequest"] = [self = *this](const Json& payload, IHookApi&) { return self.beforeProviderRequest(payload); };
         generation.handlers["afterResponse"] = [self = *this](const Json& message, IHookApi&) { return self.observe("message_end", Json::object({{"message", message}})); };
         generation.handlers["afterTools"] = [self = *this](const Json& payload, IHookApi&) {
             return self.observe("turn_end", Json::object({{"message", payload.value("assistant", Json())}, {"toolResults", payload.value("results", Json::array())}}));
         };
         extension.hooks.push_back(std::move(generation));
+        HookRegistration compaction;
+        compaction.task = "pi.compaction";
+        compaction.handlers["beforeCompact"] = [self = *this](const Json& compaction, IHookApi&) { return self.beforeCompact(compaction); };
+        extension.hooks.push_back(std::move(compaction));
         return extension;
     }
 
@@ -115,6 +124,55 @@ private:
             return std::optional<Json>();
         }
         return std::optional<Json>(Json::object({{"messages", outcome.payload.at("messages")}}));
+    }
+
+    Result<std::optional<Json>> beforeProviderRequest(const Json& payload) const {
+        if (!m_bus->hasHandlers("before_provider_request")) {
+            return std::optional<Json>();
+        }
+        bool replaced = false;
+        const HookOutcome outcome = m_bus->emit("before_provider_request", payload, [&replaced](Json& current, const Json& answer) {
+            if (!answer.is_null()) {
+                current["payload"] = answer;
+                replaced = true;
+            }
+        });
+        if (!replaced) {
+            return std::optional<Json>();
+        }
+        return std::optional<Json>(Json::object({{"payload", outcome.payload.at("payload")}}));
+    }
+
+    Result<std::optional<Json>> beforeCompact(const Json& compaction) const {
+        if (!m_bus->hasHandlers("session_before_compact")) {
+            return std::optional<Json>();
+        }
+        Json event = Json::object({{"preparation", Json::object({{"firstKeptEntryId", compaction.value("firstKept", Json())},
+                                                                  {"messagesToSummarize", compaction.value("messages", Json::array())}})},
+                                   {"branchEntries", compaction.value("entries", Json::array())},
+                                   {"reason", compaction.value("reason", Json("manual"))},
+                                   {"willRetry", false}});
+        if (compaction.contains("instructions")) {
+            event["customInstructions"] = compaction["instructions"];
+        }
+        const HookOutcome outcome = m_bus->emit("session_before_compact", event);
+        std::optional<std::string> summary;
+        for (const Json& answer : outcome.results) {
+            if (!answer.is_object()) {
+                continue;
+            }
+            if (answer.value("cancel", false)) {
+                return std::optional<Json>(Json::object({{"decline", true}}));
+            }
+            const Json supplied = answer.value("compaction", Json());
+            if (supplied.is_object() && supplied.contains("summary") && supplied["summary"].is_string()) {
+                summary = supplied["summary"].get<std::string>();
+            }
+        }
+        if (summary) {
+            return std::optional<Json>(Json::object({{"summary", *summary}}));
+        }
+        return std::optional<Json>();
     }
 
     Result<std::optional<Json>> observe(const std::string& type, Json event) const {

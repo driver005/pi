@@ -13,6 +13,7 @@ export import pi.support.agent_token_estimator;
 export import pi.support.auth_guidance;
 export import pi.support.compaction_preparer;
 export import pi.support.compactor;
+export import pi.support.plugin_session_events;
 export import pi.support.session_context_refresher;
 export import pi.support.summarization_retry_reporter;
 export import pi.types.agent_loop_config;
@@ -23,7 +24,8 @@ export import pi.types.summarization_options;
  * Runs compaction for a session: manual (on request) and automatic (threshold or overflow). Each
  * run prepares what to summarize, asks the model for the summary, appends the compaction entry,
  * reloads the agent's context and reports start/end events. Port of the compaction section of
- * AgentSession.
+ * AgentSession. With plugin events attached, plugins may cancel a compaction or supply its content
+ * (`session_before_compact`) and observe the outcome (`session_compact`, `session_compact_failed`).
  */
 export class CompactionController {
 public:
@@ -37,15 +39,23 @@ public:
           m_streamFn(std::move(streamFn)),
           m_reporter(sink) {}
 
+    /** Plugin events to fire; nullptr (the default) fires none. The pointee must outlive the controller. */
+    void setEvents(PluginSessionEvents* events) {
+        m_events = events;
+    }
+
     /** The caller has aborted any active run. Error carries "Compaction failed: ..." text. */
     Result<CompactionResult> compactManual(const std::optional<std::string>& customInstructions) {
         const auto signal = begin(m_manual);
         emitStart("manual");
+        bool fromExtension = false;
         const auto fail = [&](const Error& error) -> Result<CompactionResult> {
             const bool aborted = signal->aborted() || error.code == "aborted";
             finish(m_manual, signal);
-            emitEnd("manual", std::nullopt, aborted, false,
-                    aborted ? std::nullopt : std::optional<std::string>("Compaction failed: " + error.message));
+            const std::optional<std::string> message =
+                aborted ? std::nullopt : std::optional<std::string>("Compaction failed: " + error.message);
+            emitEnd("manual", std::nullopt, aborted, false, message);
+            reportFailure("manual", message, aborted, false, fromExtension);
             return std::unexpected(error);
         };
         if (m_agent.model().id.empty()) {
@@ -55,7 +65,7 @@ public:
         if (!preparation) {
             return fail(Error{"nothing_to_compact", noPreparationReason()});
         }
-        auto result = perform(*preparation, customInstructions, signal, "manual");
+        auto result = perform(*preparation, customInstructions, signal, "manual", false, fromExtension);
         if (!result) {
             return fail(result.error());
         }
@@ -78,14 +88,17 @@ public:
         }
         const auto signal = begin(m_auto);
         emitStart(reason);
-        auto result = perform(*preparation, std::nullopt, signal, reason);
+        bool fromExtension = false;
+        auto result = perform(*preparation, std::nullopt, signal, reason, willRetry, fromExtension);
         finish(m_auto, signal);
         if (!result) {
             const bool aborted = signal->aborted() || result.error().code == "aborted";
             const std::string prefix =
                 reason == "overflow" ? "Context overflow recovery failed: " : "Auto-compaction failed: ";
-            emitEnd(reason, std::nullopt, aborted, false,
-                    aborted ? std::nullopt : std::optional<std::string>(prefix + result.error().message));
+            const std::optional<std::string> message =
+                aborted ? std::nullopt : std::optional<std::string>(prefix + result.error().message);
+            emitEnd(reason, std::nullopt, aborted, false, message);
+            reportFailure(reason, message, aborted, willRetry, fromExtension);
             return false;
         }
         emitEnd(reason, result.value(), false, willRetry, std::nullopt);
@@ -131,8 +144,18 @@ private:
         return options;
     }
 
-    Result<CompactionResult> perform(const CompactionPreparation& preparation, const std::optional<std::string>& customInstructions, const std::shared_ptr<AbortSignal>& signal, const std::string& reason) {
-        auto compacted = m_compactor.compact(preparation, customInstructions, optionsFor(signal, reason));
+    Result<CompactionResult> perform(const CompactionPreparation& preparation, const std::optional<std::string>& customInstructions, const std::shared_ptr<AbortSignal>& signal, const std::string& reason, bool willRetry, bool& fromExtension) {
+        std::optional<CompactionResult> supplied;
+        if (m_events != nullptr) {
+            BeforeCompactOutcome decision = m_events->beforeCompact(preparation, m_session.branchPath(), customInstructions, reason, willRetry);
+            if (decision.cancel) {
+                return std::unexpected(Error{"aborted", "Compaction cancelled"});
+            }
+            supplied = std::move(decision.compaction);
+        }
+        fromExtension = supplied.has_value();
+        auto compacted = supplied ? Result<CompactionResult>(std::move(*supplied))
+                                  : m_compactor.compact(preparation, customInstructions, optionsFor(signal, reason));
         if (!compacted) {
             const bool aborted = compacted.error().code == "aborted";
             return std::unexpected(aborted ? Error{"aborted", "Compaction cancelled"} : compacted.error());
@@ -141,7 +164,8 @@ private:
             return std::unexpected(Error{"aborted", "Compaction cancelled"});
         }
         const auto appended = m_session.appendCompaction(compacted->summary, compacted->firstKeptEntryId,
-                                                         compacted->tokensBefore, compacted->details, false,
+                                                         compacted->tokensBefore, compacted->details,
+                                                         fromExtension ? std::optional<bool>(true) : std::optional<bool>(false),
                                                          compacted->usage);
         if (!appended) {
             return std::unexpected(appended.error());
@@ -152,7 +176,18 @@ private:
             after += m_estimator.messageTokens(message);
         }
         compacted->estimatedTokensAfter = after;
+        if (m_events != nullptr) {
+            if (const auto saved = m_session.entry(*appended)) {
+                m_events->compacted(*saved, fromExtension, reason, willRetry);
+            }
+        }
         return compacted;
+    }
+
+    void reportFailure(const std::string& reason, const std::optional<std::string>& message, bool aborted, bool willRetry, bool fromExtension) {
+        if (m_events != nullptr) {
+            m_events->compactFailed(reason, message, aborted, willRetry, fromExtension);
+        }
     }
 
     std::optional<CompactionPreparation> prepare() const {
@@ -209,6 +244,7 @@ private:
     AgentTokenEstimator m_estimator;
     SummarizationRetryReporter m_reporter;
     AuthGuidance m_guidance;
+    PluginSessionEvents* m_events = nullptr;
 
     mutable std::mutex m_mutex;
     std::shared_ptr<AbortSignal> m_manual;

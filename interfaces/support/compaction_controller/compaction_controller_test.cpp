@@ -3,6 +3,7 @@
 
 import std;
 import pi.support.compaction_controller;
+import pi.support.hook_bus;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;
 import pi.testing.session_harness;
@@ -35,6 +36,12 @@ protected:
         m_refresher.refresh();
     }
 
+    void on(const std::string& event, const std::function<Json(const Json&)>& handler) {
+        m_bus.subscribe(event, [handler](const std::string&, const Json& payload) -> Result<Json> { return handler(payload); });
+    }
+
+    HookBus m_bus;
+    PluginSessionEvents m_events{m_bus};
     SessionHarness m_harness;
     std::unique_ptr<IAgent> m_agent;
     FakeSettingsManager m_settings;
@@ -159,4 +166,84 @@ TEST_F(CompactionControllerTest, AutoFailureTextDependsOnReason) {
     EXPECT_FALSE(m_controller.runAuto("threshold", false));
     EXPECT_EQ(m_sink.eventsOf(SessionEventType::CompactionEnd).back().errorMessage,
               "Auto-compaction failed: Summarization failed: 400 nope");
+}
+
+TEST_F(CompactionControllerTest, APluginCanCancelACompaction) {
+    seedTurns(4);
+    m_controller.setEvents(&m_events);
+    Json failed;
+    on("session_before_compact", [](const Json&) { return Json{{"cancel", true}}; });
+    on("session_compact_failed", [&failed](const Json& payload) {
+        failed = payload;
+        return Json();
+    });
+    const std::size_t before = m_harness.session().entryCount();
+    const auto result = m_controller.compactManual(std::nullopt);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().message, "Compaction cancelled");
+    EXPECT_EQ(m_harness.session().entryCount(), before);
+    EXPECT_EQ(failed["aborted"], true);
+    EXPECT_EQ(failed["reason"], "manual");
+    const auto ends = m_sink.eventsOf(SessionEventType::CompactionEnd);
+    ASSERT_EQ(ends.size(), 1U);
+    EXPECT_TRUE(ends[0].aborted);
+}
+
+TEST_F(CompactionControllerTest, APluginCanSupplyTheCompactionAndSeesTheSavedEntry) {
+    seedTurns(4);
+    m_controller.setEvents(&m_events);
+    std::string firstKept;
+    Json seenBefore;
+    Json seenAfter;
+    on("session_before_compact", [&](const Json& payload) {
+        seenBefore = payload;
+        firstKept = payload["preparation"]["firstKeptEntryId"].get<std::string>();
+        return Json{{"compaction", Json{{"summary", "plugin summary"}, {"firstKeptEntryId", firstKept}, {"tokensBefore", 4242}}}};
+    });
+    on("session_compact", [&seenAfter](const Json& payload) {
+        seenAfter = payload;
+        return Json();
+    });
+    const auto result = m_controller.compactManual(std::string("focus"));
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    EXPECT_EQ(result->summary, "plugin summary");
+    EXPECT_EQ(result->tokensBefore, 4242);
+    EXPECT_EQ(seenBefore["customInstructions"], "focus");
+    EXPECT_EQ(seenBefore["reason"], "manual");
+    EXPECT_EQ(seenAfter["fromExtension"], true);
+    EXPECT_EQ(seenAfter["compactionEntry"]["summary"], "plugin summary");
+    EXPECT_EQ(seenAfter["compactionEntry"]["fromHook"], true);
+    EXPECT_EQ(m_harness.session().branchPath().back().type, "compaction");
+}
+
+TEST_F(CompactionControllerTest, PluginsObserveAModelCompaction) {
+    seedTurns(4);
+    m_controller.setEvents(&m_events);
+    Json seenAfter;
+    on("session_compact", [&seenAfter](const Json& payload) {
+        seenAfter = payload;
+        return Json();
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("## Goal\nsummary"));
+    ASSERT_TRUE(m_controller.compactManual(std::nullopt).has_value());
+    EXPECT_EQ(seenAfter["fromExtension"], false);
+    EXPECT_EQ(seenAfter["reason"], "manual");
+}
+
+TEST_F(CompactionControllerTest, ModelFailuresAreReportedToPlugins) {
+    seedTurns(4);
+    m_controller.setEvents(&m_events);
+    Json failed;
+    on("session_compact_failed", [&failed](const Json& payload) {
+        failed = payload;
+        return Json();
+    });
+    AssistantMessage error = m_harness.provider().textResponse("x");
+    error.stopReason = StopReason::Error;
+    error.errorMessage = "400 bad request";
+    m_harness.provider().enqueue(error);
+    ASSERT_FALSE(m_controller.compactManual(std::nullopt).has_value());
+    EXPECT_EQ(failed["aborted"], false);
+    EXPECT_EQ(failed["fromExtension"], false);
+    EXPECT_EQ(failed["errorMessage"], "Compaction failed: Summarization failed: 400 bad request");
 }

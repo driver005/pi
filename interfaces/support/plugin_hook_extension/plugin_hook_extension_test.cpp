@@ -120,6 +120,40 @@ TEST_F(PluginHookExtensionTest, ResponsesAndToolRoundsAreObservedAsMessageAndTur
     EXPECT_EQ(seen, (std::vector<std::string>{"message_end:assistant", "turn_end:1"}));
 }
 
+TEST_F(PluginHookExtensionTest, ProviderPayloadsAreReplacedByHandlers) {
+    EXPECT_FALSE(hook("pi.generation", "beforeProviderRequest", Json::object({{"payload", Json::object()}})).has_value());
+    on("before_provider_request", [](const Json& event) {
+        Json payload = event.at("payload");
+        payload["temperature"] = 0;
+        return payload;
+    });
+    const auto decision = hook("pi.generation", "beforeProviderRequest", Json::object({{"payload", Json::object({{"model", "m"}})}}));
+    ASSERT_TRUE(decision.has_value());
+    EXPECT_EQ(decision->at("payload").at("model"), "m");
+    EXPECT_EQ(decision->at("payload").at("temperature"), 0);
+}
+
+TEST_F(PluginHookExtensionTest, CompactionsCanBeDeclinedOrSummarisedByAPlugin) {
+    Json seen;
+    const Json compaction = Json::parse(R"({"reason":"threshold","entries":[{"id":1}],"messages":[{"role":"user"}],"firstKept":7,"instructions":"focus"})");
+    EXPECT_FALSE(hook("pi.compaction", "beforeCompact", compaction).has_value());
+    on("session_before_compact", [&seen](const Json& event) {
+        seen = event;
+        return Json::object({{"compaction", Json::object({{"summary", "from plugin"}, {"firstKeptEntryId", "ignored"}})}});
+    });
+    const auto summarised = hook("pi.compaction", "beforeCompact", compaction);
+    ASSERT_TRUE(summarised.has_value());
+    EXPECT_EQ(*summarised, Json::object({{"summary", "from plugin"}}));
+    EXPECT_EQ(seen.at("reason"), "threshold");
+    EXPECT_EQ(seen.at("customInstructions"), "focus");
+    EXPECT_EQ(seen.at("preparation").at("firstKeptEntryId"), 7);
+    EXPECT_EQ(seen.at("preparation").at("messagesToSummarize").size(), 1u);
+    EXPECT_EQ(seen.at("branchEntries").size(), 1u);
+    EXPECT_EQ(seen.at("willRetry"), false);
+    on("session_before_compact", [](const Json&) { return Json::object({{"cancel", true}}); });
+    EXPECT_EQ(hook("pi.compaction", "beforeCompact", compaction), std::optional<Json>(Json::object({{"decline", true}})));
+}
+
 class PluginHooksInARunTest : public testing::Test {
 protected:
     PluginHooksInARunTest()
@@ -189,4 +223,28 @@ TEST_F(PluginHooksInARunTest, ObserversSeeTheRunsMessagesAndTurns) {
     const std::lock_guard<std::mutex> lock(mutex);
     EXPECT_EQ(std::count(seen.begin(), seen.end(), "message_end"), 2);
     EXPECT_EQ(std::count(seen.begin(), seen.end(), "turn_end"), 1);
+}
+
+TEST_F(PluginHooksInARunTest, ProviderRequestPayloadsPassThroughThePlugins) {
+    m_bus->subscribe("before_provider_request", [](const std::string&, const Json& event) -> Result<Json> {
+        Json payload = event.at("payload");
+        payload["metadata"] = "tagged";
+        return payload;
+    });
+    std::mutex mutex;
+    std::vector<Json> replaced;
+    m_fixture.models().setStreamHandler([&](const Model& model, const TranscriptContext& context, const StreamOptions& options) {
+        if (options.onPayload) {
+            if (auto changed = options.onPayload(Json::object({{"model", "faux-1"}}), model)) {
+                const std::lock_guard<std::mutex> lock(mutex);
+                replaced.push_back(*changed);
+            }
+        }
+        return m_fixture.faux().stream(model, context, options);
+    });
+    run();
+    const std::lock_guard<std::mutex> lock(mutex);
+    ASSERT_EQ(replaced.size(), 2u);
+    EXPECT_EQ(replaced[0].at("metadata"), "tagged");
+    EXPECT_EQ(replaced[0].at("model"), "faux-1");
 }

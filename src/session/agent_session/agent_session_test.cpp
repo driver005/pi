@@ -408,3 +408,111 @@ TEST_F(AgentSessionTest, PluginHooksCanRewriteToolResultsAndArguments) {
     }
     EXPECT_TRUE(rewritten);
 }
+
+TEST_F(AgentSessionTest, AnInputPluginCanSwallowOrRewriteThePrompt) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    Json seen;
+    const auto id = bus.subscribe("input", [&seen](const std::string&, const Json& payload) -> Result<Json> {
+        seen = payload;
+        return Json{{"action", "handled"}};
+    });
+    PromptOptions options;
+    std::vector<PromptDisposition> dispositions;
+    options.onDisposition = [&](PromptDisposition disposition) { dispositions.push_back(disposition); };
+    const auto handled = m_session->prompt("swallow me", options);
+    ASSERT_TRUE(handled.has_value());
+    EXPECT_EQ(*handled, PromptDisposition::Handled);
+    EXPECT_EQ(dispositions, std::vector<PromptDisposition>{PromptDisposition::Handled});
+    EXPECT_EQ(m_harness.provider().callCount(), 0);
+    EXPECT_EQ(seen["text"], "swallow me");
+    EXPECT_EQ(seen["source"], "rpc");
+    EXPECT_FALSE(seen.contains("streamingBehavior"));
+    EXPECT_TRUE(m_session->messages().empty());
+
+    bus.unsubscribe(id);
+    bus.subscribe("input", [](const std::string&, const Json&) -> Result<Json> {
+        return Json{{"action", "transform"}, {"text", "rewritten"}};
+    });
+    m_harness.provider().enqueue(m_harness.provider().textResponse("ok"));
+    const auto started = m_session->prompt("original", {});
+    ASSERT_TRUE(started.has_value());
+    EXPECT_EQ(*started, PromptDisposition::Started);
+    const std::vector<AgentMessage> messages = m_session->messages();
+    bool found = false;
+    for (const AgentMessage& message : messages) {
+        if (const auto* user = std::get_if<UserMessage>(&message)) {
+            found = found || std::get<TextContent>(std::get<std::vector<UserContentBlock>>(user->content).at(0)).text == "rewritten";
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
+TEST_F(AgentSessionTest, BeforeAgentStartAddsMessagesAndReplacesTheSystemPromptForTheTurn) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    const auto handler = bus.subscribe("before_agent_start", [](const std::string&, const Json& payload) -> Result<Json> {
+        EXPECT_EQ(payload["prompt"], "go");
+        EXPECT_NE(payload["systemPrompt"].get<std::string>().find("coding assistant"), std::string::npos);
+        return Json{{"message", Json{{"customType", "note"}, {"content", "remember this"}}}, {"systemPrompt", "You are a pirate."}};
+    });
+    std::vector<TranscriptContext> contexts;
+    const auto capture = [this, &contexts](const TranscriptContext& context, const StreamOptions&, const Model&) {
+        contexts.push_back(context);
+        return m_harness.provider().textResponse("arr");
+    };
+    m_harness.provider().enqueue(capture);
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    ASSERT_EQ(contexts.size(), 1U);
+    const auto* system = std::get_if<SystemMessage>(&contexts[0].messages.front());
+    ASSERT_TRUE(system != nullptr);
+    ASSERT_TRUE(std::holds_alternative<std::string>(system->content));
+    EXPECT_EQ(std::get<std::string>(system->content), "You are a pirate.");
+    std::size_t systemCount = 0;
+    for (const Message& message : contexts[0].messages) {
+        systemCount += std::holds_alternative<SystemMessage>(message) ? 1U : 0U;
+    }
+    EXPECT_EQ(systemCount, 1U);
+    bool noted = false;
+    for (const AgentMessage& message : m_session->messages()) {
+        if (const auto* custom = std::get_if<CustomMessage>(&message)) {
+            noted = noted || custom->data.value("customType", "") == "note";
+        }
+    }
+    EXPECT_TRUE(noted);
+
+    // The replacement lasts one turn: without the plugin the next prompt renders the prompt again.
+    bus.unsubscribe(handler);
+    m_harness.provider().enqueue(capture);
+    ASSERT_TRUE(m_session->prompt("again", {}).has_value());
+    ASSERT_EQ(contexts.size(), 2U);
+    bool pirate = false;
+    for (const Message& message : contexts[1].messages) {
+        if (const auto* entry = std::get_if<SystemMessage>(&message)) {
+            pirate = pirate || (std::holds_alternative<std::string>(entry->content) && std::get<std::string>(entry->content) == "You are a pirate.");
+        }
+    }
+    EXPECT_FALSE(pirate);
+}
+
+TEST_F(AgentSessionTest, BeforeProviderRequestPluginsSeeAndReplaceThePayload) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    bus.subscribe("before_provider_request", [](const std::string&, const Json& event) -> Result<Json> {
+        Json payload = event["payload"];
+        payload["metadata"] = "tagged";
+        return payload;
+    });
+    std::optional<Json> replaced;
+    m_harness.provider().enqueue([&](const TranscriptContext&, const StreamOptions& options, const Model& model) {
+        replaced = options.onPayload ? options.onPayload(Json{{"model", "faux-1"}}, model) : std::nullopt;
+        return m_harness.provider().textResponse("ok");
+    });
+    ASSERT_TRUE(m_session->prompt("go", {}).has_value());
+    ASSERT_TRUE(replaced.has_value());
+    EXPECT_EQ((*replaced)["model"], "faux-1");
+    EXPECT_EQ((*replaced)["metadata"], "tagged");
+}

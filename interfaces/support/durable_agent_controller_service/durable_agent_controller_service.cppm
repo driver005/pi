@@ -2,19 +2,29 @@ export module pi.support.durable_agent_controller_service;
 
 import std;
 export import pi.chord.i_remote_service;
+export import pi.plugin.i_hook_bus;
 export import pi.support.harness;
+export import pi.support.plugin_session_events;
 
 /**
  * The `pi.agent-controller` service over a durable conversation: prompt, steer, follow-up, withdraw queued input, abort,
  * compact and wait for an answer. Every operation is one durable submission or task, so `operationId` and `entryId` are
  * submission ids (a compaction's `operationId` is its task id) and survive a restart. Responses use the shapes of
- * agent-controller.ts: `{accepted, operationId | entryId, error}`. Port of agent-controller-provider.ts.
+ * agent-controller.ts: `{accepted, operationId | entryId, error}`. Port of agent-controller-provider.ts. With a hook bus,
+ * plugins see the input first (`input`: handled input is rejected with code `input_handled`, transformed input replaces
+ * the message and images) and a started prompt (`before_agent_start`: the messages plugins add travel as further text
+ * blocks of the prompt; a replacement system prompt is not supported, the durable prompt is assembled by the registry).
  */
 export class DurableAgentControllerService : public IRemoteService {
 public:
-    DurableAgentControllerService(Harness& harness, std::shared_ptr<Conversation> conversation)
+    DurableAgentControllerService(Harness& harness, std::shared_ptr<Conversation> conversation, std::shared_ptr<IHookBus> hooks = {})
         : m_harness(harness),
-          m_conversation(std::move(conversation)) {}
+          m_conversation(std::move(conversation)),
+          m_hooks(std::move(hooks)) {
+        if (m_hooks) {
+            m_events = std::make_unique<PluginSessionEvents>(*m_hooks);
+        }
+    }
 
     std::map<std::string, Method> methods() override {
         std::map<std::string, Method> methods;
@@ -38,6 +48,13 @@ private:
         if (!content) {
             return std::unexpected(content.error());
         }
+        if (m_events) {
+            if (auto intercepted = intercept(*content, whenBusy); !intercepted) {
+                return std::optional<Json>(Json{{"accepted", false},
+                                                {key, nullptr},
+                                                {"error", Json{{"code", "input_handled"}, {"message", "Input was handled by a plugin"}}}});
+            }
+        }
         SubmissionDraft draft;
         draft.type = "input";
         draft.content = std::move(*content);
@@ -47,6 +64,49 @@ private:
             return std::optional<Json>(rejected(key, submission.error()));
         }
         return std::optional<Json>(accepted(key, std::to_string((*submission)->id())));
+    }
+
+    /** Runs the input and prompt plugin events over `content` in place; nullopt when a plugin handled the input. */
+    std::optional<bool> intercept(Json& content, const std::string& whenBusy) {
+        std::string text;
+        std::vector<ImageContent> images;
+        if (content.is_string()) {
+            text = content.get<std::string>();
+        } else {
+            for (const Json& block : content) {
+                if (block.value("type", std::string()) == "text" && text.empty()) {
+                    text = block.value("text", std::string());
+                } else if (block.value("type", std::string()) == "image") {
+                    images.push_back(ImageContent{block.value("data", std::string()), block.value("mimeType", std::string())});
+                }
+            }
+        }
+        const InputOutcome input = m_events->input(text, images, "rpc", whenBusy == "reject" ? "" : whenBusy);
+        if (input.handled) {
+            return std::nullopt;
+        }
+        AgentStartOutcome start;
+        if (whenBusy == "reject") {
+            start = m_events->beforeAgentStart(input.text, input.images, "");
+        }
+        Json blocks = Json::array({Json{{"type", "text"}, {"text", input.text}}});
+        for (const ImageContent& image : input.images) {
+            blocks.push_back(Json{{"type", "image"}, {"data", image.data}, {"mimeType", image.mimeType}});
+        }
+        for (const Json& added : start.messages) {
+            const Json& body = added["content"];
+            if (body.is_string()) {
+                blocks.push_back(Json{{"type", "text"}, {"text", body}});
+            } else if (body.is_array()) {
+                for (const Json& block : body) {
+                    if (block.is_object() && (block.value("type", std::string()) == "text" || block.value("type", std::string()) == "image")) {
+                        blocks.push_back(block);
+                    }
+                }
+            }
+        }
+        content = blocks.size() == 1 ? Json(input.text) : blocks;
+        return true;
     }
 
     Result<std::optional<Json>> cancelQueued(const std::vector<Json>& args) {
@@ -190,4 +250,6 @@ private:
 
     Harness& m_harness;
     std::shared_ptr<Conversation> m_conversation;
+    std::shared_ptr<IHookBus> m_hooks;
+    std::unique_ptr<PluginSessionEvents> m_events;
 };

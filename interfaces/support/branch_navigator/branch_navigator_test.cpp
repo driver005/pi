@@ -3,6 +3,7 @@
 
 import std;
 import pi.support.branch_navigator;
+import pi.support.hook_bus;
 import pi.testing.fake_settings_manager;
 import pi.testing.recording_session_sink;
 import pi.testing.session_harness;
@@ -49,6 +50,12 @@ protected:
         m_refresher.refresh();
     }
 
+    void on(const std::string& event, const std::function<Json(const Json&)>& handler) {
+        m_bus.subscribe(event, [handler](const std::string&, const Json& payload) -> Result<Json> { return handler(payload); });
+    }
+
+    HookBus m_bus;
+    PluginSessionEvents m_events{m_bus};
     SessionHarness m_harness;
     std::unique_ptr<IAgent> m_agent;
     FakeSettingsManager m_settings;
@@ -159,4 +166,58 @@ TEST_F(BranchNavigatorTest, ListsUserMessagesForForking) {
     EXPECT_EQ(messages[0].entryId, m_root);
     EXPECT_EQ(messages[0].text, "start");
     EXPECT_EQ(messages[1].text, "branch A question");
+}
+
+TEST_F(BranchNavigatorTest, APluginCanCancelANavigation) {
+    m_navigator.setEvents(&m_events);
+    on("session_before_tree", [](const Json&) { return Json{{"cancel", true}}; });
+    const auto result = m_navigator.navigate(m_a1, NavigateTreeOptions{});
+    ASSERT_TRUE(result.has_value());
+    EXPECT_TRUE(result->cancelled);
+    EXPECT_FALSE(result->aborted);
+    EXPECT_EQ(m_harness.session().leafId(), m_a2);
+    EXPECT_FALSE(m_navigator.summarizing());
+}
+
+TEST_F(BranchNavigatorTest, APluginCanSupplyTheSummaryAndTheLabel) {
+    m_navigator.setEvents(&m_events);
+    Json before;
+    Json after;
+    on("session_before_tree", [&before](const Json& payload) {
+        before = payload;
+        return Json{{"summary", Json{{"summary", "plugin summary"}, {"details", Json{{"k", 1}}}}}, {"label", "plugin-label"}};
+    });
+    on("session_tree", [&after](const Json& payload) {
+        after = payload;
+        return Json();
+    });
+    NavigateTreeOptions options;
+    options.summarize = true;
+    const auto result = m_navigator.navigate(m_a1, options);
+    ASSERT_TRUE(result.has_value()) << result.error().message;
+    ASSERT_TRUE(result->summaryEntry.has_value());
+    EXPECT_EQ(result->summaryEntry->body.value("summary", ""), "plugin summary");
+    EXPECT_EQ(result->summaryEntry->body.value("fromHook", false), true);
+    EXPECT_EQ(m_harness.session().label(result->summaryEntry->id), "plugin-label");
+    EXPECT_EQ(before["preparation"]["targetId"], m_a1);
+    EXPECT_EQ(before["preparation"]["oldLeafId"], m_a2);
+    EXPECT_EQ(before["preparation"]["userWantsSummary"], true);
+    EXPECT_GT(before["preparation"]["entriesToSummarize"].size(), 0U);
+    EXPECT_EQ(after["oldLeafId"], m_a2);
+    EXPECT_EQ(after["fromExtension"], true);
+    EXPECT_EQ(after["summaryEntry"]["id"], result->summaryEntry->id);
+}
+
+TEST_F(BranchNavigatorTest, APluginCanChangeTheSummarizationOptions) {
+    m_navigator.setEvents(&m_events);
+    on("session_before_tree", [](const Json&) { return Json{{"label", "L2"}}; });
+    Json after;
+    on("session_tree", [&after](const Json& payload) {
+        after = payload;
+        return Json();
+    });
+    ASSERT_TRUE(m_navigator.navigate(m_a1, NavigateTreeOptions{}).has_value());
+    EXPECT_EQ(m_harness.session().label(m_a1), "L2");
+    EXPECT_FALSE(after.contains("summaryEntry"));
+    EXPECT_EQ(after["newLeafId"], m_harness.session().leafId());
 }

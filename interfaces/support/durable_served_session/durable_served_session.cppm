@@ -14,14 +14,15 @@ import pi.support.session_plugins_service;
 
 /**
  * One live durable session offered to connections: the agent controller, models and transcript services of the root
- * conversation of a harness, shared by every attached client, plus `pi.session-plugins` when the host can reload its plugins. It owns the harness and the registry the harness reads, and
+ * conversation of a harness, shared by every attached client, plus `pi.session-plugins` when the host can reload its plugins.
+ * The hook bus, when given, lets plugins see the controller's input (see DurableAgentControllerService). It owns the harness and the registry the harness reads, and
  * closing it disposes the services, aborts the run and closes the harness (and with it the storage).
  */
 export class DurableServedSession : public IRoutedSessionHandle {
 public:
     /** `onClosed` runs once when the session closes, before the services and the registry go. */
     DurableServedSession(std::shared_ptr<Registry> registry, std::unique_ptr<Harness> harness, std::shared_ptr<Conversation> root, IModelRuntime& models, DurableModelsService::SelectedListener onSelected,
-                         std::function<void()> onClosed = nullptr, SessionPluginsService::Reload reloadPlugins = nullptr)
+                         std::function<void()> onClosed = nullptr, SessionPluginsService::Reload reloadPlugins = nullptr, std::shared_ptr<IHookBus> hooks = {})
         : m_registry(std::move(registry)),
           m_onClosed(std::move(onClosed)),
           m_harness(std::move(harness)),
@@ -29,7 +30,7 @@ public:
           m_provider(std::make_shared<RemoteServiceProvider>(definitions(static_cast<bool>(reloadPlugins)))) {
         auto view = m_harness->viewState(m_root->id());
         if (view) {
-            m_provider->provide("pi.agent-controller", std::make_shared<DurableAgentControllerService>(*m_harness, m_root));
+            m_provider->provide("pi.agent-controller", std::make_shared<DurableAgentControllerService>(*m_harness, m_root, std::move(hooks)));
             m_provider->provide("pi.models", std::make_shared<DurableModelsService>(m_root, *view, models, std::move(onSelected)));
             m_provider->provide("pi.transcript", std::make_shared<DurableTranscriptService>(*view));
             if (reloadPlugins) {

@@ -11,6 +11,7 @@ pi_support(
         "//interfaces/support/auth_guidance",
         "//interfaces/support/compaction_preparer",
         "//interfaces/support/compactor",
+        "//interfaces/support/plugin_session_events",
         "//interfaces/support/session_context_refresher",
         "//interfaces/support/summarization_retry_reporter",
         "//interfaces/types/agent_loop_config",
@@ -18,6 +19,7 @@ pi_support(
         "//interfaces/types/summarization_options",
     ],
     test_deps = [
+        "//interfaces/support/hook_bus",
         "//src/testing/fake_settings_manager",
         "//src/testing/recording_session_sink",
         "//src/testing/session_harness",

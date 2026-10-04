@@ -11,6 +11,8 @@ export struct PromptOptions {
     /** Expand /skill:name commands and prompt templates. */
     bool expandPromptTemplates = true;
     std::vector<ImageContent> images;
+    /** Where the input came from, as reported to `input` plugin handlers: "interactive", "rpc" or "extension". */
+    std::string source = "rpc";
     /** Required when the agent is already running: queue as steering or follow-up. */
     StreamingBehavior streamingBehavior = StreamingBehavior::None;
     /** Called once the prompt is accepted (before a started run begins), never when it is rejected. */

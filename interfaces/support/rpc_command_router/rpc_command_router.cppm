@@ -272,7 +272,9 @@ private:
         options.onDisposition = [&](PromptDisposition disposition) {
             answered = true;
             m_output(success(command, "prompt",
-                             Json{{"disposition", disposition == PromptDisposition::Started ? "started" : "queued"}}));
+                             Json{{"disposition", disposition == PromptDisposition::Started  ? "started"
+                                                 : disposition == PromptDisposition::Queued ? "queued"
+                                                                                            : "handled"}}));
         };
         const auto outcome = m_runtime.session().prompt(text(command, "message"), options);
         if (!outcome && !answered) {

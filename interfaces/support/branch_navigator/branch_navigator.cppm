@@ -6,6 +6,7 @@ export import pi.session.i_session_event_sink;
 export import pi.session.i_session_manager;
 export import pi.session.i_settings_manager;
 export import pi.support.branch_summarizer;
+export import pi.support.plugin_session_events;
 export import pi.support.session_context_refresher;
 export import pi.support.summarization_retry_reporter;
 export import pi.types.agent_loop_config;
@@ -15,7 +16,9 @@ export import pi.types.navigate_tree_result;
 
 /**
  * Moves the session's current position to another entry of the tree, optionally summarizing the
- * branch that is left behind so its context survives. Port of AgentSession.navigateTree.
+ * branch that is left behind so its context survives. Port of AgentSession.navigateTree. With plugin
+ * events attached, plugins may cancel a navigation, supply the summary or change how it is made
+ * (`session_before_tree`) and observe the move (`session_tree`).
  */
 export class BranchNavigator {
 public:
@@ -28,8 +31,14 @@ public:
           m_streamFn(std::move(streamFn)),
           m_reporter(sink) {}
 
+    /** Plugin events to fire; nullptr (the default) fires none. The pointee must outlive the navigator. */
+    void setEvents(PluginSessionEvents* events) {
+        m_events = events;
+    }
+
     /** The caller has checked that no run or compaction is active. */
-    Result<NavigateTreeResult> navigate(const std::string& targetId, const NavigateTreeOptions& options) {
+    Result<NavigateTreeResult> navigate(const std::string& targetId, const NavigateTreeOptions& requested) {
+        NavigateTreeOptions options = requested;
         const std::optional<std::string> oldLeaf = m_session.leafId();
         if (targetId == oldLeaf) {
             return NavigateTreeResult{};
@@ -50,7 +59,32 @@ public:
         std::optional<std::string> summary;
         Json details;
         std::optional<Usage> usage;
-        if (options.summarize && !collected.entries.empty()) {
+        bool fromExtension = false;
+        if (m_events != nullptr) {
+            BeforeTreeOutcome decision = m_events->beforeTree(preparation(targetId, oldLeaf, collected, options));
+            if (decision.cancel) {
+                finishSummary();
+                NavigateTreeResult cancelled;
+                cancelled.cancelled = true;
+                return cancelled;
+            }
+            if (decision.summary && options.summarize) {
+                summary = std::move(decision.summary);
+                details = std::move(decision.details);
+                usage = std::move(decision.usage);
+                fromExtension = true;
+            }
+            if (decision.customInstructions) {
+                options.customInstructions = std::move(decision.customInstructions);
+            }
+            if (decision.replaceInstructions) {
+                options.replaceInstructions = *decision.replaceInstructions;
+            }
+            if (decision.label) {
+                options.label = std::move(decision.label);
+            }
+        }
+        if (options.summarize && !summary && !collected.entries.empty()) {
             const BranchSummaryResult generated =
                 m_summarizer.summarize(collected.entries, summaryOptions(options, signal));
             const std::lock_guard<std::mutex> lock(m_mutex);
@@ -69,11 +103,13 @@ public:
             details = Json{{"readFiles", generated.readFiles.value_or(std::vector<std::string>{})},
                            {"modifiedFiles", generated.modifiedFiles.value_or(std::vector<std::string>{})}};
         }
-        {
-            const std::lock_guard<std::mutex> lock(m_mutex);
-            m_signal.reset();
+        finishSummary();
+        auto moved = moveLeaf(*target, summary && !summary->empty() ? summary : std::nullopt, details, usage, options.label, fromExtension);
+        if (moved && m_events != nullptr) {
+            const bool summarized = moved->summaryEntry.has_value();
+            m_events->treeNavigated(m_session.leafId(), oldLeaf, moved->summaryEntry, summarized && fromExtension);
         }
-        return moveLeaf(*target, summary && !summary->empty() ? summary : std::nullopt, details, usage, options.label);
+        return moved;
     }
 
     std::vector<ForkableMessage> forkableMessages() const {
@@ -110,6 +146,24 @@ public:
     }
 
 private:
+    void finishSummary() {
+        const std::lock_guard<std::mutex> lock(m_mutex);
+        m_signal.reset();
+    }
+
+    TreePreparation preparation(const std::string& targetId, const std::optional<std::string>& oldLeaf, const CollectEntriesResult& collected, const NavigateTreeOptions& options) const {
+        TreePreparation out;
+        out.targetId = targetId;
+        out.oldLeafId = oldLeaf;
+        out.commonAncestorId = collected.commonAncestorId;
+        out.entriesToSummarize = collected.entries;
+        out.userWantsSummary = options.summarize;
+        out.customInstructions = options.customInstructions;
+        out.replaceInstructions = options.replaceInstructions;
+        out.label = options.label;
+        return out;
+    }
+
     std::string userText(const Json& content) const {
         if (content.is_string()) {
             return content.get<std::string>();
@@ -139,11 +193,11 @@ private:
         return out;
     }
 
-    Result<NavigateTreeResult> moveLeaf(const SessionEntry& target, const std::optional<std::string>& summary, const Json& details, const std::optional<Usage>& usage, const std::optional<std::string>& label) {
+    Result<NavigateTreeResult> moveLeaf(const SessionEntry& target, const std::optional<std::string>& summary, const Json& details, const std::optional<Usage>& usage, const std::optional<std::string>& label, bool fromHook) {
         NavigateTreeResult result;
         const std::optional<std::string> newLeaf = navigationLeaf(target, result.editorText);
         if (summary) {
-            const auto summaryId = m_session.branchWithSummary(newLeaf, *summary, details, false, usage);
+            const auto summaryId = m_session.branchWithSummary(newLeaf, *summary, details, fromHook, usage);
             if (!summaryId) {
                 return std::unexpected(summaryId.error());
             }
@@ -188,6 +242,7 @@ private:
     const BranchSummarizer& m_summarizer;
     StreamFn m_streamFn;
     SummarizationRetryReporter m_reporter;
+    PluginSessionEvents* m_events = nullptr;
 
     mutable std::mutex m_mutex;
     std::shared_ptr<AbortSignal> m_signal;

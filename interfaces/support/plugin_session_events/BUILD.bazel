@@ -1,0 +1,19 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_session_events",
+    deps = [
+        "//interfaces/plugin/i_hook_bus",
+        "//interfaces/support/agent_message_codec",
+        "//interfaces/support/message_codec",
+        "//interfaces/types/agent_start_outcome",
+        "//interfaces/types/before_compact_outcome",
+        "//interfaces/types/before_tree_outcome",
+        "//interfaces/types/compaction_preparation",
+        "//interfaces/types/image_content",
+        "//interfaces/types/input_outcome",
+        "//interfaces/types/session_entry",
+        "//interfaces/types/tree_preparation",
+    ],
+    test_deps = ["//interfaces/support/hook_bus"],
+)

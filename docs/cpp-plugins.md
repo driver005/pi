@@ -69,17 +69,31 @@ run synchronously in subscription order and see the changes of earlier handlers.
 | `tool_call` | `{toolCallId, toolName, input}` | `{block?, reason?, terminate?, input?}`; `input` replaces the arguments (not validated again) |
 | `tool_result` | `{toolCallId, toolName, input, content, details, structuredContent, isError}` | `{content?, details?, structuredContent?, isError?}`; replacing `content` without `structuredContent` drops it |
 | `context` | `{messages}` (session messages as stored in session files) | `{messages?}` replaces the messages sent to the model |
+| `input` | `{text, images?, source, streamingBehavior?}` (`source` is `rpc`; `streamingBehavior` only while a run is active) | `{action: "continue"}`, `{action: "transform", text, images?}` or `{action: "handled"}`; transforms chain, `handled` ends the chain and swallows the input (before skill and template expansion) |
+| `before_agent_start` | `{prompt, images?, systemPrompt}` (the rendered prompt) | `{message?: {customType, content?, display?, details?}, systemPrompt?}`; the message is sent with the prompt, `systemPrompt` replaces the complete system prompt for this turn (later handlers see it) |
+| `before_provider_request` | `{payload}` (the provider request body) | any JSON replaces the payload; null keeps it |
+| `session_before_compact` | `{preparation: {firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary?, fileOps, settings}, branchEntries, customInstructions?, reason, willRetry}` | `{cancel?, compaction?: {summary, firstKeptEntryId, tokensBefore, details?, usage?}}`; `cancel` ends the chain, `compaction` replaces the model call (stored as `fromHook`) |
+| `session_compact`, `session_compact_failed` | `{compactionEntry, fromExtension, reason, willRetry}`, `{reason, errorMessage?, aborted, willRetry, fromExtension}` | none |
+| `session_before_tree` | `{preparation: {targetId, oldLeafId, commonAncestorId, entriesToSummarize, userWantsSummary, customInstructions?, replaceInstructions, label?}}` | `{cancel?, summary?: {summary, details?, usage?}, customInstructions?, replaceInstructions?, label?}`; a summary is used only when the user asked for one |
+| `session_tree` | `{newLeafId, oldLeafId, summaryEntry?, fromExtension?}` | none |
 | `session_start`, `session_shutdown` | `{type, ...}` | none |
 | agent events: `agent_start`, `agent_end`, `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, and the session events of the RPC protocol | the event JSON of `pi rpc` | none (observation only) |
 
 In `pi serve` (durable sessions) the same hooks are served from the durable hook points: `tool_call` before a tool task
 runs (rewritten arguments are validated against the tool's schema afterwards), `tool_result` after it, `context` before
-each model request, `message_end` after each model response and `turn_end` after each tool round. `terminate`,
-`structuredContent`, the session events and the other agent events are not delivered there.
+each model request, `message_end` after each model response and `turn_end` after each tool round. `before_provider_request`
+runs as the provider builds its request. `input` and `before_agent_start` run in the `pi.agent-controller` service: handled
+input answers `{accepted: false, error: {code: "input_handled"}}`, and `before_agent_start` runs for `prompt` only (not for
+steering and follow-ups); a message plugins add travels as further text blocks of the prompt and a replacement
+`systemPrompt` is ignored, because the durable prompt is assembled from registry sections. `session_before_compact` maps
+onto the compaction task's `beforeCompact` hook (the payload carries the entries before the cut, the messages to
+summarise and `firstKeptEntryId`; `cancel` declines the compaction and `compaction.summary` is placed at the cut the task
+chose, so the plugin's `firstKeptEntryId` is ignored); `session_compact`, `session_compact_failed` and the tree events
+are not delivered there. `terminate`, `structuredContent`, the session events and the other agent events are not delivered there either.
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth and virtual models (declarative providers work), commands and flags, the `input`, `before_agent_start`, `before_provider_request` and compaction/tree hooks, and the shared event bus
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), providers with their own stream handlers or OAuth and virtual models (declarative providers work), commands and flags, the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...), and the shared event bus
 between extensions. They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 

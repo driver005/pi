@@ -202,13 +202,47 @@ private:
         if (!hooked) {
             return hooked;
         }
-        const StreamOptions options = m_requests.options(checkpoint.value("streamOptions", Json::object()),
-                                                         checkpoint.value("thinkingLevel", std::string("off")), runtime.signal());
+        StreamOptions options = m_requests.options(checkpoint.value("streamOptions", Json::object()),
+                                                   checkpoint.value("thinkingLevel", std::string("off")), runtime.signal());
+        if (auto payloadHooks = installPayloadHooks(runtime, options); !payloadHooks) {
+            return payloadHooks;
+        }
         auto message = streamResponse(runtime, *model, messages, options, attempt);
         if (!message) {
             return std::unexpected(message.error());
         }
         return classify(runtime, checkpoint, view->at("messages"), *message);
+    }
+
+    /**
+     * Lets the `beforeProviderRequest` hooks see and replace the payload a provider is about to send: each handler gets
+     * `{payload}` and may answer `{payload}`. The handlers are resolved now because the provider calls back from its own thread.
+     */
+    Result<void> installPayloadHooks(ITaskRuntime& runtime, StreamOptions& options) const {
+        std::vector<HookHandler> handlers;
+        auto collected = runtime.eachHook("beforeProviderRequest", [&](const HookHandler& hook) -> Result<void> {
+            handlers.push_back(hook);
+            return {};
+        });
+        if (!collected) {
+            return collected;
+        }
+        if (handlers.empty()) {
+            return {};
+        }
+        options.onPayload = [handlers = std::move(handlers), &runtime](const Json& payload, const Model&) -> std::optional<Json> {
+            Json current = payload;
+            bool replaced = false;
+            for (const HookHandler& hook : handlers) {
+                auto answer = hook(Json::object({{"payload", current}}), runtime);
+                if (answer && *answer && (*answer)->is_object() && (*answer)->contains("payload")) {
+                    current = (*answer)->at("payload");
+                    replaced = true;
+                }
+            }
+            return replaced ? std::optional<Json>(current) : std::nullopt;
+        };
+        return {};
     }
 
     Result<void> retry(const Json& task, ITaskRuntime& runtime) const {

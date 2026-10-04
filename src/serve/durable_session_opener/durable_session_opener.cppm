@@ -61,8 +61,10 @@ public:
         if (auto installed = registry->install(PiPromptExtension(m_tools, m_resources, record.cwd).extension()); !installed) {
             return std::unexpected(installed.error());
         }
+        std::shared_ptr<IHookBus> bus;
         if (m_hooks) {
-            if (const std::shared_ptr<IHookBus> bus = m_hooks(record.cwd)) {
+            bus = m_hooks(record.cwd);
+            if (bus) {
                 if (auto installed = registry->install(PluginHookExtension(bus).extension("plugin-hooks")); !installed) {
                     return std::unexpected(installed.error());
                 }
@@ -94,7 +96,7 @@ public:
                 (void)live->install(ToolBridge(tools, cwd).extension("coding-tools"));
             }
         });
-        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }, sessionReload(record.cwd)));
+        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }, sessionReload(record.cwd), bus));
     }
 
 private:
