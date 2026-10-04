@@ -236,3 +236,74 @@ TEST_F(PluginSessionEventsTest, TreeNavigationIsObservable) {
     m_events.treeNavigated(std::nullopt, std::string("o"), std::nullopt, false);
     EXPECT_FALSE(seen.contains("summaryEntry"));
 }
+
+TEST_F(PluginSessionEventsTest, ProviderAndSelectionObservationsReachSubscribers) {
+    std::map<std::string, Json> seen;
+    for (const std::string event : {"after_provider_response", "provider_stream_event", "model_select", "thinking_level_select"}) {
+        on(event, [&seen, event](const Json& payload) {
+            seen[event] = payload;
+            return Json();
+        });
+    }
+    m_events.afterProviderResponse(200, Json{{"x-id", "7"}});
+    m_events.providerStreamEvent("anthropic", "anthropic-messages", "claude", Json{{"type", "ping"}});
+    m_events.modelSelected(Json{{"id", "b"}}, Json{{"id", "a"}}, "cycle");
+    m_events.thinkingLevelSelected("high", "off");
+
+    EXPECT_EQ(seen["after_provider_response"]["status"], 200);
+    EXPECT_EQ(seen["after_provider_response"]["headers"]["x-id"], "7");
+    EXPECT_EQ(seen["provider_stream_event"]["data"]["type"], "ping");
+    EXPECT_EQ(seen["provider_stream_event"]["api"], "anthropic-messages");
+    EXPECT_EQ(seen["model_select"]["previousModel"]["id"], "a");
+    EXPECT_EQ(seen["model_select"]["source"], "cycle");
+    EXPECT_EQ(seen["thinking_level_select"]["previousLevel"], "off");
+
+    m_events.modelSelected(Json{{"id", "b"}}, Json(), "set");
+    EXPECT_FALSE(seen["model_select"].contains("previousModel"));
+}
+
+TEST_F(PluginSessionEventsTest, SwitchAndForkCanBeCancelled) {
+    EXPECT_TRUE(m_events.allowSwitch("new", std::nullopt));
+    EXPECT_TRUE(m_events.allowFork("e1", "before"));
+    Json seenSwitch;
+    Json seenFork;
+    on("session_before_switch", [&seenSwitch](const Json& payload) {
+        seenSwitch = payload;
+        return Json{{"cancel", payload["reason"] == "resume"}};
+    });
+    on("session_before_fork", [&seenFork](const Json& payload) {
+        seenFork = payload;
+        return Json{{"cancel", true}};
+    });
+    EXPECT_TRUE(m_events.allowSwitch("new", std::nullopt));
+    EXPECT_FALSE(m_events.allowSwitch("resume", "/s/a.jsonl"));
+    EXPECT_EQ(seenSwitch["targetSessionFile"], "/s/a.jsonl");
+    EXPECT_FALSE(m_events.allowFork("e1", "at"));
+    EXPECT_EQ(seenFork["entryId"], "e1");
+    EXPECT_EQ(seenFork["position"], "at");
+}
+
+TEST_F(PluginSessionEventsTest, ProjectTrustTakesTheFirstDecisiveAnswer) {
+    EXPECT_FALSE(m_events.projectTrust("/w").has_value());
+    on("project_trust", [](const Json&) { return Json{{"trusted", "undecided"}}; });
+    EXPECT_FALSE(m_events.projectTrust("/w").has_value());
+    on("project_trust", [](const Json& payload) { return Json{{"trusted", payload["cwd"] == "/w" ? "yes" : "no"}, {"remember", true}}; });
+    on("project_trust", [](const Json&) { return Json{{"trusted", "no"}}; });
+    const auto verdict = m_events.projectTrust("/w");
+    ASSERT_TRUE(verdict.has_value());
+    EXPECT_TRUE(verdict->first);
+    EXPECT_TRUE(verdict->second);
+    EXPECT_FALSE(m_events.projectTrust("/other")->first);
+}
+
+TEST_F(PluginSessionEventsTest, ResourcesDiscoverCollectsPathsFromEveryHandler) {
+    EXPECT_TRUE(m_events.resourcesDiscover("/w", "startup").first.empty());
+    on("resources_discover", [](const Json& payload) {
+        EXPECT_EQ(payload["reason"], "reload");
+        return Json{{"skillPaths", Json::array({"/s/a"})}, {"promptPaths", Json::array({"/p/a", 5})}};
+    });
+    on("resources_discover", [](const Json&) { return Json{{"skillPaths", Json::array({"/s/b"})}, {"themePaths", Json::array({"/t"})}}; });
+    const auto [skills, prompts] = m_events.resourcesDiscover("/w", "reload");
+    EXPECT_EQ(skills, (std::vector<std::string>{"/s/a", "/s/b"}));
+    EXPECT_EQ(prompts, (std::vector<std::string>{"/p/a"}));
+}

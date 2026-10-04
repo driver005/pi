@@ -260,6 +260,9 @@ private:
     Json replaced(const Json& command, const std::string& name, const Result<void>& outcome, Json data) {
         attach();
         if (!outcome) {
+            if (outcome.error().code == "cancelled") {
+                return success(command, name, Json{{"cancelled", true}});
+            }
             return failure(command, name, outcome.error().message);
         }
         return success(command, name, data);
@@ -389,6 +392,9 @@ private:
         const auto result = m_runtime.fork(entryId, clone ? ForkPosition::At : ForkPosition::Before);
         attach();
         if (!result) {
+            if (result.error().code == "cancelled") {
+                return success(command, name, Json{{"cancelled", true}});
+            }
             return failure(command, name, result.error().message);
         }
         Json data = Json{{"cancelled", false}};

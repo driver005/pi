@@ -5,6 +5,7 @@ pi_interface(
     deps = [
         "//interfaces/session/i_agent_session",
         "//interfaces/session/i_session_manager",
+        "//interfaces/types/fork_result",
         "//interfaces/types/runtime_diagnostic",
     ],
 )

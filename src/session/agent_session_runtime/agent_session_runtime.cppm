@@ -35,6 +35,9 @@ public:
     }
 
     Result<void> newSession(const std::optional<std::string>& parentSession) override {
+        if (!m_handle->allowSwitch("new", std::nullopt)) {
+            return cancelled();
+        }
         const std::optional<std::string> previous = m_handle->sessionManager().sessionFile();
         const std::string sessionDir = m_handle->sessionManager().sessionDir();
         const bool persisted = m_handle->sessionManager().isPersisted();
@@ -53,6 +56,9 @@ public:
     }
 
     Result<void> switchSession(const std::string& sessionPath, const std::optional<std::string>& cwdOverride) override {
+        if (!m_handle->allowSwitch("resume", sessionPath)) {
+            return cancelled();
+        }
         const std::optional<std::string> previous = m_handle->sessionManager().sessionFile();
         auto manager = m_store.open(sessionPath, std::nullopt, cwdOverride);
         if (!manager) {
@@ -66,6 +72,9 @@ public:
     }
 
     Result<ForkResult> fork(const std::string& entryId, ForkPosition position) override {
+        if (!m_handle->allowFork(entryId, position)) {
+            return std::unexpected(Error{"cancelled", "Cancelled by a plugin"});
+        }
         const auto selected = m_handle->sessionManager().entry(entryId);
         if (!selected) {
             return std::unexpected(Error{"invalid_entry", "Invalid entry ID for forking"});
@@ -86,6 +95,9 @@ public:
         const std::string resolved = m_paths.resolveToCwd(inputPath, m_handle->cwd());
         if (!m_files.exists(resolved)) {
             return std::unexpected(Error{"file_not_found", "File not found: " + resolved});
+        }
+        if (!m_handle->allowSwitch("resume", resolved)) {
+            return cancelled();
         }
         const std::string sessionDir = m_handle->sessionManager().sessionDir();
         if (auto created = m_files.createDirectories(sessionDir); !created) {
@@ -122,6 +134,10 @@ public:
     }
 
 private:
+    std::unexpected<Error> cancelled() const {
+        return std::unexpected(Error{"cancelled", "Cancelled by a plugin"});
+    }
+
     void teardown() {
         // Settle any active response first so the aborted turn is persisted before the swap.
         m_handle->session().abort();

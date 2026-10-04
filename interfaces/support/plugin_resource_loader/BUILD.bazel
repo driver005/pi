@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "plugin_resource_loader",
+    deps = [
+        "//interfaces/session/i_resource_loader",
+        "//interfaces/support/plugin_session_events",
+    ],
+    test_deps = [
+        "//interfaces/support/hook_bus",
+        "//src/testing/fake_resource_loader",
+    ],
+)

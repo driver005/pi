@@ -1,7 +1,9 @@
 // style:c-abi
 // An example plugin: registers the commands `/note <text>` and `/ping` and the flags `--note-prefix <text>` and `--loud`.
 // `/note` appends a "hello-note" entry to the session (the text gets the prefix, upper-cased with --loud); `/ping` emits an
-// event on the plugin event bus that this plugin also listens to, which appends a "hello-ping" entry.
+// event on the plugin event bus that this plugin also listens to, which appends a "hello-ping" entry. It also shows the startup
+// and session events: `--trust-projects` answers the project trust question with "yes", `--extra-skills <dir>` adds a skill
+// directory (resources_discover) and `--keep-session` cancels switching to another session (session_before_switch).
 #include <algorithm>
 #include <cctype>
 
@@ -19,6 +21,15 @@ public:
                                        return std::string();
                                    }) +
                                    host.onEvent("hello:ping", [this](const pi::Json& data) { m_host->session("appendEntry", pi::Json{{"customType", "hello-ping"}, {"data", data}}); });
+        host.registerFlag("trust-projects", pi::Json{{"type", "boolean"}, {"description", "Trust the project without asking"}});
+        host.registerFlag("extra-skills", pi::Json{{"type", "string"}, {"description", "Add a skill directory"}});
+        host.registerFlag("keep-session", pi::Json{{"type", "boolean"}, {"description", "Refuse to switch sessions"}});
+        host.on("project_trust", [this](const pi::Json&) { return m_host->flag("trust-projects") == true ? pi::Json{{"trusted", "yes"}} : pi::Json(); });
+        host.on("resources_discover", [this](const pi::Json&) {
+            const pi::Json dir = m_host->flag("extra-skills");
+            return dir.is_string() ? pi::Json{{"skillPaths", pi::Json::array({dir})}} : pi::Json();
+        });
+        host.on("session_before_switch", [this](const pi::Json&) { return m_host->flag("keep-session") == true ? pi::Json{{"cancel", true}} : pi::Json(); });
         if (!errors.empty()) {
             host.log(PI_LOG_ERROR, errors);
             return false;

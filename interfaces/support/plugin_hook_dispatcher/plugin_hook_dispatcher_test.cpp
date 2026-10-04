@@ -123,3 +123,33 @@ TEST_F(PluginHookDispatcherTest, NotifyFiresEventsByType) {
     m_dispatcher.notify(Json::array());
     EXPECT_EQ(seen["x"], 1);
 }
+
+TEST_F(PluginHookDispatcherTest, ContextWithSystemSeesTheWholeTranscriptAndCanReplaceIt) {
+    TranscriptContext context;
+    SystemMessage system;
+    system.content = "be brief";
+    context.messages.push_back(system);
+    UserMessage user;
+    TextContent block;
+    block.text = "hi";
+    user.content = std::vector<UserContentBlock>{block};
+    context.messages.push_back(user);
+
+    EXPECT_EQ(m_dispatcher.transformFinalContext(context).messages.size(), 2U) << "no subscribers: unchanged";
+
+    Json seen;
+    on("context_with_system", [&seen](const Json& payload) {
+        seen = payload;
+        Json messages = payload["messages"];
+        messages[0]["content"] = "be verbose";
+        return Json{{"messages", messages}};
+    });
+    const TranscriptContext changed = m_dispatcher.transformFinalContext(context);
+    ASSERT_EQ(seen["messages"].size(), 2U);
+    EXPECT_EQ(seen["messages"][0]["role"], "system");
+    ASSERT_EQ(changed.messages.size(), 2U);
+    EXPECT_EQ(std::get<std::string>(std::get<SystemMessage>(changed.messages[0]).content), "be verbose");
+
+    on("context_with_system", [](const Json&) { return Json{{"messages", Json::array({Json{{"role", "bogus"}}})}}; });
+    EXPECT_EQ(m_dispatcher.transformFinalContext(context).messages.size(), 2U) << "an invalid replacement is ignored";
+}

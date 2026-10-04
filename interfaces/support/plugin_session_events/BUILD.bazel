@@ -7,6 +7,7 @@ pi_support(
         "//interfaces/support/agent_message_codec",
         "//interfaces/support/message_codec",
         "//interfaces/types/agent_start_outcome",
+        "//interfaces/types/bash_result",
         "//interfaces/types/before_compact_outcome",
         "//interfaces/types/before_tree_outcome",
         "//interfaces/types/compaction_preparation",

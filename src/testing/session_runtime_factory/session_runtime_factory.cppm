@@ -28,12 +28,17 @@ public:
         }
         m_reasons.push_back(request.startReason);
         return std::unique_ptr<ISessionRuntimeHandle>(std::make_unique<TestSessionHandle>(
-            std::move(request), m_agents, m_provider, m_files, m_clock, m_ids, m_sleeper));
+            std::move(request), m_agents, m_provider, m_files, m_clock, m_ids, m_sleeper, &m_denyReplacement));
     }
 
     /** Start reasons of every created session, in order. */
     std::vector<std::string> reasons() const {
         return m_reasons;
+    }
+
+    /** Makes the sessions it created refuse being switched or forked (a plugin cancelling `session_before_switch` and `session_before_fork`). */
+    void denyReplacement(bool deny) {
+        m_denyReplacement = deny;
     }
 
     /** Makes the next create() fail with this message. */
@@ -50,4 +55,5 @@ private:
     ISleeper& m_sleeper;
     std::vector<std::string> m_reasons;
     std::optional<std::string> m_failure;
+    bool m_denyReplacement = false;
 };

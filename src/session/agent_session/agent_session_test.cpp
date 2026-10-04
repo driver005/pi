@@ -834,3 +834,88 @@ TEST_F(AgentSessionTest, PluginCommandsRunInsteadOfPromptingTheModel) {
     }
     EXPECT_TRUE(listed);
 }
+
+TEST_F(AgentSessionTest, PluginsSeeModelAndThinkingLevelSelections) {
+    HookBus bus;
+    m_hookBus = &bus;
+    Model other = m_model;
+    other.id = "faux-2";
+    other.reasoning = true;
+    m_models.addModel(other);
+    rebuild();
+    std::vector<Json> models;
+    std::vector<Json> levels;
+    bus.subscribe("model_select", [&models](const std::string&, const Json& payload) -> Result<Json> {
+        models.push_back(payload);
+        return Json();
+    });
+    bus.subscribe("thinking_level_select", [&levels](const std::string&, const Json& payload) -> Result<Json> {
+        levels.push_back(payload);
+        return Json();
+    });
+
+    ASSERT_TRUE(m_session->setModel(other, false).has_value());
+    ASSERT_EQ(models.size(), 1U);
+    EXPECT_EQ(models[0]["model"]["id"], "faux-2");
+    EXPECT_EQ(models[0]["previousModel"]["id"], "faux-1");
+    EXPECT_EQ(models[0]["source"], "set");
+    ASSERT_TRUE(m_session->setModel(other, false).has_value());
+    EXPECT_EQ(models.size(), 1U) << "selecting the current model is no change";
+
+    m_session->setThinkingLevel(ThinkingLevel::High, false);
+    ASSERT_EQ(levels.size(), 1U);
+    EXPECT_EQ(levels[0]["level"], "high");
+    EXPECT_EQ(levels[0]["previousLevel"], "off");
+    m_session->setThinkingLevel(ThinkingLevel::High, false);
+    EXPECT_EQ(levels.size(), 1U);
+}
+
+TEST_F(AgentSessionTest, AUserBashPluginCanSupplyTheResult) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    Json seen;
+    bus.subscribe("user_bash", [&seen](const std::string&, const Json& payload) -> Result<Json> {
+        seen = payload;
+        return Json{{"result", Json{{"output", "from plugin\n"}, {"exitCode", 3}}}};
+    });
+    const auto bash = m_session->executeBash("deploy", nullptr, true, std::nullopt);
+    ASSERT_TRUE(bash.has_value());
+    EXPECT_EQ(bash->output, "from plugin\n");
+    EXPECT_EQ(bash->exitCode, 3);
+    EXPECT_EQ(seen["command"], "deploy");
+    EXPECT_EQ(seen["excludeFromContext"], true);
+    EXPECT_EQ(seen["cwd"], "/tmp");
+    bool recorded = false;
+    for (const SessionEntry& entry : m_harness.session().entries()) {
+        recorded = recorded || (entry.type == "message" && entry.body["message"].value("command", "") == "deploy");
+    }
+    EXPECT_TRUE(recorded);
+}
+
+TEST_F(AgentSessionTest, AContextWithSystemPluginChangesWhatTheProviderReceives) {
+    HookBus bus;
+    m_hookBus = &bus;
+    rebuild();
+    bus.subscribe("context_with_system", [](const std::string&, const Json& payload) -> Result<Json> {
+        Json messages = payload["messages"];
+        messages.push_back(Json{{"role", "user"}, {"content", "injected by plugin"}, {"timestamp", 1}});
+        return Json{{"messages", messages}};
+    });
+    std::size_t received = 0;
+    bool injected = false;
+    m_harness.provider().enqueue([&](const TranscriptContext& context, const StreamOptions&, const Model&) {
+        received = context.messages.size();
+        for (const Message& message : context.messages) {
+            if (const auto* user = std::get_if<UserMessage>(&message)) {
+                if (const auto* text = std::get_if<std::string>(&user->content)) {
+                    injected = injected || *text == "injected by plugin";
+                }
+            }
+        }
+        return m_harness.provider().textResponse("ok");
+    });
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    EXPECT_TRUE(injected) << "the provider got the plugin's message among " << received;
+}

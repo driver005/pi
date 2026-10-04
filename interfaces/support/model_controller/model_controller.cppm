@@ -25,12 +25,22 @@ public:
           m_models(models),
           m_sink(sink) {}
 
+    /** Told after a selection changed the model: the model, the previous one (an empty id when there was none) and "set" or "cycle". */
+    using ModelObserver = std::function<void(const Model& model, const Model& previous, const std::string& source)>;
+    /** Told after the thinking level changed. */
+    using LevelObserver = std::function<void(ThinkingLevel level, ThinkingLevel previous)>;
+
+    void setObservers(ModelObserver onModel, LevelObserver onLevel) {
+        m_onModel = std::move(onModel);
+        m_onLevel = std::move(onLevel);
+    }
+
     /** Error when the provider has no credentials. persist saves the model as the global default. */
     Result<void> setModel(const Model& model, bool persist) {
         if (!m_models.hasConfiguredAuth(model.provider)) {
             return std::unexpected(Error{"no_auth", "No API key for " + model.provider + "/" + model.id});
         }
-        apply(model, std::nullopt, persist);
+        apply(model, std::nullopt, persist, "set");
         return {};
     }
 
@@ -57,6 +67,9 @@ public:
             event.type = SessionEventType::ThinkingLevelChanged;
             event.level = effective;
             m_sink.emit(event);
+            if (m_onLevel) {
+                m_onLevel(effective, previous);
+            }
         }
     }
 
@@ -118,8 +131,9 @@ private:
         return m_agent.thinkingLevel();
     }
 
-    void apply(const Model& model, const std::optional<ThinkingLevel>& explicitLevel, bool persist) {
+    void apply(const Model& model, const std::optional<ThinkingLevel>& explicitLevel, bool persist, const std::string& source) {
         const ThinkingLevel level = levelForSwitch(model, explicitLevel);
+        const Model previous = m_agent.model();
         m_agent.setModel(model);
         m_session.appendModelChange(model.provider, model.id);
         if (persist) {
@@ -129,6 +143,9 @@ private:
         }
         // Model persistence does not rewrite the global thinking default.
         setThinkingLevel(level, false);
+        if (m_onModel && !(sameModel(previous, model) && !previous.id.empty())) {
+            m_onModel(model, previous, source);
+        }
     }
 
     void addToScope(const Model& model) {
@@ -172,7 +189,7 @@ private:
             }
         }
         const ScopedModel& next = usable[nextIndex(index, usable.size(), forward)];
-        apply(next.model, next.thinkingLevel, persist);
+        apply(next.model, next.thinkingLevel, persist, "cycle");
         return ModelCycleResult{next.model, m_agent.thinkingLevel(), true};
     }
 
@@ -189,7 +206,7 @@ private:
             }
         }
         const Model& next = available[nextIndex(index, available.size(), forward)];
-        apply(next, std::nullopt, persist);
+        apply(next, std::nullopt, persist, "cycle");
         return ModelCycleResult{next, m_agent.thinkingLevel(), false};
     }
 
@@ -209,6 +226,8 @@ private:
     ISessionEventSink& m_sink;
     ThinkingLevelResolver m_levels;
 
+    ModelObserver m_onModel;
+    LevelObserver m_onLevel;
     mutable std::mutex m_mutex;
     std::vector<ScopedModel> m_scoped;
 };

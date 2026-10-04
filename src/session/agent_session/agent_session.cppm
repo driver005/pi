@@ -20,6 +20,7 @@ import pi.support.compactor;
 import pi.support.context_usage_calculator;
 import pi.support.custom_message_queue;
 import pi.support.install_telemetry_policy;
+import pi.support.model_codec;
 import pi.support.model_controller;
 import pi.support.pending_input_tracker;
 import pi.support.plugin_hook_dispatcher;
@@ -382,6 +383,12 @@ public:
     }
 
     Result<BashResult> executeBash(const std::string& command, const std::function<void(const std::string&)>& onChunk, bool excludeFromContext, const std::optional<std::string>& id) override {
+        if (m_events) {
+            if (auto supplied = m_events->userBash(command, excludeFromContext, m_config.session.cwd())) {
+                m_bash->record(command, *supplied, excludeFromContext);
+                return *supplied;
+            }
+        }
         return m_bash->execute(command, onChunk, excludeFromContext, id);
     }
 
@@ -663,6 +670,13 @@ private:
                                                          m_config.bash, m_config.clock);
         m_models = std::make_unique<ModelController>(*m_agent, session, settings, m_config.models, m_hub);
         m_models->setScopedModels(m_config.scopedModels);
+        if (m_events) {
+            m_models->setObservers(
+                [this](const Model& model, const Model& previous, const std::string& source) {
+                    m_events->modelSelected(m_modelCodec.toJson(model), previous.id.empty() ? Json() : m_modelCodec.toJson(previous), source);
+                },
+                [this](ThinkingLevel level, ThinkingLevel previous) { m_events->thinkingLevelSelected(m_levels.levelName(level), m_levels.levelName(previous)); });
+        }
         m_loadout = std::make_unique<PromptLoadout>(*m_agent, session, m_config.tools, m_config.resources,
                                                     m_config.clock, m_config.cwd);
         m_loadout->setToolFilter(m_config.allowedTools, m_config.excludedTools);
@@ -727,6 +741,18 @@ private:
         options.thinkingBudgets = view.thinkingBudgets();
         if (m_events) {
             options.onPayload = [this](const Json& payload, const Model&) { return m_events->beforeProviderRequest(payload); };
+            if (m_config.hooks->hasHandlers("after_provider_response")) {
+                options.onResponse = [this](const ProviderResponse& response, const Model&) {
+                    Json headers = Json::object();
+                    for (const auto& [name, value] : response.headers) {
+                        headers[name] = value;
+                    }
+                    m_events->afterProviderResponse(response.status, headers);
+                };
+            }
+            if (m_config.hooks->hasHandlers("provider_stream_event")) {
+                options.onStreamEvent = [this](const Json& data, const Model& model) { m_events->providerStreamEvent(model.provider, model.api, model.id, data); };
+            }
         }
         options.transformHeaders = [this](const Model& model, const ProviderAttribution::Headers& headers) { return transformHeaders(model, headers); };
         return options;
@@ -833,7 +859,10 @@ private:
     }
 
     /** Streams a request: virtual models never reach a provider, so an unrouted one ends with the routing error. */
-    std::shared_ptr<AssistantMessageStream> streamRouted(const Model& model, const TranscriptContext& context, const StreamOptions& request) {
+    std::shared_ptr<AssistantMessageStream> streamRouted(const Model& model, const TranscriptContext& original, const StreamOptions& request) {
+        // Plugins see the final transcript of the session's own requests only, not compaction and summary calls.
+        const bool sessionRequest = request.sessionId && *request.sessionId == m_config.session.sessionId();
+        const TranscriptContext context = m_hooks && sessionRequest && !m_virtual.isVirtual(model) ? m_hooks->transformFinalContext(original) : original;
         if (m_virtual.isVirtual(model)) {
             std::optional<std::string> reason;
             {
@@ -844,7 +873,7 @@ private:
         }
         // Compaction and summaries use routing ids of their own; only session requests replace the cache entry, so only they
         // restart the warming. It goes on while the transcript still extends the request's prefix.
-        if (m_warmer && request.sessionId && *request.sessionId == m_config.session.sessionId()) {
+        if (m_warmer && sessionRequest) {
             CacheWarmRequest warm;
             warm.model = model;
             warm.context = context;
@@ -1231,6 +1260,7 @@ private:
     std::unique_ptr<CacheWarmer> m_warmer;
     AgentMessageCodec m_messageCodec;
     ThinkingLevelResolver m_levels;
+    ModelCodec m_modelCodec;
     ProviderAttribution m_attribution;
     InstallTelemetryPolicy m_installTelemetry;
     TranscriptNormalizer m_transcript;

@@ -23,6 +23,8 @@ export struct StreamOptions {
     /** Inspect or replace the request payload; return nullopt to keep it. */
     std::function<std::optional<Json>(const Json&, const Model&)> onPayload;
     std::function<void(const ProviderResponse&, const Model&)> onResponse;
+    /** Sees every JSON event of a server-sent-events response as parsed, before it is interpreted (not for AWS event streams and WebSockets). */
+    std::function<void(const Json&, const Model&)> onStreamEvent;
     /**
      * Runs last over the fully assembled request headers (model, auth and caller headers) and returns the headers to send; the
      * model-runtime applies it, providers never see it.

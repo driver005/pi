@@ -18,11 +18,12 @@ import pi.testing.fake_resource_loader;
 import pi.testing.fake_settings_manager;
 import pi.tools.tool_registry;
 
-/** A real AgentSession over a faux provider, with fake settings and resources, for runtime tests. */
+/** A real AgentSession over a faux provider, with fake settings and resources, for runtime tests. `denyReplacement` (read at each question) makes it refuse to be switched or forked, like a plugin that cancels. */
 export class TestSessionHandle : public ISessionRuntimeHandle {
 public:
-    TestSessionHandle(SessionRuntimeRequest request, IAgentFactory& agents, FauxProvider& provider, IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper)
-        : m_cwd(request.cwd),
+    TestSessionHandle(SessionRuntimeRequest request, IAgentFactory& agents, FauxProvider& provider, IFileSystem& files, const IClock& clock, IIdGenerator& ids, ISleeper& sleeper, const bool* denyReplacement = nullptr)
+        : m_denyReplacement(denyReplacement),
+          m_cwd(request.cwd),
           m_agentDir(request.agentDir),
           m_manager(std::move(request.sessionManager)),
           m_bash(m_runner, files, m_crypto, m_environment) {
@@ -57,6 +58,14 @@ public:
         return {};
     }
 
+    bool allowSwitch(const std::string&, const std::optional<std::string>&) override {
+        return m_denyReplacement == nullptr || !*m_denyReplacement;
+    }
+
+    bool allowFork(const std::string&, ForkPosition) override {
+        return m_denyReplacement == nullptr || !*m_denyReplacement;
+    }
+
     std::unique_ptr<ISessionManager> releaseSessionManager() override {
         return std::move(m_manager);
     }
@@ -72,6 +81,7 @@ private:
         return model;
     }
 
+    const bool* m_denyReplacement;
     std::string m_cwd;
     std::string m_agentDir;
     std::unique_ptr<ISessionManager> m_manager;

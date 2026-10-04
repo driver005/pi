@@ -10,6 +10,7 @@ pi_support(
         "//interfaces/types/agent_message",
         "//interfaces/types/before_tool_call_result",
         "//interfaces/types/tool_call_context",
+        "//interfaces/types/transcript_context",
     ],
     test_deps = ["//interfaces/support/hook_bus"],
 )

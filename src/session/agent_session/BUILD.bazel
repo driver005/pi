@@ -14,6 +14,7 @@ pi_module(
         "//interfaces/support/context_usage_calculator",
         "//interfaces/support/error_stream_factory",
         "//interfaces/support/custom_message_queue",
+        "//interfaces/support/model_codec",
         "//interfaces/support/model_controller",
         "//interfaces/support/pending_input_tracker",
         "//interfaces/support/plugin_hook_dispatcher",

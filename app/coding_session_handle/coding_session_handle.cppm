@@ -19,7 +19,9 @@ import pi.support.mcp_oauth_providers;
 import pi.support.mcp_result_converter;
 import pi.support.mcp_tool_namer;
 import pi.support.package_manager;
+import pi.support.plugin_resource_loader;
 import pi.support.plugin_session_bridge;
+import pi.support.plugin_session_events;
 import pi.support.plugin_discovery;
 import pi.support.model_selector;
 import pi.tools.bash_tool;
@@ -48,6 +50,7 @@ public:
           m_settings(m_agentDir + "/settings.json", m_cwd + "/.pi/settings.json", false, services.platform().files(), services.platform().locks(), services.platform().ids()),
           m_resources(resourceOptions(options), m_settings, services.platform().files()),
           m_queue(services.platform().files()),
+          m_pluginResources(m_resources, m_sessionEvents, m_cwd, [this](const std::vector<std::string>& skills, const std::vector<std::string>& prompts) { m_resources.addPaths(skills, prompts); }),
           m_pluginDiscovery(services.platform().files()),
           m_plugins(services.platform().libraries(), m_tools, m_hooks, services.platform().processes(), services.platform().logger(), PluginContext{request.cwd, request.agentDir}, &services.models().models(), nullptr, &services.platform().clock()),
           m_bash(services.platform().processes(), services.platform().files(), services.platform().crypto(), services.platform().environment()),
@@ -64,10 +67,10 @@ public:
         loadPackages(options);
         loadPlugins(options);
         startMcp(options);
-        if (auto loaded = m_resources.reload(); !loaded) {
+        if (auto loaded = m_pluginResources.reload(); !loaded) {
             warn(loaded.error().message);
         }
-        applyPluginFlags(options);
+        applyPluginFlags(options, true);
         createSession(options);
         m_bridge = std::make_unique<PluginSessionBridge>(*m_session, *m_manager, m_settings, m_services.models().models(), [this] { return mcpServers(); }, nullptr);
         m_plugins.setSessionBridge(m_bridge.get());
@@ -113,6 +116,14 @@ public:
         return m_diagnostics;
     }
 
+    bool allowSwitch(const std::string& reason, const std::optional<std::string>& targetSessionFile) override {
+        return m_sessionEvents.allowSwitch(reason, targetSessionFile);
+    }
+
+    bool allowFork(const std::string& entryId, ForkPosition position) override {
+        return m_sessionEvents.allowFork(entryId, position == ForkPosition::At ? "at" : "before");
+    }
+
     std::unique_ptr<ISessionManager> releaseSessionManager() override {
         return std::move(m_manager);
     }
@@ -120,7 +131,11 @@ public:
 private:
     void resolveTrust(const CodingStartupOptions& options) {
         const std::string policy = m_settings.view().defaultProjectTrust();
-        const auto trusted = m_services.trust().resolve(m_cwd, options.trustProject, policy, {});
+        // A project_trust handler belongs to a plugin that loads before the project is trusted: the global ones load for it.
+        const auto trusted = m_services.trust().resolve(m_cwd, options.trustProject, policy, [this, &options](const std::string& cwd) {
+            loadGlobalPlugins(options);
+            return m_sessionEvents.projectTrust(cwd);
+        });
         if (!trusted) {
             warn("Could not read project trust: " + trusted.error().message);
             return;
@@ -133,15 +148,22 @@ private:
     void registerTools() {
         PlatformServices& platform = m_services.platform();
         const SettingsView view = m_settings.view();
-        m_tools.add(std::make_shared<ReadTool>(platform.files(), platform.base64(), m_cwd));
-        m_tools.add(std::make_shared<BashTool>(platform.processes(), platform.files(), platform.crypto(),
+        addBuiltin(std::make_shared<ReadTool>(platform.files(), platform.base64(), m_cwd));
+        addBuiltin(std::make_shared<BashTool>(platform.processes(), platform.files(), platform.crypto(),
                                                platform.environment(), m_cwd, view.shellPath().value_or(""),
                                                view.shellCommandPrefix().value_or("")));
-        m_tools.add(std::make_shared<EditTool>(platform.files(), m_queue, m_cwd));
-        m_tools.add(std::make_shared<WriteTool>(platform.files(), m_queue, m_cwd));
-        m_tools.add(std::make_shared<GrepTool>(platform.processes(), platform.files(), m_cwd));
-        m_tools.add(std::make_shared<FindTool>(platform.files(), m_cwd));
-        m_tools.add(std::make_shared<LsTool>(platform.files(), m_cwd));
+        addBuiltin(std::make_shared<EditTool>(platform.files(), m_queue, m_cwd));
+        addBuiltin(std::make_shared<WriteTool>(platform.files(), m_queue, m_cwd));
+        addBuiltin(std::make_shared<GrepTool>(platform.processes(), platform.files(), m_cwd));
+        addBuiltin(std::make_shared<FindTool>(platform.files(), m_cwd));
+        addBuiltin(std::make_shared<LsTool>(platform.files(), m_cwd));
+    }
+
+    /** A built-in tool does not replace a plugin's tool of the same name (plugins that load before the trust question). */
+    void addBuiltin(std::shared_ptr<ITool> tool) {
+        if (m_tools.find(tool->definition().name) == nullptr) {
+            m_tools.add(std::move(tool));
+        }
     }
 
     ResourceLoaderOptions resourceOptions(const CodingStartupOptions& options) const {
@@ -195,7 +217,7 @@ private:
                                   *m_manager,
                                   m_settings,
                                   m_services.models().models(),
-                                  m_resources,
+                                  m_pluginResources,
                                   m_tools,
                                   m_bash,
                                   platform.files(),
@@ -232,27 +254,41 @@ private:
         m_packagePlugins = std::move(found.plugins);
     }
 
+    /** The plugins that do not depend on the project: <agent-dir>/plugins and --plugin. Loaded once, before the trust question when a plugin may answer it. */
+    void loadGlobalPlugins(const CodingStartupOptions& options) {
+        if (options.noPlugins || m_globalPluginsLoaded) {
+            return;
+        }
+        m_globalPluginsLoaded = true;
+        std::vector<std::string> paths = m_pluginDiscovery.discover(m_agentDir + "/plugins");
+        paths.insert(paths.end(), options.pluginPaths.begin(), options.pluginPaths.end());
+        loadPluginPaths(paths);
+        applyPluginFlags(options, false);
+    }
+
     void loadPlugins(const CodingStartupOptions& options) {
         if (options.noPlugins) {
             return;
         }
-        std::vector<std::string> paths = m_pluginDiscovery.discover(m_agentDir + "/plugins");
+        loadGlobalPlugins(options);
+        std::vector<std::string> paths;
         if (m_settings.projectTrusted()) {
-            for (std::string& path : m_pluginDiscovery.discover(m_cwd + "/.pi/plugins")) {
-                paths.push_back(std::move(path));
-            }
+            paths = m_pluginDiscovery.discover(m_cwd + "/.pi/plugins");
         }
         paths.insert(paths.end(), m_packagePlugins.begin(), m_packagePlugins.end());
-        paths.insert(paths.end(), options.pluginPaths.begin(), options.pluginPaths.end());
+        loadPluginPaths(paths);
+    }
+
+    void loadPluginPaths(const std::vector<std::string>& paths) {
         for (const Error& error : m_plugins.load(paths)) {
             warn("Plugin: " + error.message);
         }
     }
 
     /** Command line flags plugins declared get their values; the others are reported (a plugin may be missing or disabled). */
-    void applyPluginFlags(const CodingStartupOptions& options) {
+    void applyPluginFlags(const CodingStartupOptions& options, bool reportUnknown) {
         for (const auto& [name, value] : options.pluginFlags) {
-            if (const auto set = m_plugins.setFlag(name, value); !set) {
+            if (const auto set = m_plugins.setFlag(name, value); !set && reportUnknown) {
                 warn(set.error().message);
             }
         }
@@ -353,8 +389,11 @@ private:
     FileMutationQueue m_queue;
     ToolRegistry m_tools;
     HookBus m_hooks;
+    PluginSessionEvents m_sessionEvents{m_hooks};
+    PluginResourceLoader m_pluginResources;
     PluginDiscovery m_pluginDiscovery;
     std::vector<std::string> m_packagePlugins;
+    bool m_globalPluginsLoaded = false;
     PluginHost m_plugins;
     BashCommandExecutor m_bash;
     ModelSelector m_selector;

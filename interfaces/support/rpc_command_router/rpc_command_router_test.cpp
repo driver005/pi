@@ -196,3 +196,15 @@ TEST_F(RpcCommandRouterTest, AbortReturnsOnceIdle) {
     EXPECT_EQ(send(Json{{"type", "abort_retry"}})["success"], true);
     EXPECT_EQ(send(Json{{"type", "abort_bash"}})["success"], true);
 }
+
+TEST_F(RpcCommandRouterTest, ACancellingPluginAnswersCancelledNotAFailure) {
+    const std::string oldId = send(Json{{"type", "get_state"}})["data"]["sessionId"];
+    m_factory.denyReplacement(true);
+    const Json created = send(Json{{"type", "new_session"}});
+    EXPECT_EQ(created["success"], true);
+    EXPECT_EQ(created["data"], (Json{{"cancelled", true}}));
+    EXPECT_EQ(send(Json{{"type", "get_state"}})["data"]["sessionId"], oldId);
+    m_harness.provider().enqueue(m_harness.provider().textResponse("one"));
+    m_router->handle(Json{{"type", "prompt"}, {"message", "hi"}});
+    EXPECT_EQ(send(Json{{"type", "clone"}})["data"], (Json{{"cancelled", true}}));
+}

@@ -321,3 +321,44 @@ TEST_F(CodingSessionHandleTest, PluginsShareAnEventBus) {
     }
     EXPECT_EQ(pings, 1);
 }
+
+TEST_F(CodingSessionHandleTest, APluginAnswersTheProjectTrustQuestion) {
+    writeProjectSettings(R"({"defaultTools":["ls"]})");
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    EXPECT_EQ(open(options)->session().activeToolNames(), (std::vector<std::string>{"read", "bash", "edit", "write"})) << "no answer: not trusted";
+    options.pluginFlags = {{"trust-projects", std::nullopt}};
+    const auto handle = open(options);
+    EXPECT_TRUE(handle->diagnostics().empty());
+    EXPECT_EQ(handle->session().activeToolNames(), (std::vector<std::string>{"ls"}));
+}
+
+TEST_F(CodingSessionHandleTest, PluginsAddSkillsWhenResourcesAreDiscovered) {
+    std::filesystem::create_directories(m_dir + "/extra/greet");
+    std::ofstream(m_dir + "/extra/greet/SKILL.md") << "---\nname: greet\ndescription: Greets people\n---\nSay hello.\n";
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    options.pluginFlags = {{"extra-skills", m_dir + "/extra"}};
+    const auto handle = open(options);
+    bool listed = false;
+    for (const SlashCommandInfo& command : handle->session().slashCommands()) {
+        listed = listed || command.name == "skill:greet";
+    }
+    EXPECT_TRUE(listed);
+    EXPECT_EQ(handle->session().reload().has_value(), true);
+    int greets = 0;
+    for (const SlashCommandInfo& command : handle->session().slashCommands()) {
+        greets += command.name == "skill:greet" ? 1 : 0;
+    }
+    EXPECT_EQ(greets, 1) << "a reload does not add the path twice";
+}
+
+TEST_F(CodingSessionHandleTest, APluginCanCancelSwitchingSessions) {
+    CodingStartupOptions options;
+    options.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    EXPECT_TRUE(open(options)->allowSwitch("new", std::nullopt));
+    options.pluginFlags = {{"keep-session", std::nullopt}};
+    const auto handle = open(options);
+    EXPECT_FALSE(handle->allowSwitch("resume", "/s/a.jsonl"));
+    EXPECT_TRUE(handle->allowFork("e1", ForkPosition::Before)) << "only switching was cancelled";
+}

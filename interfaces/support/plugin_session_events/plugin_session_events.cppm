@@ -6,6 +6,7 @@ export import pi.support.agent_message_codec;
 export import pi.support.message_codec;
 export import pi.types.agent_start_outcome;
 export import pi.types.before_compact_outcome;
+export import pi.types.bash_result;
 export import pi.types.before_tree_outcome;
 export import pi.types.compaction_preparation;
 export import pi.types.image_content;
@@ -28,7 +29,20 @@ export import pi.types.tree_preparation;
  *    errorMessage?, aborted, willRetry, fromExtension}: observations;
  *  - `session_before_tree` {preparation} -> {cancel?, summary?: {summary, details?, usage?}, customInstructions?,
  *    replaceInstructions?, label?} (a cancel ends the chain) and `session_tree` {newLeafId, oldLeafId, summaryEntry?,
- *    fromExtension?}: observation.
+ *    fromExtension?}: observation;
+ *  - `session_before_switch` {reason: "new"|"resume", targetSessionFile?} and `session_before_fork` {entryId, position:
+ *    "before"|"at"} -> {cancel?}: a cancel keeps the current session;
+ *  - `project_trust` {cwd} -> {trusted: "yes"|"no"|"undecided", remember?}: the first "yes" or "no" decides whether the project
+ *    is trusted (and is stored when `remember`); "undecided" or no answer leaves it to the stored decision and the settings;
+ *  - `resources_discover` {cwd, reason: "startup"|"reload"} -> {skillPaths?, promptPaths?}: more skill and prompt template paths
+ *    (every handler's answer is used);
+ *  - `user_bash` {command, excludeFromContext, cwd} -> {result?: {output, exitCode?, cancelled?, truncated?, fullOutputPath?}}: the
+ *    first handler with a result replaces running the command (TypeScript's custom `operations` cannot cross the C ABI);
+ *  - `after_provider_response` {status, headers}: the provider answered (2xx) and the stream starts; observation;
+ *  - `provider_stream_event` {provider, api, model, data}: one parsed JSON event of a server-sent-events response before pi
+ *    interprets it; observation (not delivered for AWS event streams and WebSockets);
+ *  - `model_select` {model, previousModel?, source: "set"|"cycle"} and `thinking_level_select` {level, previousLevel}: observations
+ *    of changes that actually changed something.
  * Without subscribers every method answers "nothing changed".
  */
 export class PluginSessionEvents {
@@ -249,7 +263,119 @@ public:
         observe("session_tree", payload);
     }
 
+    /** False when a handler of `session_before_switch` cancelled the new session or the switch. */
+    bool allowSwitch(const std::string& reason, const std::optional<std::string>& targetSessionFile) {
+        Json payload = Json::object({{"reason", reason}});
+        if (targetSessionFile) {
+            payload["targetSessionFile"] = *targetSessionFile;
+        }
+        return !cancelled("session_before_switch", payload);
+    }
+
+    /** False when a handler of `session_before_fork` cancelled the fork. */
+    bool allowFork(const std::string& entryId, const std::string& position) {
+        return !cancelled("session_before_fork", Json::object({{"entryId", entryId}, {"position", position}}));
+    }
+
+    /** {trusted, remember} of the first `project_trust` handler that decided; nullopt when none did. */
+    std::optional<std::pair<bool, bool>> projectTrust(const std::string& cwd) {
+        if (!m_bus.hasHandlers("project_trust")) {
+            return std::nullopt;
+        }
+        const HookOutcome emitted = m_bus.emit("project_trust", Json::object({{"type", "project_trust"}, {"cwd", cwd}}));
+        for (const Json& answer : emitted.results) {
+            if (!answer.is_object() || !answer.contains("trusted") || !answer["trusted"].is_string()) {
+                continue;
+            }
+            const std::string verdict = answer["trusted"].get<std::string>();
+            if (verdict == "yes" || verdict == "no") {
+                return std::make_pair(verdict == "yes", answer.value("remember", false));
+            }
+        }
+        return std::nullopt;
+    }
+
+    /** The skill and prompt template paths `resources_discover` handlers added (first: skills, second: prompt templates). */
+    std::pair<std::vector<std::string>, std::vector<std::string>> resourcesDiscover(const std::string& cwd, const std::string& reason) {
+        std::pair<std::vector<std::string>, std::vector<std::string>> paths;
+        if (!m_bus.hasHandlers("resources_discover")) {
+            return paths;
+        }
+        const HookOutcome emitted = m_bus.emit("resources_discover", Json::object({{"type", "resources_discover"}, {"cwd", cwd}, {"reason", reason}}));
+        for (const Json& answer : emitted.results) {
+            collectPaths(answer, "skillPaths", paths.first);
+            collectPaths(answer, "promptPaths", paths.second);
+        }
+        return paths;
+    }
+
+    /** The result a `user_bash` handler supplies instead of running `command`; nullopt when none did. */
+    std::optional<BashResult> userBash(const std::string& command, bool excludeFromContext, const std::string& cwd) {
+        if (!m_bus.hasHandlers("user_bash")) {
+            return std::nullopt;
+        }
+        const HookOutcome emitted = m_bus.emit("user_bash", Json::object({{"type", "user_bash"}, {"command", command}, {"excludeFromContext", excludeFromContext}, {"cwd", cwd}}));
+        for (const Json& answer : emitted.results) {
+            if (!answer.is_object() || !answer.contains("result") || !answer["result"].is_object()) {
+                continue;
+            }
+            const Json& result = answer["result"];
+            BashResult out;
+            out.output = result.value("output", std::string());
+            if (result.contains("exitCode") && result["exitCode"].is_number_integer()) {
+                out.exitCode = result["exitCode"].get<int>();
+            }
+            out.cancelled = result.value("cancelled", false);
+            out.truncated = result.value("truncated", false);
+            if (result.contains("fullOutputPath") && result["fullOutputPath"].is_string()) {
+                out.fullOutputPath = result["fullOutputPath"].get<std::string>();
+            }
+            return out;
+        }
+        return std::nullopt;
+    }
+
+    void afterProviderResponse(int status, const Json& headers) {
+        observe("after_provider_response", Json::object({{"status", status}, {"headers", headers}}));
+    }
+
+    void providerStreamEvent(const std::string& provider, const std::string& api, const std::string& model, const Json& data) {
+        observe("provider_stream_event", Json::object({{"provider", provider}, {"api", api}, {"model", model}, {"data", data}}));
+    }
+
+    void modelSelected(const Json& model, const Json& previousModel, const std::string& source) {
+        Json payload = Json::object({{"model", model}, {"source", source}});
+        if (!previousModel.is_null()) {
+            payload["previousModel"] = previousModel;
+        }
+        observe("model_select", payload);
+    }
+
+    void thinkingLevelSelected(const std::string& level, const std::string& previousLevel) {
+        observe("thinking_level_select", Json::object({{"level", level}, {"previousLevel", previousLevel}}));
+    }
+
 private:
+    void collectPaths(const Json& answer, const std::string& key, std::vector<std::string>& out) const {
+        if (!answer.is_object() || !answer.contains(key) || !answer[key].is_array()) {
+            return;
+        }
+        for (const Json& path : answer[key]) {
+            if (path.is_string()) {
+                out.push_back(path.get<std::string>());
+            }
+        }
+    }
+
+    bool cancelled(const std::string& event, Json payload) {
+        if (!m_bus.hasHandlers(event)) {
+            return false;
+        }
+        payload["type"] = event;
+        const HookOutcome emitted = m_bus.emit(event, payload);
+        return std::ranges::any_of(emitted.results, [](const Json& result) { return result.is_object() && result.value("cancel", false); });
+    }
+
     void observe(const std::string& event, Json payload) {
         if (m_bus.hasHandlers(event)) {
             payload["type"] = event;

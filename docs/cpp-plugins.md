@@ -159,6 +159,19 @@ run synchronously in subscription order and see the changes of earlier handlers.
 | `session_compact`, `session_compact_failed` | `{compactionEntry, fromExtension, reason, willRetry}`, `{reason, errorMessage?, aborted, willRetry, fromExtension}` | none |
 | `session_before_tree` | `{preparation: {targetId, oldLeafId, commonAncestorId, entriesToSummarize, userWantsSummary, customInstructions?, replaceInstructions, label?}}` | `{cancel?, summary?: {summary, details?, usage?}, customInstructions?, replaceInstructions?, label?}`; a summary is used only when the user asked for one |
 | `session_tree` | `{newLeafId, oldLeafId, summaryEntry?, fromExtension?}` | none |
+| `context_with_system` | `{messages}` (the complete transcript sent to the provider, system messages included, as stored in session files; only the session's own requests, not compaction or summaries) | `{messages?}` replaces it, sent as returned |
+| `before_provider_headers` | `{headers}` (name to value, after pi's attribution headers) | an object of headers to set; `null` removes one (TypeScript handlers mutate in place) |
+| `after_provider_response` | `{status, headers}` (2xx responses; the stream starts next) | none |
+| `provider_stream_event` | `{provider, api, model, data}` (each parsed JSON event of a server-sent-events response; not for AWS event streams and WebSockets) | none |
+| `model_select` | `{model, previousModel?, source: "set"\|"cycle"}` (only when the model changed) | none |
+| `thinking_level_select` | `{level, previousLevel}` (only when the level changed) | none |
+| `user_bash` | `{command, excludeFromContext, cwd}` | `{result?: {output, exitCode?, cancelled?, truncated?, fullOutputPath?}}` replaces running the command (the result is recorded as usual); TypeScript's custom `operations` cannot cross the C ABI |
+| `session_before_switch` | `{reason: "new"\|"resume", targetSessionFile?}` (new session, switch, import) | `{cancel?}`; `new_session` and `switch_session` then answer `{cancelled: true}` |
+| `session_before_fork` | `{entryId, position: "before"\|"at"}` (fork and clone) | `{cancel?}`; `fork` and `clone` answer `{cancelled: true}` |
+| `project_trust` | `{cwd}` (asked only when the project has something to gate and no `--trust`/`--no-trust` was given) | `{trusted: "yes"\|"no"\|"undecided", remember?}`; the first yes or no decides. The plugins of `<agent-dir>/plugins` and `--plugin` are loaded for it (command line flags are already set); project and package plugins load after the answer |
+| `resources_discover` | `{cwd, reason: "startup"\|"reload"}` (before each load of the resources) | `{skillPaths?, promptPaths?}`; every handler's paths are added once |
+| `mcp_servers_change` | `{servers: [{name, extension, config}]}` (`pi serve` only: after a plugin registered or withdrew an MCP server once the plugins are bound) | none |
+| `cache_warming_decision` | `{warmCost, missCost, continuationProbability, action: "warm"\|"stop"}` (pi's decision about refreshing the prompt cache) | `{action: "warm"\|"stop"}`; the last answer wins |
 | `session_start`, `session_shutdown` | `{type, ...}` | none |
 | agent events: `agent_start`, `agent_end`, `turn_start`, `turn_end`, `message_start`, `message_update`, `message_end`, `tool_execution_start`, `tool_execution_update`, `tool_execution_end`, and the session events of the RPC protocol | the event JSON of `pi rpc` | none (observation only) |
 
@@ -176,7 +189,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the other provider and session hooks (`before_provider_headers`, `after_provider_response`, `session_before_switch`, `session_before_fork`, ...). They can be added as new host API functions or events without breaking ABI version 1 because
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), the OAuth login of providers (declarative and stream-handler providers work with API keys), commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the session boundary drafts (`agent_before_settle`, and the `entries` and `continue` results of `before_agent_start`), `session_start` reasons other than the first load, and the new hooks of the table above in `pi serve` sessions (only the hooks listed under `pi serve` below). They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 
 ## Building a plugin

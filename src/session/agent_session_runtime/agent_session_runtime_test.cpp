@@ -153,3 +153,29 @@ TEST_F(AgentSessionRuntimeTest, DisposeStopsTheSession) {
     m_runtime->dispose();
     EXPECT_TRUE(m_runtime->session().isIdle());
 }
+
+TEST_F(AgentSessionRuntimeTest, ACancellingPluginKeepsTheCurrentSession) {
+    say("first", "one");
+    const std::string id = m_runtime->session().sessionId();
+    m_factory.denyReplacement(true);
+    const auto created = m_runtime->newSession(std::nullopt);
+    ASSERT_FALSE(created.has_value());
+    EXPECT_EQ(created.error().code, "cancelled");
+    EXPECT_EQ(m_runtime->session().sessionId(), id);
+
+    const auto file = m_runtime->session().sessionFile();
+    ASSERT_TRUE(file.has_value());
+    const auto switched = m_runtime->switchSession(*file, std::nullopt);
+    ASSERT_FALSE(switched.has_value());
+    EXPECT_EQ(switched.error().code, "cancelled");
+
+    const auto leaf = m_runtime->session().leafId();
+    ASSERT_TRUE(leaf.has_value());
+    const auto forked = m_runtime->fork(*leaf, ForkPosition::At);
+    ASSERT_FALSE(forked.has_value());
+    EXPECT_EQ(forked.error().code, "cancelled");
+    EXPECT_EQ(m_runtime->session().sessionId(), id);
+
+    m_factory.denyReplacement(false);
+    EXPECT_TRUE(m_runtime->newSession(std::nullopt).has_value());
+}

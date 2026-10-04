@@ -263,3 +263,24 @@ TEST_F(DurableToolboxTest, PluginMcpServersAreIgnoredWhenMcpIsOff) {
     const auto toolbox = open(startup);
     EXPECT_TRUE(names(*toolbox).empty());
 }
+
+TEST_F(DurableToolboxTest, PluginsHearAboutRegisteredMcpServersAfterTheyAreBound) {
+    CodingStartupOptions startup;
+    startup.pluginPaths = {"plugins/hello_mcp/libhello_mcp.so"};
+    std::vector<Json> changes;
+    std::mutex mutex;
+    const auto toolbox = open(startup);
+    toolbox->hooks()->subscribe("mcp_servers_change", [&](const std::string&, const Json& payload) -> Result<Json> {
+        const std::lock_guard<std::mutex> lock(mutex);
+        changes.push_back(payload);
+        return Json();
+    });
+    ASSERT_TRUE(toolbox->reload().has_value());
+    const std::lock_guard<std::mutex> lock(mutex);
+    ASSERT_GE(changes.size(), 2U) << "the old registration was withdrawn, the new one made";
+    EXPECT_TRUE(changes.front()["servers"].empty());
+    EXPECT_EQ(changes.back()["servers"].size(), 1U);
+    EXPECT_EQ(changes.back()["servers"][0]["name"], "hello-mcp");
+    EXPECT_EQ(changes.back()["servers"][0]["config"]["command"], "/bin/sh");
+    EXPECT_NE(changes.back()["servers"][0]["extension"].get<std::string>().find("libhello_mcp.so"), std::string::npos);
+}

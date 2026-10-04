@@ -8,12 +8,14 @@ export import pi.types.after_tool_call_result;
 export import pi.types.agent_message;
 export import pi.types.before_tool_call_result;
 export import pi.types.tool_call_context;
+export import pi.types.transcript_context;
 
 /**
  * Turns the agent loop's hook points into plugin events and plugin answers back into hook results.
  * Events (payload -> result): `tool_call` {toolCallId, toolName, input} -> {block?, reason?, terminate?,
  * input?}; `tool_result` {toolCallId, toolName, input, content, details, structuredContent, isError} ->
- * {content?, details?, structuredContent?, isError?}; `context` {messages} -> {messages?}. Handlers see
+ * {content?, details?, structuredContent?, isError?}; `context` {messages} -> {messages?}; `context_with_system` {messages}
+ * (the complete transcript sent to the provider, system messages included) -> {messages?}, sent as returned. Handlers see
  * the changes of earlier handlers. Without subscribers every method is a no-op.
  */
 export class PluginHookDispatcher {
@@ -121,6 +123,29 @@ public:
         }
         auto replaced = m_agentMessages.listFromJson(outcome.payload["messages"]);
         return replaced ? std::move(*replaced) : messages;
+    }
+
+    /** The transcript sent to the provider after every `context_with_system` handler; the input when nobody changed it. */
+    TranscriptContext transformFinalContext(const TranscriptContext& context) {
+        if (!m_bus.hasHandlers("context_with_system")) {
+            return context;
+        }
+        const Json payload{{"messages", m_messages.toJson(context.messages)}};
+        const HookOutcome outcome = m_bus.emit("context_with_system", payload, [](Json& current, const Json& result) {
+            if (result.is_object() && result.contains("messages") && result["messages"].is_array()) {
+                current["messages"] = result["messages"];
+            }
+        });
+        if (outcome.results.empty()) {
+            return context;
+        }
+        auto replaced = m_messages.messagesFromJson(outcome.payload["messages"]);
+        if (!replaced) {
+            return context;
+        }
+        TranscriptContext out = context;
+        out.messages = std::move(*replaced);
+        return out;
     }
 
     /** Fires an observation event named by json["type"] (agent_start, message_end, ...). */

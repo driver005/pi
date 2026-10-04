@@ -80,23 +80,32 @@ public:
         if (!validated) {
             return std::unexpected(validated.error());
         }
-        const std::lock_guard<std::mutex> lock(m_mcpMutex);
-        const auto existing = m_pluginServers.find(name);
-        if (existing != m_pluginServers.end() && existing->second.first != owner) {
-            return std::unexpected(Error{"mcp_server_conflict", "MCP server \"" + name + "\" is already registered by another plugin"});
+        bool started = false;
+        {
+            const std::lock_guard<std::mutex> lock(m_mcpMutex);
+            const auto existing = m_pluginServers.find(name);
+            if (existing != m_pluginServers.end() && existing->second.first != owner) {
+                return std::unexpected(Error{"mcp_server_conflict", "MCP server \"" + name + "\" is already registered by another plugin"});
+            }
+            validated->source = "plugin";
+            validated->scope = "plugin";
+            m_pluginServers[name] = {owner, *validated};
+            m_pluginServerConfigs[name] = config;
+            // Before startup the server is collected with the configured ones; after it, connected right away.
+            if (m_mcpStarted && m_mcpAllowed && !m_configuredServers.contains(name)) {
+                ensureMcp();
+                m_mcp->addServers({*validated}, m_cwd);
+            }
+            started = m_mcpStarted;
         }
-        validated->source = "plugin";
-        validated->scope = "plugin";
-        m_pluginServers[name] = {owner, *validated};
-        // Before startup the server is collected with the configured ones; after it, connected right away.
-        if (m_mcpStarted && m_mcpAllowed && !m_configuredServers.contains(name)) {
-            ensureMcp();
-            m_mcp->addServers({*validated}, m_cwd);
+        if (started) {
+            emitServersChange();
         }
         return {};
     }
 
     void unregisterServer(const std::string& owner, const std::string& name) override {
+        bool stopped = false;
         {
             const std::lock_guard<std::mutex> lock(m_mcpMutex);
             const auto existing = m_pluginServers.find(name);
@@ -104,12 +113,16 @@ public:
                 return;
             }
             m_pluginServers.erase(existing);
-            if (!m_mcp || m_configuredServers.contains(name)) {
-                return;
+            m_pluginServerConfigs.erase(name);
+            if (m_mcp && !m_configuredServers.contains(name)) {
+                m_mcp->stopServer(name);
+                stopped = true;
             }
-            m_mcp->stopServer(name);
         }
-        notifyChange();
+        emitServersChange();
+        if (stopped) {
+            notifyChange();
+        }
     }
 
     /**
@@ -144,6 +157,20 @@ public:
     }
 
 private:
+    /** `mcp_servers_change`: every server the plugins registered, after a change once the plugins are bound. */
+    void emitServersChange() {
+        Json servers = Json::array();
+        {
+            const std::lock_guard<std::mutex> lock(m_mcpMutex);
+            for (const auto& [name, registered] : m_pluginServers) {
+                servers.push_back(Json{{"name", name}, {"extension", registered.first}, {"config", m_pluginServerConfigs[name]}});
+            }
+        }
+        if (m_hooks->hasHandlers("mcp_servers_change")) {
+            m_hooks->emit("mcp_servers_change", Json{{"type", "mcp_servers_change"}, {"servers", servers}});
+        }
+    }
+
     std::vector<std::string> loadPlugins(const CodingStartupOptions& startup) {
         std::vector<std::string> problems;
         if (startup.noPlugins) {
@@ -274,6 +301,7 @@ private:
     bool m_mcpAllowed = false;
     std::set<std::string> m_configuredServers;
     std::map<std::string, std::pair<std::string, McpServerConfig>> m_pluginServers;
+    std::map<std::string, Json> m_pluginServerConfigs;
     std::unique_ptr<McpServerManager> m_mcp;
     std::mutex m_reloadMutex;
     mutable std::mutex m_listenerMutex;

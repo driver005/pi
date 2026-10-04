@@ -154,3 +154,22 @@ TEST_F(SseRequestRunnerTest, OnResponseHookSeesStatus) {
         });
     EXPECT_EQ(status, 200);
 }
+
+TEST_F(SseRequestRunnerTest, StreamEventHookSeesEachParsedJsonEvent) {
+    std::vector<Json> seen;
+    m_options.onStreamEvent = [&](const Json& data, const Model&) { seen.push_back(data); };
+    m_http.enqueue(reply(200, "data: {\"a\":1}\n\ndata: [DONE]\n\ndata: {\"b\":2}\n\n"));
+    std::vector<std::string> handled;
+    run([&](const SseEvent& event) -> Result<void> {
+            handled.push_back(event.data);
+            return {};
+        },
+        [&]() -> Result<void> {
+            m_emitter.done(StopReason::Stop);
+            return {};
+        });
+    ASSERT_EQ(seen.size(), 2U) << "[DONE] is not JSON";
+    EXPECT_EQ(seen[0]["a"], 1);
+    EXPECT_EQ(seen[1]["b"], 2);
+    EXPECT_EQ(handled.size(), 3U);
+}

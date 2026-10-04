@@ -51,7 +51,7 @@ public:
             if (failure) {
                 return;
             }
-            failure = dispatch(parser.feed(chunk), handler);
+            failure = dispatch(parser.feed(chunk), handler, model, options);
             if (failure) {
                 local->abort();
             }
@@ -73,7 +73,7 @@ public:
             fail(emitter, options, formatError(response.value()));
             return;
         }
-        if (auto tail = dispatch(parser.finish(), handler)) {
+        if (auto tail = dispatch(parser.finish(), handler, model, options)) {
             fail(emitter, options, tail->message);
             return;
         }
@@ -89,8 +89,14 @@ private:
                       aborted ? "Request was aborted" : message);
     }
 
-    std::optional<Error> dispatch(const std::vector<SseEvent>& events, const EventHandler& handler) const {
+    std::optional<Error> dispatch(const std::vector<SseEvent>& events, const EventHandler& handler, const Model& model, const StreamOptions& options) const {
         for (const auto& event : events) {
+            if (options.onStreamEvent) {
+                const Json data = Json::parse(event.data, nullptr, false);
+                if (!data.is_discarded()) {
+                    options.onStreamEvent(data, model);
+                }
+            }
             auto result = handler(event);
             if (!result) {
                 return result.error();
