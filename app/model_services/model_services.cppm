@@ -24,6 +24,7 @@ import pi.ai.provider_registry;
 import pi.ai.responses_provider;
 import pi.platform_services;
 import pi.support.builtin_oauth_specs;
+import pi.support.radius_catalog;
 import pi.support.radius_gateway;
 
 /**
@@ -39,12 +40,13 @@ public:
           m_configValues(platform.environment(), platform.processes()),
           m_credentials(agentDir + "/auth.json", platform.files(), platform.locks(), m_configValues),
           m_modelsStore(agentDir + "/models-cache.json", platform.files(), platform.locks()),
+          m_radiusCatalog(platform.http(), m_modelsStore, platform.clock()),
           m_envKeys(platform.environment(), platform.files()),
           m_adc(platform.http(), platform.files(), platform.environment(), platform.clock(), platform.crypto(), platform.base64()),
           m_flows(buildFlows()),
           m_copilot(platform.http()),
           m_meta(platform.http(), platform.clock()),
-          m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir, PiUserAgent().value(platform.system())}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
+          m_runtime(ModelRuntimeConfig{agentDir + "/models.json", catalogDir, PiUserAgent().value(platform.system()), RadiusGateway().gatewayUrl(platform.environment())}, m_credentials, m_modelsStore, platform.files(), m_providers, m_envKeys, m_configValues, platform.clock(), flowMap()) {
         m_providers.registerProvider(std::make_shared<AnthropicMessagesProvider>(
             platform.http(), platform.sleeper(), platform.clock(), platform.executor()));
         m_providers.registerProvider(std::make_shared<ChatCompletionsProvider>(
@@ -100,6 +102,25 @@ public:
         return RadiusGateway().gatewayUrl(m_platform.environment());
     }
 
+    /**
+     * Fetches the Radius gateway's model catalog (signed in with the stored Radius credential or `RADIUS_API_KEY` when there
+     * is one), keeps it in the models store and has the runtime list it. Does nothing while `PI_OFFLINE` is set. A failure
+     * keeps the stored catalog and is returned; callers report it and carry on.
+     */
+    Result<void> refreshRadiusCatalog(const std::shared_ptr<AbortSignal>& signal = nullptr) {
+        if (m_platform.environment().get("PI_OFFLINE")) {
+            return {};
+        }
+        std::optional<std::string> key;
+        if (const auto auth = m_runtime.getAuth(RadiusGateway().providerId(), std::nullopt, {}); auth && *auth) {
+            key = (*auth)->auth.apiKey;
+        }
+        if (auto refreshed = m_radiusCatalog.refresh(radiusGateway(), key, signal); !refreshed) {
+            return refreshed;
+        }
+        return m_runtime.reload();
+    }
+
     /** The Kimi OAuth host override from the environment (KIMI_CODE_OAUTH_HOST or KIMI_OAUTH_HOST); empty for the default. */
     std::string kimiHost() const {
         std::string host = m_platform.environment().get("KIMI_CODE_OAUTH_HOST").value_or("");
@@ -150,6 +171,7 @@ private:
     ConfigValueResolver m_configValues;
     FileCredentialStore m_credentials;
     FileModelsStore m_modelsStore;
+    RadiusCatalog m_radiusCatalog;
     EnvKeyTable m_envKeys;
     GoogleAdcAuth m_adc;
     std::vector<std::unique_ptr<OauthRefreshFlow>> m_flows;

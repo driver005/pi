@@ -144,6 +144,12 @@ private:
             return 1;
         }
         m_out << "Signed in to \"" << provider << "\".\n";
+        if (provider == "radius") {
+            // The gateway's model catalog depends on who is signed in.
+            if (const auto refreshed = m_services.models().refreshRadiusCatalog(); !refreshed) {
+                m_err << "pi: Radius model catalog not refreshed: " << refreshed.error().message << "\n";
+            }
+        }
         return 0;
     }
 

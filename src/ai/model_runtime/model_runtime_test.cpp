@@ -297,6 +297,27 @@ TEST_F(ModelRuntimeTest, RemoteStoreOverlayAddsModelsWhenNewerThanCatalog) {
     EXPECT_FALSE(m_runtime.find("openai", "gpt-new").has_value());
 }
 
+TEST_F(ModelRuntimeTest, RadiusCatalogAppliesWithoutALastModifiedAndReplacesTheBaselineOfOtherGateways) {
+    m_files.writeFile("/cfg/catalog/models.json", R"({"radius":{"base":{"id":"base","name":"Base","api":"faux","baseUrl":"https://radius.pi.dev","provider":"radius"}}})");
+    ModelsStoreEntry entry;
+    entry.models = Json::parse(R"([{"id":"dyn","name":"Dyn","api":"faux","baseUrl":"https://gw/api"},{"id":"base","name":"Renamed","api":"faux","baseUrl":"https://gw/api"}])");
+    entry.checkedAt = 1;
+    ASSERT_TRUE(m_models.write("radius", entry).has_value());
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    ASSERT_TRUE(m_runtime.find("radius", "dyn").has_value());
+    EXPECT_EQ(m_runtime.find("radius", "base")->name, "Renamed");
+
+    ModelRuntime custom(ModelRuntimeConfig{"/cfg/models.json", "/cfg/catalog", "pi", "radius.example.com"}, m_credentials, m_models, m_files, m_providers, m_envKeys, m_configValues, m_clock, {});
+    ASSERT_TRUE(custom.reload().has_value());
+    EXPECT_TRUE(custom.find("radius", "dyn").has_value());
+    EXPECT_EQ(custom.find("radius", "base")->name, "Renamed") << "the stored catalog replaces the generated model of the same id";
+    ASSERT_TRUE(m_models.remove("radius").has_value());
+    ASSERT_TRUE(custom.reload().has_value());
+    EXPECT_FALSE(custom.find("radius", "base").has_value()) << "the generated Radius models belong to the default gateway";
+    ASSERT_TRUE(m_runtime.reload().has_value());
+    EXPECT_TRUE(m_runtime.find("radius", "base").has_value());
+}
+
 TEST_F(ModelRuntimeTest, DeferredResponsesAreFetchedAndCancelledThroughTheProvider) {
     m_environment.set("OPENAI_API_KEY", "sk");
     ASSERT_TRUE(m_runtime.reload().has_value());

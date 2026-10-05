@@ -19,6 +19,7 @@ pi_module(
         "//interfaces/support/model_composer",
         "//interfaces/support/models_config_loader",
         "//interfaces/support/provider_auth_resolver",
+        "//interfaces/support/radius_gateway",
         "//interfaces/support/virtual_model_registry",
         "//interfaces/types/model_runtime_config",
         "//interfaces/types/prepared_request",

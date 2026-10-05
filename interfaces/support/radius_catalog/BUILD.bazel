@@ -1,0 +1,18 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "radius_catalog",
+    deps = [
+        "//interfaces/platform/i_clock",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/provider/i_models_store",
+        "//interfaces/support/radius_gateway",
+    ],
+    test_deps = [
+        "//interfaces/support/header_merger",
+        "//interfaces/types/json",
+        "//src/ai/memory_models_store",
+        "//src/testing/fixed_clock",
+        "//src/testing/scripted_http_client",
+    ],
+)

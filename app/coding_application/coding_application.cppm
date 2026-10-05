@@ -24,6 +24,11 @@ public:
           m_factory(m_services, m_options.startup) {}
 
     Result<void> open() {
+        if (!m_options.faux) {
+            if (const auto refreshed = m_services.models().refreshRadiusCatalog(); !refreshed) {
+                m_startupDiagnostics.push_back(RuntimeDiagnostic{"warning", "Radius model catalog not refreshed: " + refreshed.error().message});
+            }
+        }
         auto manager = openSessionTree();
         if (!manager) {
             return std::unexpected(manager.error());
@@ -51,7 +56,13 @@ public:
     }
 
     std::vector<RuntimeDiagnostic> diagnostics() const {
-        return m_runtime ? m_runtime->diagnostics() : std::vector<RuntimeDiagnostic>{};
+        std::vector<RuntimeDiagnostic> all = m_startupDiagnostics;
+        if (m_runtime) {
+            for (RuntimeDiagnostic& diagnostic : m_runtime->diagnostics()) {
+                all.push_back(std::move(diagnostic));
+            }
+        }
+        return all;
     }
 
     IAgentSessionRuntime* runtime() {
@@ -97,4 +108,5 @@ private:
     CodingServices m_services;
     CodingRuntimeFactory m_factory;
     std::unique_ptr<AgentSessionRuntime> m_runtime;
+    std::vector<RuntimeDiagnostic> m_startupDiagnostics;
 };

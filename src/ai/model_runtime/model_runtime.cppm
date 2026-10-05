@@ -21,6 +21,7 @@ export import pi.support.model_catalog_loader;
 export import pi.support.model_composer;
 export import pi.support.models_config_loader;
 export import pi.support.provider_auth_resolver;
+export import pi.support.radius_gateway;
 export import pi.support.virtual_model_registry;
 export import pi.types.model_runtime_config;
 export import pi.types.prepared_request;
@@ -390,6 +391,9 @@ private:
         for (auto& [providerId, models] : *catalog) {
             base[providerId] = std::move(models);
         }
+        if (!m_config.radiusGateway.empty() && m_radius.normalize(m_config.radiusGateway) != m_radius.normalize(m_radius.defaultGateway())) {
+            base.erase(m_radius.providerId());
+        }
         return base;
     }
 
@@ -407,7 +411,9 @@ private:
                 continue;
             }
             const ModelsStoreEntry& entry = **stored;
-            if (generatedAtMs > 0 && (!entry.lastModified || *entry.lastModified <= generatedAtMs)) {
+            // The Radius catalog is the gateway's own answer, not a copy of the generated one: it always applies.
+            const bool dynamic = id == m_radius.providerId();
+            if (!dynamic && generatedAtMs > 0 && (!entry.lastModified || *entry.lastModified <= generatedAtMs)) {
                 continue;
             }
             base[id] = mergeById(base[id], m_catalogLoader.parseModels(id, entry.models));
@@ -576,6 +582,7 @@ private:
     ModelRuntimeConfig m_config;
     ICredentialStore& m_credentials;
     IModelsStore& m_store;
+    RadiusGateway m_radius;
     IProviderRegistry& m_providers;
     const EnvKeyTable& m_envKeys;
     ConfigValueResolver& m_configValues;

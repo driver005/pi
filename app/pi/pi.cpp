@@ -53,6 +53,11 @@ int main(int argc, char** argv) {
         CodingServices services(options.agentDir,
                                 options.catalogDir.empty() ? options.agentDir + "/catalog" : options.catalogDir,
                                 options.faux);
+        if (!options.faux) {
+            if (const auto refreshed = services.models().refreshRadiusCatalog(); !refreshed) {
+                std::cerr << "pi: Radius model catalog not refreshed: " << refreshed.error().message << "\n";
+            }
+        }
         CodingRuntimeFactory runtimes(services, options.startup);
         PlatformServices& platform = services.platform();
         ServeDependencies dependencies;

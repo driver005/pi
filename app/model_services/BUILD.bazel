@@ -4,6 +4,7 @@ pi_module(
     name = "model_services",
     deps = [
         "//interfaces/support/pi_user_agent",
+        "//interfaces/support/radius_catalog",
         "//app/platform_services",
         "//interfaces/provider/i_credential_store",
         "//interfaces/provider/i_model_runtime",
@@ -31,5 +32,9 @@ pi_module(
         "//src/ai/pi_messages_provider",
         "//src/ai/provider_registry",
         "//src/ai/responses_provider",
+    ],
+    test_deps = [
+        "//interfaces/support/header_merger",
+        "//src/testing/fake_http_server",
     ],
 )
