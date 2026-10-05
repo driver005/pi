@@ -23,7 +23,7 @@ public:
         return {PluginCommandInfo{"deploy", "Deploys", "/plugins/deploy.so"}};
     }
 
-    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>&) override {
+    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>&, IPluginSessionBridge*) override {
         if (name != "deploy") {
             return std::nullopt;
         }

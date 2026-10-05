@@ -82,8 +82,9 @@ public:
         return out;
     }
 
-    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort) override {
+    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort, IPluginSessionBridge* bridge) override {
         PluginCommandEntry entry;
+        const std::thread::id self = std::this_thread::get_id();
         {
             const std::lock_guard<std::mutex> lock(m_mutex);
             const auto found = m_commands.find(name);
@@ -91,8 +92,15 @@ public:
                 return std::nullopt;
             }
             entry = found->second;
+            if (bridge != nullptr) {
+                m_threadBridges[self] = bridge;
+            }
         }
         PiOwnedString raw = entry.handler(entry.userData, PiString{args.data(), args.size()}, reinterpret_cast<const PiAbort*>(abort.get()));
+        if (bridge != nullptr) {
+            const std::lock_guard<std::mutex> lock(m_mutex);
+            m_threadBridges.erase(self);
+        }
         const bool empty = raw.data == nullptr || raw.size == 0;
         const std::string text = takeString(raw);
         if (empty) {
@@ -441,7 +449,8 @@ private:
         IPluginSessionBridge* bridge = nullptr;
         {
             const std::lock_guard<std::mutex> lock(m_mutex);
-            bridge = m_bridge;
+            const auto own = m_threadBridges.find(std::this_thread::get_id());
+            bridge = own != m_threadBridges.end() ? own->second : m_bridge;
         }
         if (bridge == nullptr) {
             return owned(Json{{"error", "session not ready"}});
@@ -973,6 +982,8 @@ private:
     /** Stream-handler providers by API name. */
     std::map<std::string, std::shared_ptr<PluginProvider>> m_streamProviders;
     IPluginSessionBridge* m_bridge = nullptr;
+    /** The session a command running on a thread operates on (commands run for a session of their own, see IPluginCommands::execute). */
+    std::map<std::thread::id, IPluginSessionBridge*> m_threadBridges;
     std::map<std::string, std::shared_ptr<PluginOauthFlow>> m_oauth;
     std::map<std::string, PluginCommandEntry> m_commands;
     std::map<std::string, PluginFlag> m_flags;

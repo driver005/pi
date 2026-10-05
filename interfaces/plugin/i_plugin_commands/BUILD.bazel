@@ -3,6 +3,7 @@ load("//tools:module.bzl", "pi_interface")
 pi_interface(
     name = "i_plugin_commands",
     deps = [
+        "//interfaces/plugin/i_plugin_session_bridge",
         "//interfaces/support/abort_signal",
         "//interfaces/types/plugin_command_info",
         "//interfaces/types/plugin_flag",

@@ -3,6 +3,7 @@ export module pi.serve.durable_session_opener;
 import std;
 export import pi.durable.i_storage;
 export import pi.plugin.i_hook_bus;
+import pi.plugin.i_plugin_commands;
 export import pi.provider.i_model_runtime;
 export import pi.server.i_session_opener;
 export import pi.support.durable_models_service;
@@ -36,9 +37,11 @@ public:
     using HooksSource = std::function<std::shared_ptr<IHookBus>(const std::string& cwd)>;
     /** Reloads the plugins of a directory. */
     using PluginsReload = std::function<Result<void>(const std::string& cwd)>;
+    /** The commands the plugins of a directory registered; they run for the sessions of that directory. */
+    using CommandsSource = std::function<IPluginCommands*(const std::string& cwd)>;
 
     DurableSessionOpener(IModelRuntime& models, StorageOpener storage, std::shared_ptr<ToolSetCache> tools, std::shared_ptr<ResourceSetCache> resources, SettingsSource settings, AgentSeed seed,
-                         DurableModelsService::SelectedListener onSelected, HooksSource hooks = {}, PluginsReload reloadPlugins = {})
+                         DurableModelsService::SelectedListener onSelected, HooksSource hooks = {}, PluginsReload reloadPlugins = {}, CommandsSource commands = {})
         : m_models(models),
           m_storage(std::move(storage)),
           m_tools(std::move(tools)),
@@ -47,7 +50,8 @@ public:
           m_seed(std::move(seed)),
           m_onSelected(std::move(onSelected)),
           m_hooks(std::move(hooks)),
-          m_reloadPlugins(std::move(reloadPlugins)) {}
+          m_reloadPlugins(std::move(reloadPlugins)),
+          m_commands(std::move(commands)) {}
 
     Result<std::shared_ptr<IRoutedSessionHandle>> open(const SessionRecord& record, const ServiceContext&) override {
         auto storage = m_storage(record.directory + "/session.sqlite");
@@ -96,7 +100,7 @@ public:
                 (void)live->install(ToolBridge(tools, cwd).extension("coding-tools"));
             }
         });
-        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }, sessionReload(record.cwd), bus));
+        return std::shared_ptr<IRoutedSessionHandle>(std::make_shared<DurableServedSession>(registry, std::move(harness), *root, m_models, m_onSelected, [tools = m_tools, subscription] { tools->unsubscribe(subscription); }, sessionReload(record.cwd), bus, m_commands ? m_commands(record.cwd) : nullptr, record.cwd));
     }
 
 private:
@@ -116,4 +120,5 @@ private:
     DurableModelsService::SelectedListener m_onSelected;
     HooksSource m_hooks;
     PluginsReload m_reloadPlugins;
+    CommandsSource m_commands;
 };

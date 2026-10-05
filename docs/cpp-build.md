@@ -179,4 +179,4 @@ Shared libraries loaded through a C ABI replace TypeScript extensions: they add 
 
 ## Not yet ported
 
-UI APIs of plugins (`ctx.ui`, renderers, widgets), plugin commands in `pi serve` sessions, the session boundary drafts of plugins (`agent_before_settle`), the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); the dynamic Radius model catalog; custom HTML export themes; the share flow (`gh gist`); the Docker and Vitest half of the evals; codemode (dropped by decision).
+UI APIs of plugins (`ctx.ui`, renderers, widgets), the full session API of plugin commands in `pi serve` sessions (models, tools, settings, tree; see docs/cpp-plugins.md), the session boundary drafts of plugins (`agent_before_settle`), the compaction observations, tree events and the `before_agent_start` system prompt replacement of plugins in durable sessions (see docs/cpp-plugins.md); the dynamic Radius model catalog; custom HTML export themes; the share flow (`gh gist`); the Docker and Vitest half of the evals; codemode (dropped by decision).

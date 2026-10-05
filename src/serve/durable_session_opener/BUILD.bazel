@@ -6,6 +6,7 @@ pi_module(
         "//interfaces/support/session_plugins_service",
         "//interfaces/support/plugin_hook_extension",
         "//interfaces/plugin/i_hook_bus",
+        "//interfaces/plugin/i_plugin_commands",
         "//interfaces/durable/i_storage",
         "//interfaces/provider/i_model_runtime",
         "//interfaces/server/i_session_opener",

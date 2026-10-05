@@ -5,6 +5,7 @@ export import pi.coding_services;
 export import pi.server.i_session_opener;
 export import pi.types.coding_startup_options;
 import pi.durable_toolbox;
+import pi.plugin.i_plugin_commands;
 import pi.durable.sqlite_database;
 import pi.durable.sqlite_storage;
 import pi.serve.durable_session_opener;
@@ -48,7 +49,8 @@ public:
         return std::make_shared<DurableSessionOpener>(
             m_services.models().models(), [this](const std::string& path) { return openStorage(path); }, m_tools, m_resources,
             [this](const std::string& cwd) { return runSettings(cwd); }, [this](const std::string& cwd) { return seed(cwd); },
-            [this](const Model& model) { saveDefault(model); }, [this](const std::string& cwd) { return toolboxFor(cwd).hooks(); }, [this](const std::string& cwd) { return toolboxFor(cwd).reload(); });
+            [this](const Model& model) { saveDefault(model); }, [this](const std::string& cwd) { return toolboxFor(cwd).hooks(); }, [this](const std::string& cwd) { return toolboxFor(cwd).reload(); },
+            [this](const std::string& cwd) -> IPluginCommands* { return &toolboxFor(cwd).commands(); });
     }
 
 private:

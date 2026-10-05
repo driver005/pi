@@ -1,6 +1,7 @@
 export module pi.plugin.i_plugin_commands;
 
 import std;
+export import pi.plugin.i_plugin_session_bridge;
 export import pi.support.abort_signal;
 export import pi.types.plugin_command_info;
 export import pi.types.plugin_flag;
@@ -12,8 +13,13 @@ public:
     virtual ~IPluginCommands() = default;
 
     virtual std::vector<PluginCommandInfo> commands() const = 0;
-    /** True when the command exists; its failure is the Result (the prompt that named it is consumed either way). */
-    virtual std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort) = 0;
+    /**
+     * True when the command exists; its failure is the Result (the prompt that named it is consumed either way). `bridge`, when
+     * given, is the session the command's `session_call`s operate on for the duration of the call (a host shared by several
+     * sessions needs it); null uses the host's own session bridge.
+     */
+    virtual std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort,
+                                                IPluginSessionBridge* bridge) = 0;
 
     virtual std::vector<PluginFlag> flags() const = 0;
     /** Sets a flag from the command line: a boolean flag takes no value ("true"/"false" accepted), a string flag needs one. */

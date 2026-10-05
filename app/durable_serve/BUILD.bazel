@@ -5,6 +5,7 @@ pi_module(
     deps = [
         "//app/coding_services",
         "//app/durable_toolbox",
+        "//interfaces/plugin/i_plugin_commands",
         "//interfaces/server/i_session_opener",
         "//interfaces/support/model_selector",
         "//interfaces/support/package_manager",
@@ -28,5 +29,8 @@ pi_module(
     test_deps = [
         "//src/ai/faux_provider",
     ],
-    data = ["//plugins/hello_tool"],
+    data = [
+        "//plugins/hello_commands",
+        "//plugins/hello_tool",
+    ],
 )

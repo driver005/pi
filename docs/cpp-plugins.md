@@ -122,8 +122,16 @@ for routers (use `list_models`).
 after the first space instead of reaching the model, before the `input` event and even while the agent streams; the prompt is
 answered `Handled`. A command wins over a prompt template of the same name, and names are unique across plugins. A handler that
 returns `{"error"}` makes the prompt fail with that message (TypeScript reports an extension error and swallows the prompt).
-`get_commands` lists them with source `extension`. They are available in `pi rpc` sessions; `pi serve`
-sessions do not dispatch them.
+`get_commands` lists them with source `extension`. They are available in `pi rpc` sessions and in `pi serve` sessions: the
+`pi.agent-controller` service runs a `prompt`, `steer` or `follow-up` message that names a command, before the `input` event, and
+answers `{accepted: false, error: {code: "command_handled"}}` (or `command_failed` with the command's error). The plugins of a
+directory serve all its sessions, so while a command runs its `session_call`s are routed to the session that ran it (a per-thread
+bridge in `PluginHost`, `IPluginCommands::execute`'s `bridge` argument). In a `pi serve` session the session API is the part that
+makes sense over a durable conversation (`DurableSessionBridge`): `appendEntry` writes a `pi.plugin-entry` entry
+(`{customType, data}`, answers the submission id), `sendUserMessage` submits input (steering, or `deliverAs: "followUp"`, while
+busy), `abort`, `waitForIdle`, `isIdle`, `sessionManager.getEntries` (oldest first, at most 1000), `getSessionId` (the
+conversation id) and `getCwd`; every other method answers `{"error"}`. `abort` and cancelling the request cancel a running command.
+Event handlers a command triggers on its own thread (`emit_event`) use the same session.
 
 `register_flag(name, options)` declares `--name` (`{"description"?, "type": "boolean"|"string", "default"?}`) and `get_flag(name)`
 reads its value (`{"value": ...}`: the command line value, else the default, else null). `pi rpc` and `pi serve` accept flags
@@ -203,7 +211,7 @@ are not delivered there. `terminate`, `structuredContent`, the session events an
 
 ## Differences from TypeScript extensions
 
-Not ported: UI APIs (`ctx.ui`, renderers, widgets), `modifyModels` and `getApiKey` of provider OAuth, commands in `pi serve` sessions, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the session boundary drafts (`agent_before_settle`, and the `entries` and `continue` results of `before_agent_start`), `session_start` reasons other than the first load, and the new hooks of the table above in `pi serve` sessions (only the hooks listed under `pi serve` below). They can be added as new host API functions or events without breaking ABI version 1 because
+Not ported: UI APIs (`ctx.ui`, renderers, widgets), `modifyModels` and `getApiKey` of provider OAuth, session replacement from plugins (`newSession`, `switchSession`, `fork`), the mutable `systemPromptOptions` of `before_agent_start` (plugins see and replace the rendered prompt), the session boundary drafts (`agent_before_settle`, and the `entries` and `continue` results of `before_agent_start`), `session_start` reasons other than the first load, and the new hooks of the table above in `pi serve` sessions (only the hooks listed under `pi serve` below). They can be added as new host API functions or events without breaking ABI version 1 because
 the host API struct carries its size.
 
 ## Building a plugin

@@ -3,6 +3,8 @@ export module pi.support.durable_agent_controller_service;
 import std;
 export import pi.chord.i_remote_service;
 export import pi.plugin.i_hook_bus;
+export import pi.plugin.i_plugin_commands;
+export import pi.support.durable_session_bridge;
 export import pi.support.harness;
 export import pi.support.plugin_session_events;
 
@@ -14,13 +16,20 @@ export import pi.support.plugin_session_events;
  * plugins see the input first (`input`: handled input is rejected with code `input_handled`, transformed input replaces
  * the message and images) and a started prompt (`before_agent_start`: the messages plugins add travel as further text
  * blocks of the prompt; a replacement system prompt is not supported, the durable prompt is assembled by the registry).
+ * With plugin commands, a message `/name args` naming one runs it instead of reaching the model (before the input event,
+ * as in AgentSession), with the session calls of the command bridged to this conversation (`DurableSessionBridge`); the
+ * request is answered `accepted: false` with code `command_handled`, or `command_failed` carrying the command's error, and
+ * `abort` cancels a command that is still running.
  */
 export class DurableAgentControllerService : public IRemoteService {
 public:
-    DurableAgentControllerService(Harness& harness, std::shared_ptr<Conversation> conversation, std::shared_ptr<IHookBus> hooks = {})
+    DurableAgentControllerService(Harness& harness, std::shared_ptr<Conversation> conversation, std::shared_ptr<IHookBus> hooks = {},
+                                  IPluginCommands* commands = nullptr, std::string cwd = {})
         : m_harness(harness),
           m_conversation(std::move(conversation)),
-          m_hooks(std::move(hooks)) {
+          m_hooks(std::move(hooks)),
+          m_commands(commands),
+          m_bridge(m_conversation, std::move(cwd)) {
         if (m_hooks) {
             m_events = std::make_unique<PluginSessionEvents>(*m_hooks);
         }
@@ -28,9 +37,9 @@ public:
 
     std::map<std::string, Method> methods() override {
         std::map<std::string, Method> methods;
-        methods["prompt"] = [this](const std::vector<Json>& args, const ServiceContext&) { return submit(args, "reject", "operationId"); };
-        methods["steer"] = [this](const std::vector<Json>& args, const ServiceContext&) { return submit(args, "steer", "entryId"); };
-        methods["followUp"] = [this](const std::vector<Json>& args, const ServiceContext&) { return submit(args, "followUp", "entryId"); };
+        methods["prompt"] = [this](const std::vector<Json>& args, const ServiceContext& context) { return submit(args, "reject", "operationId", context); };
+        methods["steer"] = [this](const std::vector<Json>& args, const ServiceContext& context) { return submit(args, "steer", "entryId", context); };
+        methods["followUp"] = [this](const std::vector<Json>& args, const ServiceContext& context) { return submit(args, "followUp", "entryId", context); };
         methods["cancelQueued"] = [this](const std::vector<Json>& args, const ServiceContext&) { return cancelQueued(args); };
         methods["abort"] = [this](const std::vector<Json>&, const ServiceContext&) { return abort(); };
         methods["compact"] = [this](const std::vector<Json>& args, const ServiceContext&) { return compact(args); };
@@ -43,10 +52,13 @@ public:
     }
 
 private:
-    Result<std::optional<Json>> submit(const std::vector<Json>& args, const std::string& whenBusy, const std::string& key) {
+    Result<std::optional<Json>> submit(const std::vector<Json>& args, const std::string& whenBusy, const std::string& key, const ServiceContext& context) {
         auto content = parseRequest(args);
         if (!content) {
             return std::unexpected(content.error());
+        }
+        if (auto handled = runCommand(*content, key, context)) {
+            return std::optional<Json>(*handled);
         }
         if (m_events) {
             if (auto intercepted = intercept(*content, whenBusy); !intercepted) {
@@ -64,6 +76,38 @@ private:
             return std::optional<Json>(rejected(key, submission.error()));
         }
         return std::optional<Json>(accepted(key, std::to_string((*submission)->id())));
+    }
+
+    /** The answer of a plugin command the text names, run on this conversation; nothing when it names none. */
+    std::optional<Json> runCommand(const Json& content, const std::string& key, const ServiceContext& context) {
+        if (m_commands == nullptr || !content.is_string() || !content.get<std::string>().starts_with("/")) {
+            return std::nullopt;
+        }
+        const std::string text = content.get<std::string>();
+        const std::size_t space = text.find(' ');
+        const std::string name = text.substr(1, space == std::string::npos ? std::string::npos : space - 1);
+        const std::string args = space == std::string::npos ? std::string() : text.substr(space + 1);
+        const auto signal = std::make_shared<AbortSignal>();
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandAbort = signal;
+        }
+        const std::uint64_t listener = context.signal ? context.signal->onAbort([signal] { signal->abort(); }) : 0;
+        const auto outcome = m_commands->execute(name, args, signal, &m_bridge);
+        if (context.signal) {
+            context.signal->removeListener(listener);
+        }
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            m_commandAbort = nullptr;
+        }
+        if (!outcome) {
+            return std::nullopt;
+        }
+        if (!*outcome) {
+            return Json{{"accepted", false}, {key, nullptr}, {"error", Json{{"code", "command_failed"}, {"message", outcome->error().message}}}};
+        }
+        return Json{{"accepted", false}, {key, nullptr}, {"error", Json{{"code", "command_handled"}, {"message", "Handled by the plugin command /" + name}}}};
     }
 
     /** Runs the input and prompt plugin events over `content` in place; nullopt when a plugin handled the input. */
@@ -126,6 +170,14 @@ private:
     }
 
     Result<std::optional<Json>> abort() {
+        std::shared_ptr<AbortSignal> command;
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            command = m_commandAbort;
+        }
+        if (command) {
+            command->abort();
+        }
         if (auto aborted = m_conversation->abort(); !aborted) {
             return std::unexpected(aborted.error());
         }
@@ -252,4 +304,8 @@ private:
     std::shared_ptr<Conversation> m_conversation;
     std::shared_ptr<IHookBus> m_hooks;
     std::unique_ptr<PluginSessionEvents> m_events;
+    IPluginCommands* m_commands;
+    DurableSessionBridge m_bridge;
+    std::mutex m_commandMutex;
+    std::shared_ptr<AbortSignal> m_commandAbort;
 };

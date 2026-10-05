@@ -1,0 +1,13 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "durable_session_bridge",
+    deps = [
+        "//interfaces/plugin/i_plugin_session_bridge",
+        "//interfaces/support/conversation",
+    ],
+    test_deps = [
+        "//interfaces/types/json",
+        "//src/testing/durable_harness_fixture",
+    ],
+)

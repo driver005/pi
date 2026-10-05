@@ -145,3 +145,24 @@ TEST_F(DurableServeTest, ASessionReloadsThePluginsOfItsDirectory) {
     const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
     EXPECT_NE(subscribed.dump().find("Hello, Grace!"), std::string::npos) << subscribed.dump();
 }
+
+TEST_F(DurableServeTest, PluginCommandsRunInDurableSessionsAndWriteToTheirConversation) {
+    m_startup.pluginPaths = {"plugins/hello_commands/libhello_commands.so"};
+    m_startup.noPlugins = false;
+    DurableServe durable(*m_services, m_startup, m_dir + "/agent");
+    auto handle = durable.opener()->open(record(), ServiceContext{});
+    ASSERT_TRUE(handle.has_value()) << handle.error().message;
+    auto attachment = (*handle)->attachClient(ServiceContext{});
+    ASSERT_TRUE(attachment.has_value());
+    const Json note = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "/note ship it"}, {"images", nullptr}});
+    EXPECT_FALSE(note.at("accepted").get<bool>());
+    EXPECT_EQ(note.at("error").at("code"), "command_handled") << note.dump();
+    // `/ping` emits on the event bus; the plugin's own handler appends an entry from the same thread.
+    const Json ping = call(**attachment, "pi.agent-controller", "prompt", Json{{"message", "/ping"}, {"images", nullptr}});
+    EXPECT_EQ(ping.at("error").at("code"), "command_handled") << ping.dump();
+    const Json subscribed = callWith(**attachment, "$chord.service", "subscribe", Json::array({"t", "pi.transcript", "singleton"}));
+    const std::string dump = subscribed.dump();
+    EXPECT_NE(dump.find("pi.plugin-entry"), std::string::npos) << dump;
+    EXPECT_NE(dump.find("note: ship it"), std::string::npos) << dump;
+    EXPECT_NE(dump.find("hello-ping"), std::string::npos) << dump;
+}

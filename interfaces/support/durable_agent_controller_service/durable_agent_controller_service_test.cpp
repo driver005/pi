@@ -6,6 +6,40 @@ import pi.support.hook_bus;
 import pi.support.wait_gate;
 import pi.testing.durable_harness_fixture;
 
+class RecordingCommands : public IPluginCommands {
+public:
+    std::vector<PluginCommandInfo> commands() const override {
+        return {};
+    }
+
+    std::optional<Result<void>> execute(const std::string& name, const std::string& args, const std::shared_ptr<AbortSignal>& abort,
+                                        IPluginSessionBridge* bridge) override {
+        if (name == "wait") {
+            m_started.open();
+            (void)WaitGate().wait({abort.get()});
+            m_aborted = abort->aborted();
+            return Result<void>{};
+        }
+        if (name != "note") {
+            return std::nullopt;
+        }
+        m_args.push_back(args);
+        if (args == "fail") {
+            return Result<void>(std::unexpected(Error{"plugin", "note failed"}));
+        }
+        m_answer = bridge->call("appendEntry", Json{{"customType", "note"}, {"data", Json{{"text", args}}}}, abort.get());
+        return Result<void>{};
+    }
+
+    std::vector<PluginFlag> flags() const override { return {}; }
+    Result<void> setFlag(const std::string&, const std::optional<std::string>&) override { return {}; }
+
+    std::vector<std::string> m_args;
+    Json m_answer;
+    WaitGate m_started;
+    std::atomic<bool> m_aborted{false};
+};
+
 class DurableAgentControllerServiceTest : public ::testing::Test {
 protected:
     DurableAgentControllerServiceTest() {
@@ -209,4 +243,80 @@ TEST_F(DurableAgentControllerPluginTest, SteeringSeesItsStreamingBehaviorAndSkip
     ASSERT_TRUE(steer.at("accepted").get<bool>());
     EXPECT_EQ(seen["streamingBehavior"], "steer");
     EXPECT_FALSE(started);
+}
+
+class DurableAgentControllerServiceCommandsTest : public ::testing::Test {
+protected:
+    DurableAgentControllerServiceCommandsTest() {
+        EXPECT_TRUE(m_fixture.open().has_value());
+        m_service = std::make_unique<DurableAgentControllerService>(m_fixture.harness(), m_fixture.root(), nullptr, &m_commands, "/work");
+        m_methods = m_service->methods();
+    }
+
+    Json call(const std::string& method, const Json& argument) {
+        auto result = m_methods.at(method)({argument}, ServiceContext{std::make_shared<AbortSignal>()});
+        EXPECT_TRUE(result.has_value()) << (result ? "" : result.error().message);
+        return result && *result ? **result : Json(nullptr);
+    }
+
+    Json prompt(const std::string& message) {
+        return call("prompt", Json{{"message", message}, {"images", nullptr}});
+    }
+
+    DurableHarnessFixture m_fixture;
+    RecordingCommands m_commands;
+    std::unique_ptr<DurableAgentControllerService> m_service;
+    std::map<std::string, IRemoteService::Method> m_methods;
+};
+
+TEST_F(DurableAgentControllerServiceCommandsTest, ACommandRunsOnTheConversationInsteadOfReachingTheModel) {
+    const Json response = prompt("/note remember this");
+    EXPECT_FALSE(response.at("accepted").get<bool>());
+    EXPECT_EQ(response.at("error").at("code"), "command_handled");
+    ASSERT_EQ(m_commands.m_args.size(), 1U);
+    EXPECT_EQ(m_commands.m_args[0], "remember this");
+    EXPECT_TRUE(m_commands.m_answer.contains("id")) << m_commands.m_answer.dump();
+    auto page = m_fixture.root()->entries(std::nullopt, std::nullopt, 10);
+    ASSERT_TRUE(page.has_value());
+    ASSERT_EQ(page->items.size(), 1U);
+    EXPECT_EQ(page->items[0].at("kind"), "pi.plugin-entry");
+    EXPECT_EQ(page->items[0].at("data").at("data").at("text"), "remember this");
+}
+
+TEST_F(DurableAgentControllerServiceCommandsTest, AFailingCommandIsReported) {
+    const Json response = prompt("/note fail");
+    EXPECT_FALSE(response.at("accepted").get<bool>());
+    EXPECT_EQ(response.at("error").at("code"), "command_failed");
+    EXPECT_EQ(response.at("error").at("message"), "note failed");
+}
+
+TEST_F(DurableAgentControllerServiceCommandsTest, UnknownCommandsAndPlainTextStillReachTheModel) {
+    m_fixture.faux().enqueue(m_fixture.faux().textResponse("one"));
+    m_fixture.faux().enqueue(m_fixture.faux().textResponse("two"));
+    const Json unknown = prompt("/nothing here");
+    ASSERT_TRUE(unknown.at("accepted").get<bool>());
+    EXPECT_EQ(call("waitForPrompt", unknown.at("operationId")).at("text"), "one");
+    const Json plain = prompt("note this");
+    ASSERT_TRUE(plain.at("accepted").get<bool>());
+    EXPECT_EQ(call("waitForPrompt", plain.at("operationId")).at("text"), "two");
+    EXPECT_TRUE(m_commands.m_args.empty());
+}
+
+TEST_F(DurableAgentControllerServiceCommandsTest, AbortCancelsARunningCommand) {
+    std::thread running([this] { prompt("/wait"); });
+    ASSERT_TRUE(m_commands.m_started.wait({}).has_value());
+    call("abort", Json());
+    running.join();
+    EXPECT_TRUE(m_commands.m_aborted);
+}
+
+TEST_F(DurableAgentControllerServiceCommandsTest, CancellingTheRequestCancelsTheCommand) {
+    const auto signal = std::make_shared<AbortSignal>();
+    std::thread running([&] {
+        (void)m_methods.at("prompt")({Json{{"message", "/wait"}, {"images", nullptr}}}, ServiceContext{signal});
+    });
+    ASSERT_TRUE(m_commands.m_started.wait({}).has_value());
+    signal->abort();
+    running.join();
+    EXPECT_TRUE(m_commands.m_aborted);
 }

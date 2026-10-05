@@ -5,6 +5,8 @@ pi_support(
     deps = [
         "//interfaces/chord/i_remote_service",
         "//interfaces/plugin/i_hook_bus",
+        "//interfaces/plugin/i_plugin_commands",
+        "//interfaces/support/durable_session_bridge",
         "//interfaces/support/harness",
         "//interfaces/support/plugin_session_events",
     ],

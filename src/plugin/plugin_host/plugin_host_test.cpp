@@ -717,6 +717,7 @@ std::vector<int> g_uiResults;
 std::string g_prompted;
 std::string g_refreshInput;
 std::string g_commandArgs;
+std::string g_commandSession;
 std::string g_eventData;
 std::string g_eventChannel;
 
@@ -734,6 +735,7 @@ class PluginHostCommandsTest : public PluginHostTest {
 protected:
     PluginHostCommandsTest() {
         g_commandArgs.clear();
+        g_commandSession.clear();
         g_eventData.clear();
         g_eventChannel.clear();
     }
@@ -744,6 +746,11 @@ protected:
             g_host = host;
             PiCommandFn handler = [](void*, PiString args, const PiAbort*) {
                 g_commandArgs.assign(args.data, args.size);
+                if (g_commandArgs == "session") {
+                    const std::string method = "isIdle";
+                    const std::string params = "{}";
+                    g_commandSession = take(g_host->session_call(g_host->host, view(method), view(params), nullptr));
+                }
                 return g_commandArgs == "boom" ? text(R"({"error":"it broke"})") : PiOwnedString{nullptr, 0, nullptr};
             };
             const std::string name = "greet";
@@ -789,17 +796,17 @@ TEST_F(PluginHostCommandsTest, ACommandRunsWithItsArgumentsAndAnErrorIsReturned)
     EXPECT_EQ(m_host.commands()[0].description, "Greets");
     EXPECT_EQ(m_host.commands()[0].path, "/plugins/c.so");
 
-    const auto ran = m_host.execute("greet", "to you", m_signal);
+    const auto ran = m_host.execute("greet", "to you", m_signal, nullptr);
     ASSERT_TRUE(ran.has_value());
     EXPECT_TRUE(ran->has_value());
     EXPECT_EQ(g_commandArgs, "to you");
 
-    const auto broke = m_host.execute("greet", "boom", m_signal);
+    const auto broke = m_host.execute("greet", "boom", m_signal, nullptr);
     ASSERT_TRUE(broke.has_value());
     ASSERT_FALSE(broke->has_value());
     EXPECT_EQ(broke->error().message, "it broke");
 
-    EXPECT_FALSE(m_host.execute("unknown", "", m_signal).has_value());
+    EXPECT_FALSE(m_host.execute("unknown", "", m_signal, nullptr).has_value());
 }
 
 TEST_F(PluginHostCommandsTest, CommandNamesAreUniqueAndEndWithThePlugin) {
@@ -850,6 +857,23 @@ TEST_F(PluginHostCommandsTest, SessionCallsAnswerNotReadyUntilTheBridgeIsSet) {
     EXPECT_TRUE(bridge.m_calls[1].second.is_object()) << "non-object params become {}";
     m_host.setSessionBridge(nullptr);
     EXPECT_EQ(Json::parse(take(g_host->session_call(g_host->host, view(method), view(params), nullptr)))["error"], "session not ready");
+}
+
+TEST_F(PluginHostCommandsTest, ACommandOperatesOnTheBridgeItWasRunWith) {
+    provideCommandsPlugin("/plugins/c.so");
+    ASSERT_TRUE(m_host.load({"/plugins/c.so"}).empty());
+    RecordingBridge own;
+    RecordingBridge shared;
+    m_host.setSessionBridge(&shared);
+
+    ASSERT_TRUE(m_host.execute("greet", "session", m_signal, &own).has_value());
+    EXPECT_EQ(Json::parse(g_commandSession)["echo"], "isIdle");
+    EXPECT_EQ(own.m_calls.size(), 1U);
+    EXPECT_TRUE(shared.m_calls.empty());
+
+    ASSERT_TRUE(m_host.execute("greet", "session", m_signal, nullptr).has_value());
+    EXPECT_EQ(own.m_calls.size(), 1U) << "the per-command bridge is gone after the command";
+    EXPECT_EQ(shared.m_calls.size(), 1U);
 }
 
 TEST_F(PluginHostCommandsTest, TheEventBusReachesSubscribers) {

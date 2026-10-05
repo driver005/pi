@@ -151,6 +151,11 @@ public:
         return m_hooks;
     }
 
+    /** The commands the directory's plugins registered (valid for the toolbox's life; empty once the plugins shut down). */
+    IPluginCommands& commands() {
+        return m_plugins;
+    }
+
     std::vector<std::string> diagnostics() const {
         const std::lock_guard<std::mutex> lock(m_listenerMutex);
         return m_diagnostics;

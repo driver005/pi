@@ -1265,7 +1265,7 @@ private:
             const std::lock_guard<std::mutex> lock(m_commandMutex);
             m_commandAbort = signal;
         }
-        const auto outcome = m_config.commands->execute(name, args, signal);
+        const auto outcome = m_config.commands->execute(name, args, signal, nullptr);
         {
             const std::lock_guard<std::mutex> lock(m_commandMutex);
             m_commandAbort = nullptr;
