@@ -4,9 +4,13 @@ pi_support(
     name = "html_exporter",
     deps = [
         "//interfaces/platform/i_base64_codec",
+        "//interfaces/support/export_themes",
         "//interfaces/types/export_assets",
         "//interfaces/types/json",
         "//interfaces/types/result",
     ],
-    test_deps = ["//src/base/base64_codec"],
+    test_deps = [
+        "//src/base/base64_codec",
+        "//src/testing/fake_file_system",
+    ],
 )

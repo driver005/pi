@@ -9,7 +9,7 @@ import pi.support.path_resolver;
 import pi.support.session_export_data;
 
 /**
- * `pi export <session.jsonl> [output.html] [--theme dark|light]`: writes a session file as a self-contained HTML page (HtmlExporter),
+ * `pi export <session.jsonl> [output.html] [--theme <name>]`: writes a session file as a self-contained HTML page (HtmlExporter),
  * by default `pi-session-<file name>.html` in the working directory. Like TypeScript's `--export`, the page has the conversation and
  * its tree but no system prompt or tool list, which only a live session knows. Returns the process exit code.
  */
@@ -34,7 +34,10 @@ public:
             return 1;
         }
         const EmbeddedExportAssets assets;
-        const auto html = HtmlExporter(assets.assets(), platform.base64()).render(SessionExportData().build(**session, std::nullopt, std::nullopt), line.exportTheme);
+        // Like TypeScript's exportFromFile, custom themes come from the agent directory only.
+        const ExportAssets files = assets.assets();
+        ExportThemes themes(files.themesJson, platform.files(), {line.options.agentDir + "/themes"});
+        const auto html = HtmlExporter(files, platform.base64(), themes).render(SessionExportData().build(**session, std::nullopt, std::nullopt), line.exportTheme);
         if (!html) {
             m_err << "pi: " << html.error().message << "\n";
             return 1;

@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "oklab_converter",
+    deps = ["//interfaces/types/rgb_color"],
+)

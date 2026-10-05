@@ -18,3 +18,10 @@ filegroup(
     srcs = ["ts_evals_golden.json"],
     visibility = ["//visibility:public"],
 )
+
+# Same, for the HTML export's custom themes (see tools/ts_theme_golden.mts).
+filegroup(
+    name = "themes",
+    srcs = ["ts_theme_golden.json"],
+    visibility = ["//visibility:public"],
+)

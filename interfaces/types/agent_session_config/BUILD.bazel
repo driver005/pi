@@ -8,6 +8,7 @@ pi_interface(
         "//interfaces/platform/i_environment",
         "//interfaces/platform/i_file_system",
         "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_process_runner",
         "//interfaces/platform/i_system_info",
         "//interfaces/platform/i_id_generator",
         "//interfaces/platform/i_sleeper",

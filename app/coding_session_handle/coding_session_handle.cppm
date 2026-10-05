@@ -238,6 +238,7 @@ private:
         config.agentDir = m_agentDir;
         config.system = &platform.system();
         config.http = &platform.http();
+        config.processes = &platform.processes();
         config.plugins = [this] { return m_plugins.loaded(); };
         config.commands = &m_plugins;
         config.exportAssets = &m_exportAssets;

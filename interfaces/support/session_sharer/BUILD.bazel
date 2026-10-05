@@ -1,0 +1,24 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "session_sharer",
+    deps = [
+        "//interfaces/platform/i_environment",
+        "//interfaces/platform/i_file_system",
+        "//interfaces/platform/i_http_client",
+        "//interfaces/platform/i_id_generator",
+        "//interfaces/platform/i_process_runner",
+        "//interfaces/support/abort_signal",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/share_outcome",
+    ],
+    test_deps = [
+        "//interfaces/support/header_merger",
+        "//src/testing/fake_environment",
+        "//src/testing/fake_file_system",
+        "//src/testing/scripted_http_client",
+        "//src/testing/scripted_process_runner",
+        "//src/testing/sequential_id_generator",
+    ],
+)

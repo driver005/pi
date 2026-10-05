@@ -13,6 +13,7 @@ import pi.testing.fake_resource_loader;
 import pi.testing.fake_settings_manager;
 import pi.testing.fake_system_info;
 import pi.testing.scripted_http_client;
+import pi.testing.scripted_process_runner;
 import pi.testing.scripted_tool;
 import pi.testing.session_harness;
 import pi.tools.tool_registry;
@@ -72,6 +73,7 @@ protected:
             config.agentDir = "/agent";
             config.system = &m_systemInfo;
             config.http = &m_http;
+            config.processes = &m_processes;
             config.environment = &m_environment;
             config.plugins = [] { return std::vector<std::string>{"/plugins/libhello.so"}; };
         }
@@ -126,6 +128,7 @@ protected:
     bool m_withBugReports = false;
     FakeSystemInfo m_systemInfo;
     ScriptedHttpClient m_http;
+    ScriptedProcessRunner m_processes{[](const ProcessRequest&) -> Result<ProcessResult> { return std::unexpected(Error{"spawn", "gh is not installed here"}); }};
     SessionHarness m_harness;
     FakeSettingsManager m_settings{Json{{"retry", Json{{"enabled", true}, {"maxRetries", 2}, {"baseDelayMs", 10}}},
                                         {"compaction", Json{{"keepRecentTokens", 500}, {"reserveTokens", 1000}}}}};
@@ -216,6 +219,53 @@ TEST_F(AgentSessionTest, BugReportsNeedAHostThatSupportsThem) {
     const auto result = m_session->reportBug(Json{{"delivery", "zip"}});
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, "unsupported");
+}
+
+TEST_F(AgentSessionTest, SharingNeedsAHostThatSupportsIt) {
+    const auto result = m_session->shareSession(Json::object());
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, "unsupported");
+}
+
+TEST_F(AgentSessionTest, SharingUploadsTheBranchWithItsPromptAndToolsToRadiusWhenSignedIn) {
+    m_withBugReports = true;
+    rebuild();
+    m_models.setAuthenticated("radius", true);
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
+    HttpResponse reply;
+    reply.status = 200;
+    reply.body = R"({"artifact":{"canonical_url":"https://radius.pi.dev/a/9"}})";
+    m_http.enqueue(reply);
+    const auto shared = m_session->shareSession(Json::object());
+    ASSERT_TRUE(shared.has_value()) << shared.error().message;
+    EXPECT_EQ((*shared)["via"], "radius");
+    EXPECT_EQ((*shared)["url"], "https://radius.pi.dev/a/9");
+    ASSERT_EQ(m_http.requests().size(), 1U);
+    const std::string body = m_http.requests()[0].body;
+    std::vector<Json> lines;
+    std::istringstream stream(body);
+    for (std::string line; std::getline(stream, line);) {
+        lines.push_back(Json::parse(line));
+    }
+    ASSERT_GE(lines.size(), 3U);
+    EXPECT_EQ(lines[0]["type"], "session");
+    const Json& trailing = lines.back();
+    EXPECT_EQ(trailing["customType"], "pi.share");
+    EXPECT_EQ(trailing["parentId"], lines[lines.size() - 2]["id"]);
+    EXPECT_FALSE(trailing["data"]["systemPrompt"].get<std::string>().empty());
+    EXPECT_EQ(trailing["data"]["tools"][0]["name"], "read");
+    EXPECT_EQ(m_processes.calls(), 0);
+}
+
+TEST_F(AgentSessionTest, SharingWithoutRadiusNeedsTheGitHubCli) {
+    m_withBugReports = true;
+    rebuild();
+    const auto shared = m_session->shareSession(Json::object());
+    ASSERT_FALSE(shared.has_value());
+    EXPECT_EQ(shared.error().message, "GitHub CLI (gh) is not installed. Install it from https://cli.github.com/");
+    EXPECT_TRUE(m_http.requests().empty());
 }
 
 TEST_F(AgentSessionTest, ABugReportDescribesTheSessionAndIsRecordedInIt) {

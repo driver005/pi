@@ -164,6 +164,10 @@ private:
             auto filed = m_runtime.session().reportBug(c);
             return filed ? success(c, "bug_report", *filed) : failure(c, "bug_report", filed.error().message);
         };
+        m_handlers["share_session"] = [this](const Json& c) {
+            auto shared = m_runtime.session().shareSession(c);
+            return shared ? success(c, "share_session", *shared) : failure(c, "share_session", shared.error().message);
+        };
         m_handlers["export_html"] = [this](const Json& c) {
             const std::string path = text(c, "outputPath");
             const auto written = m_runtime.session().exportHtml(path.empty() ? std::nullopt : std::optional<std::string>(path), text(c, "theme"));

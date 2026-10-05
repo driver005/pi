@@ -4,6 +4,7 @@ import std;
 export import pi.platform.i_base64_codec;
 export import pi.platform.i_environment;
 export import pi.platform.i_http_client;
+export import pi.platform.i_process_runner;
 export import pi.platform.i_system_info;
 export import pi.agent.i_agent_factory;
 export import pi.platform.i_clock;
@@ -58,6 +59,8 @@ export struct AgentSessionConfig {
     std::string agentDir = "";
     const ISystemInfo* system = nullptr;
     IHttpClient* http = nullptr;
+    /** Child processes for sharing a session through the GitHub CLI. */
+    IProcessRunner* processes = nullptr;
     /** Paths of the plugins that are loaded, for bug reports. */
     std::function<std::vector<std::string>()> plugins = nullptr;
     /** The HTML export (`exportHtml`): its template files and a base64 codec; without them exporting fails. */

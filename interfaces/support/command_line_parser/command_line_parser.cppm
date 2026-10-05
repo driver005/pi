@@ -69,7 +69,7 @@ public:
             }
         }
         if (line.command == "export" && (line.arguments.empty() || line.arguments.size() > 2)) {
-            return std::unexpected(Error{"usage", "Usage: pi export <session.jsonl> [output.html] [--theme dark|light]"});
+            return std::unexpected(Error{"usage", "Usage: pi export <session.jsonl> [output.html] [--theme <name>]"});
         }
         if (line.command == "auth") {
             if (auto valid = validateAuth(line.arguments); !valid) {
@@ -89,7 +89,7 @@ public:
                "serve  Serves the Pi protocol (CBOR) on a unix socket in the server directory.\n"
                "mcp    pi mcp list | login <server> | logout <server>: MCP server sign-in (OAuth).\n"
                "auth   pi auth list | status | login <provider> | logout <provider>: sign in to subscription providers.\n"
-               "export  pi export <session.jsonl> [output.html]: write a session as a self-contained HTML page (--theme dark|light).\n"
+               "export  pi export <session.jsonl> [output.html]: write a session as a self-contained HTML page (--theme dark, light or a custom theme).\n"
                "evals   pi evals plan|report|observe: plan, read and compare documentation evals (--model, --runs).\n"
                "install, remove, update, list   pi install|remove <source> [-l], pi update [source], pi list: manage packages\n"
                "                                (skills, prompt templates and plugins from git repositories and local directories).\n"

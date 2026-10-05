@@ -42,6 +42,7 @@ import pi.support.summary_generator;
 import pi.support.virtual_model_names;
 import pi.support.error_stream_factory;
 import pi.support.html_exporter;
+import pi.support.session_sharer;
 import pi.support.path_resolver;
 import pi.support.session_export_data;
 import pi.support.transcript_normalizer;
@@ -500,6 +501,62 @@ public:
     }
 
     Result<std::string> exportHtml(const std::optional<std::string>& outputPath, const std::string& theme) override {
+        auto html = renderHtml(theme);
+        if (!html) {
+            return std::unexpected(html.error());
+        }
+        const std::optional<std::string> file = m_config.session.sessionFile();
+        const PathResolver paths(m_config.files.homeDirectory());
+        const std::string name = "pi-session-" + std::filesystem::path(*file).stem().string() + ".html";
+        const std::string target = paths.resolveToCwd(outputPath.value_or(name), m_config.cwd);
+        if (auto written = m_config.files.writeFile(target, *html); !written) {
+            return std::unexpected(written.error());
+        }
+        return target;
+    }
+
+    Result<Json> shareSession(const Json& options) override {
+        if (m_config.http == nullptr || m_config.processes == nullptr || m_config.environment == nullptr) {
+            return std::unexpected(Error{"unsupported", "Sharing is not available in this host"});
+        }
+        const std::string theme = options.is_object() && options.value("theme", Json()).is_string() ? options["theme"].get<std::string>() : std::string();
+        Json tools = Json::array();
+        for (const ToolInfo& tool : allTools()) {
+            if (tool.active) {
+                tools.push_back(Json{{"name", tool.name}, {"description", tool.description}, {"parameters", tool.parameters}});
+            }
+        }
+        // The viewer reads the system prompt and the tool schemas from a trailing `pi.share` entry.
+        const std::string prompt = systemPrompt();
+        const std::string entryId = m_config.ids.next();
+        const auto trailing = [&](const std::optional<std::string>& parentId, const std::string& timestamp) {
+            return std::vector<Json>{Json{{"type", "custom"},
+                                          {"customType", "pi.share"},
+                                          {"id", entryId.substr(entryId.size() > 8 ? entryId.size() - 8 : 0)},
+                                          {"parentId", parentId ? Json(*parentId) : Json(nullptr)},
+                                          {"timestamp", timestamp},
+                                          {"data", Json{{"systemPrompt", prompt}, {"tools", tools}}}}};
+        };
+        const std::string jsonl = SessionBranchSerializer(m_config.clock).serialize(m_config.session.sessionId(), m_config.cwd, m_config.session.branchPath(), trailing);
+        const RadiusGateway radius;
+        std::optional<std::string> token;
+        if (const auto auth = m_config.models.getAuth(radius.providerId()); auth && auth->has_value()) {
+            token = (*auth)->auth.apiKey;
+        }
+        auto shared = SessionSharer(*m_config.http, *m_config.processes, m_config.files, *m_config.environment, m_config.ids)
+                          .share(jsonl, [&] { return renderHtml(theme); }, token, nullptr);
+        if (!shared) {
+            return std::unexpected(shared.error());
+        }
+        Json out = Json{{"via", shared->via}, {"url", shared->url}};
+        if (shared->gistUrl) {
+            out["gistUrl"] = *shared->gistUrl;
+        }
+        return out;
+    }
+
+    /** The session as a self-contained HTML page; the checks and errors of `exportHtml`. */
+    Result<std::string> renderHtml(const std::string& theme) {
         if (m_config.exportAssets == nullptr || m_config.base64 == nullptr) {
             return std::unexpected(Error{"unsupported", "HTML export is not available in this host"});
         }
@@ -517,17 +574,14 @@ public:
             }
         }
         const Json data = SessionExportData().build(m_config.session, systemPrompt(), tools);
-        auto html = HtmlExporter(m_config.exportAssets->assets(), *m_config.base64).render(data, theme);
-        if (!html) {
-            return std::unexpected(html.error());
+        // Custom themes: the agent directory's, and the project's when the project is trusted.
+        std::vector<std::string> themeDirectories{m_config.agentDir + "/themes"};
+        if (m_config.settings.projectTrusted()) {
+            themeDirectories.push_back(m_config.cwd + "/.pi/themes");
         }
-        const PathResolver paths(m_config.files.homeDirectory());
-        const std::string name = "pi-session-" + std::filesystem::path(*file).stem().string() + ".html";
-        const std::string target = paths.resolveToCwd(outputPath.value_or(name), m_config.cwd);
-        if (auto written = m_config.files.writeFile(target, *html); !written) {
-            return std::unexpected(written.error());
-        }
-        return target;
+        const ExportAssets assets = m_config.exportAssets->assets();
+        ExportThemes themes(assets.themesJson, m_config.files, std::move(themeDirectories));
+        return HtmlExporter(assets, *m_config.base64, themes).render(data, theme);
     }
 
     Result<Json> reportBug(const Json& options) override {

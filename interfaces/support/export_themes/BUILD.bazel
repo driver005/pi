@@ -1,0 +1,12 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "export_themes",
+    deps = [
+        "//interfaces/platform/i_file_system",
+        "//interfaces/support/export_theme_resolver",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+    ],
+    test_deps = ["//src/testing/fake_file_system"],
+)

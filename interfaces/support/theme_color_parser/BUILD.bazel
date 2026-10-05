@@ -1,0 +1,11 @@
+load("//tools:module.bzl", "pi_support")
+
+pi_support(
+    name = "theme_color_parser",
+    deps = [
+        "//interfaces/support/oklab_converter",
+        "//interfaces/types/json",
+        "//interfaces/types/result",
+        "//interfaces/types/theme_color",
+    ],
+)

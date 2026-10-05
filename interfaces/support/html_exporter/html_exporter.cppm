@@ -2,6 +2,7 @@ export module pi.support.html_exporter;
 
 import std;
 export import pi.platform.i_base64_codec;
+export import pi.support.export_themes;
 export import pi.types.export_assets;
 export import pi.types.json;
 export import pi.types.result;
@@ -9,25 +10,25 @@ export import pi.types.result;
 /**
  * Renders a session as one self-contained HTML page: the template with the theme's CSS variables, the page and card colors, the
  * session data (header, entries, leaf, system prompt, tools) as base64 JSON, and the inlined libraries; the page's own script draws
- * the conversation and its tree in the browser. The built-in themes `dark` and `light` come with the assets (their colors are
- * resolved from the TypeScript themes by tools/ts_export_themes.mts); custom themes are not supported. Port of generateHtml in
+ * the conversation and its tree in the browser. The theme is looked up by name in ExportThemes: the built-in `dark` and `light`
+ * (resolved from the TypeScript themes by tools/ts_export_themes.mts) and custom theme files. Port of generateHtml in
  * core/export-html/index.ts. Placeholders are replaced in one pass over the template, so text a replacement contains is never
  * taken for a placeholder.
  */
 export class HtmlExporter {
 public:
-    HtmlExporter(ExportAssets assets, const IBase64Codec& base64)
+    HtmlExporter(ExportAssets assets, const IBase64Codec& base64, ExportThemes& themes)
         : m_assets(std::move(assets)),
-          m_base64(base64) {}
+          m_base64(base64),
+          m_themes(themes) {}
 
     /** `themeName` empty selects `dark`. */
     Result<std::string> render(const Json& sessionData, const std::string& themeName) const {
-        const Json themes = Json::parse(m_assets.themesJson, nullptr, false);
-        const std::string name = themeName.empty() ? "dark" : themeName;
-        if (!themes.is_object() || !themes.contains(name)) {
-            return std::unexpected(Error{"unknown_theme", "Unknown theme \"" + name + "\" (available: " + available(themes) + ")"});
+        auto found = m_themes.find(themeName.empty() ? "dark" : themeName);
+        if (!found) {
+            return std::unexpected(found.error());
         }
-        const Json& theme = themes[name];
+        const Json& theme = *found;
         const Json& colors = theme["colors"];
         const Json& exportColors = theme["export"];
         std::string vars;
@@ -70,16 +71,7 @@ private:
         return out + text.substr(std::min(position, text.size()));
     }
 
-    std::string available(const Json& themes) const {
-        std::string names;
-        if (themes.is_object()) {
-            for (const auto& entry : themes.items()) {
-                names += (names.empty() ? "" : ", ") + entry.key();
-            }
-        }
-        return names;
-    }
-
     ExportAssets m_assets;
     const IBase64Codec& m_base64;
+    ExportThemes& m_themes;
 };

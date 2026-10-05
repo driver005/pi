@@ -136,6 +136,13 @@ public:
      */
     virtual Result<std::string> exportHtml(const std::optional<std::string>& outputPath, const std::string& theme) = 0;
 
+    /**
+     * Shares the session (SessionSharer): `{theme?}` answers `{via: "radius" | "gist", url, gistUrl?}`. A signed-in Radius account
+     * gets an artifact upload of the current branch (with a trailing `pi.share` entry holding the system prompt and the active
+     * tool schemas); otherwise the session is exported as HTML to a private gist through the GitHub CLI.
+     */
+    virtual Result<Json> shareSession(const Json& options) = 0;
+
     /** Prompt templates and skills a prompt can invoke by name. */
     virtual std::vector<SlashCommandInfo> slashCommands() const = 0;
 

@@ -433,6 +433,27 @@ TEST_F(CodingSessionHandleTest, ExportsAPersistedSessionAsHtml) {
     ASSERT_TRUE(relative.has_value());
     EXPECT_EQ(*relative, m_cwd + "/rel.html") << "relative paths count from the session's cwd";
     EXPECT_EQ(handle.session().exportHtml(std::nullopt, "mauve").error().code, "unknown_theme");
+
+    // A custom theme of the agent directory.
+    Json colors = Json::object();
+    for (const char* token : {"accent", "border", "borderAccent", "borderMuted", "success", "error", "warning", "muted", "dim", "text", "thinkingText",
+                              "selectedBg", "userMessageBg", "userMessageText", "customMessageBg", "customMessageText", "customMessageLabel", "toolPendingBg",
+                              "toolSuccessBg", "toolErrorBg", "toolTitle", "toolOutput", "mdHeading", "mdLink", "mdLinkUrl", "mdCode", "mdCodeBlock",
+                              "mdCodeBlockBorder", "mdQuote", "mdQuoteBorder", "mdHr", "mdListBullet", "toolDiffAdded", "toolDiffRemoved", "toolDiffContext",
+                              "syntaxComment", "syntaxKeyword", "syntaxFunction", "syntaxVariable", "syntaxString", "syntaxNumber", "syntaxType",
+                              "syntaxOperator", "syntaxPunctuation", "thinkingOff", "thinkingMinimal", "thinkingLow", "thinkingMedium", "thinkingHigh",
+                              "thinkingXhigh", "bashMode"}) {
+        colors[token] = "#102030";
+    }
+    colors["accent"] = "okhsl(0 0 1)";
+    std::filesystem::create_directories(m_dir + "/agent/themes");
+    std::ofstream(m_dir + "/agent/themes/mauve.json") << Json{{"name", "mauve"}, {"colors", colors}}.dump();
+    const auto custom = handle.session().exportHtml("custom.html", "mauve");
+    ASSERT_TRUE(custom.has_value()) << custom.error().message;
+    std::ifstream customIn(*custom);
+    const std::string customHtml((std::istreambuf_iterator<char>(customIn)), std::istreambuf_iterator<char>());
+    EXPECT_NE(customHtml.find("--accent: #ffffff;"), std::string::npos) << "okhsl(0 0 1) is white";
+    EXPECT_NE(customHtml.find("--text: #102030;"), std::string::npos);
 }
 
 TEST_F(CodingSessionHandleTest, InMemorySessionsCannotBeExported) {

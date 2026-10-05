@@ -1,0 +1,6 @@
+load("//tools:module.bzl", "pi_interface")
+
+pi_interface(
+    name = "theme_color",
+    deps = ["//interfaces/types/rgb_color"],
+)

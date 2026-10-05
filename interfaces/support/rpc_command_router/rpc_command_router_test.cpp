@@ -183,6 +183,10 @@ TEST_F(RpcCommandRouterTest, BashCompactAndStatsCommands) {
     const Json stats = send(Json{{"type", "get_session_stats"}})["data"];
     EXPECT_EQ(stats["totalMessages"], 1);
     EXPECT_EQ(send(Json{{"type", "export_html"}})["success"], false);
+    const Json share = send(Json{{"type", "share_session"}});
+    EXPECT_EQ(share["success"], false);
+    EXPECT_EQ(share["command"], "share_session");
+    EXPECT_EQ(share["error"], "Sharing is not available in this host");
     const Json bug = send(Json{{"type", "bug_report"}, {"delivery", "zip"}});
     EXPECT_EQ(bug["success"], false);
     EXPECT_EQ(bug["command"], "bug_report");
