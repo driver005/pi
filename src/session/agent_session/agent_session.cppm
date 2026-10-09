@@ -519,69 +519,27 @@ public:
         if (m_config.http == nullptr || m_config.processes == nullptr || m_config.environment == nullptr) {
             return std::unexpected(Error{"unsupported", "Sharing is not available in this host"});
         }
+        if (m_config.session.branchPath().empty()) {
+            return std::unexpected(Error{"share_failed", "Nothing to share yet - start a conversation first"});
+        }
+        auto token = radiusToken();
+        if (!token) {
+            return std::unexpected(token.error());
+        }
         const std::string theme = options.is_object() && options.value("theme", Json()).is_string() ? options["theme"].get<std::string>() : std::string();
-        Json tools = Json::array();
-        for (const ToolInfo& tool : allTools()) {
-            if (tool.active) {
-                tools.push_back(Json{{"name", tool.name}, {"description", tool.description}, {"parameters", tool.parameters}});
-            }
-        }
-        // The viewer reads the system prompt and the tool schemas from a trailing `pi.share` entry.
-        const std::string prompt = systemPrompt();
-        const std::string entryId = m_config.ids.next();
-        const auto trailing = [&](const std::optional<std::string>& parentId, const std::string& timestamp) {
-            return std::vector<Json>{Json{{"type", "custom"},
-                                          {"customType", "pi.share"},
-                                          {"id", entryId.substr(entryId.size() > 8 ? entryId.size() - 8 : 0)},
-                                          {"parentId", parentId ? Json(*parentId) : Json(nullptr)},
-                                          {"timestamp", timestamp},
-                                          {"data", Json{{"systemPrompt", prompt}, {"tools", tools}}}}};
-        };
-        const std::string jsonl = SessionBranchSerializer(m_config.clock).serialize(m_config.session.sessionId(), m_config.cwd, m_config.session.branchPath(), trailing);
-        const RadiusGateway radius;
-        std::optional<std::string> token;
-        if (const auto auth = m_config.models.getAuth(radius.providerId()); auth && auth->has_value()) {
-            token = (*auth)->auth.apiKey;
-        }
+        const auto signal = std::make_shared<AbortSignal>();
+        setShareAbort(signal);
         auto shared = SessionSharer(*m_config.http, *m_config.processes, m_config.files, *m_config.environment, m_config.ids)
-                          .share(jsonl, [&] { return renderHtml(theme); }, token, nullptr);
+                          .share(shareJsonl(), [&] { return renderHtml(theme); }, *token, signal);
+        setShareAbort(nullptr);
         if (!shared) {
             return std::unexpected(shared.error());
         }
-        Json out = Json{{"via", shared->via}, {"url", shared->url}};
+        Json out = Json{{"via", shared->route == ShareRoute::Radius ? "radius" : "gist"}, {"url", shared->url}};
         if (shared->gistUrl) {
             out["gistUrl"] = *shared->gistUrl;
         }
         return out;
-    }
-
-    /** The session as a self-contained HTML page; the checks and errors of `exportHtml`. */
-    Result<std::string> renderHtml(const std::string& theme) {
-        if (m_config.exportAssets == nullptr || m_config.base64 == nullptr) {
-            return std::unexpected(Error{"unsupported", "HTML export is not available in this host"});
-        }
-        const std::optional<std::string> file = m_config.session.sessionFile();
-        if (!file || !m_config.session.isPersisted()) {
-            return std::unexpected(Error{"export_failed", "Cannot export in-memory session to HTML"});
-        }
-        if (!m_config.files.exists(*file)) {
-            return std::unexpected(Error{"export_failed", "Nothing to export yet - start a conversation first"});
-        }
-        Json tools = Json::array();
-        for (const ToolInfo& tool : allTools()) {
-            if (tool.active) {
-                tools.push_back(Json{{"name", tool.name}, {"description", tool.description}, {"parameters", tool.parameters}});
-            }
-        }
-        const Json data = SessionExportData().build(m_config.session, systemPrompt(), tools);
-        // Custom themes: the agent directory's, and the project's when the project is trusted.
-        std::vector<std::string> themeDirectories{m_config.agentDir + "/themes"};
-        if (m_config.settings.projectTrusted()) {
-            themeDirectories.push_back(m_config.cwd + "/.pi/themes");
-        }
-        const ExportAssets assets = m_config.exportAssets->assets();
-        ExportThemes themes(assets.themesJson, m_config.files, std::move(themeDirectories));
-        return HtmlExporter(assets, *m_config.base64, themes).render(data, theme);
     }
 
     Result<Json> reportBug(const Json& options) override {
@@ -1327,6 +1285,70 @@ private:
         return outcome;
     }
 
+    /** The schemas of the active tools, as the HTML export and the share viewer show them. */
+    Json activeToolSchemas() {
+        Json tools = Json::array();
+        for (const ToolInfo& tool : allTools()) {
+            if (tool.active) {
+                tools.push_back(Json{{"name", tool.name}, {"description", tool.description}, {"parameters", tool.parameters}});
+            }
+        }
+        return tools;
+    }
+
+    /** The session as a self-contained HTML page; the checks and errors of `exportHtml`. */
+    Result<std::string> renderHtml(const std::string& theme) {
+        if (m_config.exportAssets == nullptr || m_config.base64 == nullptr) {
+            return std::unexpected(Error{"unsupported", "HTML export is not available in this host"});
+        }
+        const std::optional<std::string> file = m_config.session.sessionFile();
+        if (!file || !m_config.session.isPersisted()) {
+            return std::unexpected(Error{"export_failed", "Cannot export in-memory session to HTML"});
+        }
+        if (!m_config.files.exists(*file)) {
+            return std::unexpected(Error{"export_failed", "Nothing to export yet - start a conversation first"});
+        }
+        const Json data = SessionExportData().build(m_config.session, systemPrompt(), activeToolSchemas());
+        // Custom themes: the agent directory's, and the project's when the project is trusted.
+        std::vector<std::string> themeDirectories{m_config.agentDir + "/themes"};
+        if (m_config.settings.projectTrusted()) {
+            themeDirectories.push_back(m_config.cwd + "/.pi/themes");
+        }
+        const ExportAssets assets = m_config.exportAssets->assets();
+        ExportThemes themes(assets.themesJson, m_config.files, std::move(themeDirectories));
+        return HtmlExporter(assets, *m_config.base64, themes).render(data, theme);
+    }
+
+    /** The current branch as JSONL with the trailing `pi.share` entry (system prompt and tool schemas) the viewer reads. */
+    std::string shareJsonl() {
+        const Json tools = activeToolSchemas();
+        const std::string prompt = systemPrompt();
+        const std::string entryId = m_config.ids.next();
+        const auto trailing = [&](const std::optional<std::string>& parentId, const std::string& timestamp) {
+            return std::vector<Json>{Json{{"type", "custom"},
+                                          {"customType", "pi.share"},
+                                          {"id", entryId.substr(entryId.size() > 8 ? entryId.size() - 8 : 0)},
+                                          {"parentId", parentId ? Json(*parentId) : Json(nullptr)},
+                                          {"timestamp", timestamp},
+                                          {"data", Json{{"systemPrompt", prompt}, {"tools", tools}}}}};
+        };
+        return SessionBranchSerializer(m_config.clock).serialize(m_config.session.sessionId(), m_config.cwd, m_config.session.branchPath(), trailing);
+    }
+
+    /** The token of the signed-in Radius account: nothing without one; an error when there is a credential that cannot be used. */
+    Result<std::optional<std::string>> radiusToken() {
+        const auto auth = m_config.models.getAuth(RadiusGateway().providerId());
+        if (!auth) {
+            return std::unexpected(auth.error());
+        }
+        return auth->has_value() ? (*auth)->auth.apiKey : std::nullopt;
+    }
+
+    void setShareAbort(const std::shared_ptr<AbortSignal>& signal) {
+        const std::lock_guard<std::mutex> lock(m_commandMutex);
+        m_shareAbort = signal;
+    }
+
     void abortPluginCommand() {
         std::shared_ptr<AbortSignal> signal;
         {
@@ -1335,6 +1357,14 @@ private:
         }
         if (signal) {
             signal->abort();
+        }
+        std::shared_ptr<AbortSignal> share;
+        {
+            const std::lock_guard<std::mutex> lock(m_commandMutex);
+            share = m_shareAbort;
+        }
+        if (share) {
+            share->abort();
         }
     }
 
@@ -1380,6 +1410,8 @@ private:
     std::atomic<bool> m_runActive{false};
     std::mutex m_commandMutex;
     std::shared_ptr<AbortSignal> m_commandAbort;
+    /** Cancels the share in progress (a gist or an upload); `abort()` fires it. */
+    std::shared_ptr<AbortSignal> m_shareAbort;
     std::atomic<bool> m_abortRequested{false};
     std::mutex m_mutex;
     std::condition_variable m_idle;

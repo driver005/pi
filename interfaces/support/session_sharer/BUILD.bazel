@@ -9,6 +9,8 @@ pi_support(
         "//interfaces/platform/i_id_generator",
         "//interfaces/platform/i_process_runner",
         "//interfaces/support/abort_signal",
+        "//interfaces/support/radius_gateway",
+        "//interfaces/support/text_trimmer",
         "//interfaces/types/json",
         "//interfaces/types/result",
         "//interfaces/types/share_outcome",

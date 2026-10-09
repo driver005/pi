@@ -1,3 +1,6 @@
 load("//tools:module.bzl", "pi_interface")
 
-pi_interface(name = "share_outcome")
+pi_interface(
+    name = "share_outcome",
+    deps = ["//interfaces/types/share_route"],
+)

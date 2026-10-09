@@ -15,9 +15,11 @@ protected:
 };
 
 TEST_F(OklabConverterTest, RoundTripsSrgbThroughOklab) {
-    for (const RgbColor& color : {RgbColor{0, 0, 0}, RgbColor{255, 255, 255}, RgbColor{52, 53, 65}, RgbColor{200, 30, 90}}) {
-        const OklabConverter::Vector lab = m_converter.rgbToOklab(color);
-        expectRgb(m_converter.linearSrgbToRgb(m_converter.oklabToLinearSrgb(lab)), color.r, color.g, color.b);
+    for (const RgbColor& color : {RgbColor{0, 0, 0}, RgbColor{255, 255, 255}, RgbColor{52, 53, 65},
+                                  RgbColor{200, 30, 90}}) {
+        const OklabConverter::Triplet lab = m_converter.rgbToOklab(color);
+        expectRgb(m_converter.linearSrgbToRgb(m_converter.oklabToLinearSrgb(lab)), color.r, color.g,
+                  color.b);
     }
     EXPECT_NEAR(m_converter.rgbToOklab(RgbColor{255, 255, 255})[0], 1.0, 1e-6);
 }

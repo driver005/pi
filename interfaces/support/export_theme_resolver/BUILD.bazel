@@ -6,6 +6,7 @@ pi_support(
         "//interfaces/support/theme_color_parser",
         "//interfaces/types/json",
         "//interfaces/types/result",
+        "//interfaces/types/theme_token_set",
     ],
     data = ["//src/testing/ts_golden:themes"],
 )

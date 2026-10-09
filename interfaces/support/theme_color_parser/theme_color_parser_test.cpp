@@ -40,8 +40,22 @@ TEST_F(ThemeColorParserTest, ParsesOklchAndOkhslWithPercentages) {
     EXPECT_NEAR(m_parser.parse(Json("oklch(40% 0.1 200)"))->lightness, 0.4, 1e-12);
 }
 
+TEST_F(ThemeColorParserTest, AcceptsSignsExponentsAndMixedCase) {
+    EXPECT_EQ(hexOf("oklch(+1e0 0 0)"), "#ffffff");
+    EXPECT_EQ(hexOf("OkHsL(+120DEG .0 1.)"), "#ffffff");
+    EXPECT_EQ(hexOf("oklch(  50%   0   0deg )"), hexOf("oklch(0.5 0 0)"));
+    EXPECT_TRUE(m_parser.isOkColorFunction("OKLCH(1 0 0)"));
+    EXPECT_TRUE(m_parser.isOkhsl("okhsl(1 0 0)"));
+    EXPECT_FALSE(m_parser.isOkhsl("oklch(1 0 0)"));
+}
+
 TEST_F(ThemeColorParserTest, RejectsInvalidValues) {
-    for (const Json& value : {Json("red"), Json("#12"), Json("oklch(2 0 0)"), Json("oklch(0.5 -1 0)"), Json("okhsl(0 2 0.5)"), Json(256), Json(-1), Json(true), Json(1.5)}) {
+    for (const Json& value :
+         {Json("red"), Json("#12"), Json("oklch(2 0 0)"), Json("oklch(0.5 -1 0)"),
+          Json("okhsl(0 2 0.5)"), Json("oklch(1e999 0 0)"), Json("okhsl(1e999 0.5 0.5)"),
+          Json("oklch(inf 0 0)"), Json("oklch(0.5 nan 0)"), Json("oklch(0.5 0.1)"),
+          Json("oklch(0.5 0.1 20 30)"), Json("oklch(0.5 0.1 20deg"), Json("oklch(5%x 0.1 20)"),
+          Json("okhsl(10 50% 50)x"), Json(256), Json(-1), Json(true), Json(1.5)}) {
         EXPECT_FALSE(m_parser.parse(value).has_value()) << value.dump();
     }
 }

@@ -5,6 +5,8 @@ pi_support(
     deps = [
         "//interfaces/platform/i_file_system",
         "//interfaces/support/export_theme_resolver",
+        "//interfaces/support/text_trimmer",
+        "//interfaces/types/theme_file",
         "//interfaces/types/json",
         "//interfaces/types/result",
     ],

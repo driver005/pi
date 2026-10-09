@@ -22,7 +22,8 @@ protected:
 TEST_F(DurableSessionBridgeTest, AppendsPluginEntriesAndReadsThemBackOldestFirst) {
     const Json first = call("appendEntry", Json{{"customType", "note"}, {"data", Json{{"n", 1}}}});
     ASSERT_TRUE(first.contains("id")) << first.dump();
-    ASSERT_TRUE(call("appendEntry", Json{{"customType", "note"}, {"data", Json{{"n", 2}}}}).contains("id"));
+    ASSERT_TRUE(
+        call("appendEntry", Json{{"customType", "note"}, {"data", Json{{"n", 2}}}}).contains("id"));
     const Json entries = call("sessionManager.getEntries");
     ASSERT_EQ(entries.size(), 2U);
     EXPECT_EQ(entries[0]["kind"], "pi.plugin-entry");

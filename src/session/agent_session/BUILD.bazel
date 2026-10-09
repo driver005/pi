@@ -23,6 +23,7 @@ pi_module(
         "//interfaces/support/cache_warmer",
         "//interfaces/support/html_exporter",
         "//interfaces/support/session_sharer",
+        "//interfaces/types/share_route",
         "//interfaces/support/install_telemetry_policy",
         "//interfaces/support/path_resolver",
         "//interfaces/support/session_export_data",

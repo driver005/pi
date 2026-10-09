@@ -63,7 +63,8 @@ TEST_F(RadiusCatalogTest, AFailedRequestLeavesTheStoredCatalogAlone) {
     m_http.enqueue(reply(503, "  down for maintenance  "));
     const auto unavailable = m_catalog.refresh("https://radius.test", std::nullopt);
     ASSERT_FALSE(unavailable.has_value());
-    EXPECT_EQ(unavailable.error().message, "Could not load Radius config from https://radius.test: 503: down for maintenance");
+    EXPECT_EQ(unavailable.error().message,
+              "Could not load Radius config from https://radius.test: 503: down for maintenance");
 
     m_http.enqueue(reply(200, "not json"));
     const auto invalid = m_catalog.refresh("https://radius.test", std::nullopt);

@@ -259,9 +259,23 @@ TEST_F(AgentSessionTest, SharingUploadsTheBranchWithItsPromptAndToolsToRadiusWhe
     EXPECT_EQ(m_processes.calls(), 0);
 }
 
+TEST_F(AgentSessionTest, SharingAnEmptySessionIsRefusedBeforeAnythingIsSent) {
+    m_withBugReports = true;
+    rebuild();
+    m_models.setAuthenticated("radius", true);
+    const auto shared = m_session->shareSession(Json::object());
+    ASSERT_FALSE(shared.has_value());
+    EXPECT_EQ(shared.error().message, "Nothing to share yet - start a conversation first");
+    EXPECT_TRUE(m_http.requests().empty());
+    EXPECT_EQ(m_processes.calls(), 0);
+}
+
 TEST_F(AgentSessionTest, SharingWithoutRadiusNeedsTheGitHubCli) {
     m_withBugReports = true;
     rebuild();
+    m_harness.provider().enqueue(m_harness.provider().textResponse("hi"));
+    ASSERT_TRUE(m_session->prompt("hello", PromptOptions{}).has_value());
+    m_session->waitForIdle();
     const auto shared = m_session->shareSession(Json::object());
     ASSERT_FALSE(shared.has_value());
     EXPECT_EQ(shared.error().message, "GitHub CLI (gh) is not installed. Install it from https://cli.github.com/");

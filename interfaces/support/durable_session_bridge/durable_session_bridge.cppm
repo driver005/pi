@@ -5,18 +5,19 @@ export import pi.plugin.i_plugin_session_bridge;
 export import pi.support.conversation;
 
 /**
- * What plugin commands can do to a durable (`pi serve`) session: the operations of PiHostApi.session_call that make sense over a
- * conversation. `appendEntry` is a write submission of a `pi.plugin-entry` entry (`{customType, data}`) answering the submission
- * id; `sendUserMessage` is an input submission (steering, or a follow-up with `deliverAs: "followUp"`, while the conversation is
- * busy); `abort`, `waitForIdle`, `isIdle`, `sessionManager.getEntries` (oldest first, at most 1000), `getSessionId` and `getCwd`
- * read or drive the conversation. Everything else answers `{"error": ...}`: models, tools, settings and the tree live in the
+ * What plugin commands can do to a durable (`pi serve`) session: the operations of
+ * PiHostApi.session_call that make sense over a conversation. `appendEntry` is a write submission
+ * of a `pi.plugin-entry` entry (`{customType, data}`) answering the submission id;
+ * `sendUserMessage` is an input submission (steering, or a follow-up with `deliverAs: "followUp"`,
+ * while the conversation is busy); `abort`, `waitForIdle`, `isIdle`, `sessionManager.getEntries`
+ * (oldest first, at most 1000), `getSessionId` and `getCwd` read or drive the conversation.
+ * Everything else answers `{"error": ...}`: models, tools, settings and the tree live in the
  * session registry of a durable session, not in a handle plugins can reach.
  */
 export class DurableSessionBridge : public IPluginSessionBridge {
 public:
     DurableSessionBridge(std::shared_ptr<Conversation> conversation, std::string cwd)
-        : m_conversation(std::move(conversation)),
-          m_cwd(std::move(cwd)) {}
+        : m_conversation(std::move(conversation)), m_cwd(std::move(cwd)) {}
 
     Json call(const std::string& method, const Json& params, const AbortSignal* abort) override {
         if (method == "appendEntry") {
@@ -57,10 +58,13 @@ private:
         }
         SubmissionDraft draft;
         draft.type = "write";
-        draft.entry = Json{{"kind", "pi.plugin-entry"},
-                           {"data", Json{{"customType", params["customType"]}, {"data", params.contains("data") ? params["data"] : Json(nullptr)}}}};
+        draft.entry = Json{
+            {"kind", "pi.plugin-entry"},
+            {"data", Json{{"customType", params["customType"]},
+                          {"data", params.contains("data") ? params["data"] : Json(nullptr)}}}};
         const auto submitted = m_conversation->submit(draft);
-        return submitted ? Json{{"id", std::to_string((*submitted)->id())}} : error(submitted.error().message);
+        return submitted ? Json{{"id", std::to_string((*submitted)->id())}}
+                         : error(submitted.error().message);
     }
 
     Json sendUserMessage(const Json& params) {
@@ -70,7 +74,8 @@ private:
         SubmissionDraft draft;
         draft.type = "input";
         draft.content = params["text"];
-        draft.whenBusy = params.value("deliverAs", std::string()) == "followUp" ? "followUp" : "steer";
+        draft.whenBusy =
+            params.value("deliverAs", std::string()) == "followUp" ? "followUp" : "steer";
         const auto submitted = m_conversation->submit(draft);
         return submitted ? Json{{"ok", true}} : error(submitted.error().message);
     }
